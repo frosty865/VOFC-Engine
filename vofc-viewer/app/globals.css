@@ -1,0 +1,191 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CISA Design System takes precedence */
+body {
+  font-family: var(--font-family, 'Source Sans Pro'), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--cisa-gray-lighter, #f1f1f2);
+}
+
+/* Ensure CISA styles override Tailwind */
+.card {
+  background-color: var(--cisa-white, #ffffff);
+  border: 1px solid var(--cisa-gray-light, #d6d7d9);
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn {
+  background-color: var(--cisa-blue, #112e51);
+  color: var(--cisa-white, #ffffff);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn:hover {
+  background-color: var(--cisa-blue-light, #205493);
+}
+
+.form-input {
+  border: 1px solid var(--cisa-gray-light, #d6d7d9);
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: var(--font-size-base, 16px);
+}
+
+.form-input:focus {
+  border-color: var(--cisa-blue, #112e51);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(17, 46, 81, 0.2);
+}
+
+/* CISA Navigation Styles - Updated to match CISA Design System */
+.nav-tabs {
+  display: flex;
+  background: var(--cisa-white, #ffffff);
+  border-radius: 8px;
+  padding: 4px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  border: 1px solid var(--cisa-gray-light, #d6d7d9);
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Formatted text styles for OFC content */
+.formatted-text ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.formatted-text li {
+  margin: 4px 0;
+  line-height: 1.5;
+}
+
+.formatted-text li strong {
+  color: var(--cisa-blue, #112e51);
+  font-weight: 600;
+}
+
+.formatted-text a {
+  color: var(--cisa-blue, #112e51);
+  text-decoration: underline;
+}
+
+.formatted-text a:hover {
+  color: var(--cisa-blue-dark, #0c1e3a);
+  text-decoration: none;
+}
+
+/* Button outline styles */
+.btn-outline-primary {
+  background-color: transparent;
+  border: 2px solid var(--cisa-blue, #112e51);
+  color: var(--cisa-blue, #112e51);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.btn-outline-primary:hover {
+  background-color: var(--cisa-blue, #112e51);
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.nav-tab {
+  background: none;
+  border: none;
+  padding: 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--cisa-gray, #5b616b);
+  transition: all 0.3s ease;
+  font-family: var(--font-family, 'Source Sans Pro'), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 18px;
+  min-width: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  border: 2px solid transparent;
+  text-decoration: none;
+}
+
+.nav-tab:hover {
+  background-color: var(--cisa-blue-lightest, #e1f3fd);
+  color: var(--cisa-blue, #112e51);
+  border-color: var(--cisa-blue-lighter, #0071bc);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  text-decoration: none;
+}
+
+.nav-tab.active {
+  background-color: var(--cisa-blue, #112e51);
+  color: var(--cisa-white, #ffffff);
+  border-color: var(--cisa-blue, #112e51);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+/* CISA Badge Styles */
+.badge {
+  display: inline-block;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.bg-danger { background-color: var(--cisa-red, #d83933); color: white; }
+.bg-warning { background-color: var(--cisa-warning, #ffc107); color: var(--cisa-black, #1b1b1b); }
+.bg-info { background-color: var(--cisa-info, #17a2b8); color: white; }
+.bg-success { background-color: var(--cisa-success, #28a745); color: white; }
+.bg-primary { background-color: var(--cisa-blue, #112e51); color: white; }
+.bg-secondary { background-color: var(--cisa-gray, #5b616b); color: white; }
+
+/* Back to Top Button Styles */
+.back-to-top {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  background-color: var(--cisa-blue, #112e51);
+  color: var(--cisa-white, #ffffff);
+  border: none;
+  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 18px;
+}
+
+.back-to-top:hover {
+  background-color: var(--cisa-blue-light, #205493);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.back-to-top:active {
+  transform: translateY(0);
+}
+
+
+
