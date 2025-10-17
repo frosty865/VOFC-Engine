@@ -50,6 +50,24 @@ const formatOptionText = (text) => {
 const OFCCard = memo(({ ofc }) => {
   const formattedText = formatOptionText(ofc.option_text);
   
+  // Parse citation numbers from the sources column
+  const parseCitations = (sourcesText) => {
+    if (!sourcesText) return [];
+    const citationRegex = /\[cite:\s*([^\]]+)\]/g;
+    const citations = [];
+    let match;
+    
+    while ((match = citationRegex.exec(sourcesText)) !== null) {
+      // Split by comma and extract individual citation numbers
+      const citationNumbers = match[1].split(',').map(num => num.trim());
+      citations.push(...citationNumbers);
+    }
+    
+    return citations;
+  };
+  
+  const citationNumbers = parseCitations(ofc.sources);
+  
   return (
     <div className="card">
       <div className="card-body">
@@ -76,10 +94,29 @@ const OFCCard = memo(({ ofc }) => {
           />
         </div>
         
-        {ofc.source && (
-          <div className="text-sm text-secondary">
-            <strong>Source:</strong> 
-            <SafeHTML content={ofc.source} />
+        {citationNumbers.length > 0 && (
+          <div className="text-sm text-secondary mb-2">
+            <strong>Sources:</strong>
+            <div className="mt-1 space-y-2">
+              {citationNumbers.map((citationNum, idx) => {
+                // Find the matching source from ofc_sources
+                const matchingSource = ofc.ofc_sources?.find(link => 
+                  link.sources && link.sources["reference number"] == citationNum
+                );
+                
+                return (
+                  <div key={idx} className="p-2 rounded border-l-2" style={{ 
+                    backgroundColor: 'var(--cisa-gray-light)',
+                    borderColor: 'var(--cisa-blue)',
+                    color: 'var(--cisa-gray-dark)'
+                  }}>
+                    <div className="text-xs text-gray-700">
+                      <SafeHTML content={matchingSource?.sources?.source || `Source ${citationNum} not found`} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>

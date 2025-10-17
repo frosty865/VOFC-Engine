@@ -1,28 +1,20 @@
-/**
- * Server-side Authentication Service
- * Handles secure authentication with JWT tokens and database verification
- */
+const { createClient } = require('@supabase/supabase-js');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
-import { createClient } from '@supabase/supabase-js';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+require('dotenv').config({ path: '.env.local' });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const jwtSecret = process.env.JWT_SECRET || 'your-64-character-secret-key-change-this-in-production';
+const jwtSecret = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+const tokenExpiresIn = '24h';
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export class AuthService {
-  /**
-   * Authenticate user with username and password
-   * @param {string} username - Username
-   * @param {string} password - Password
-   * @returns {Promise<Object>} Authentication result
-   */
   static async authenticateUser(username, password) {
     try {
-      // Get user from database
       const { data: user, error } = await supabase
         .from('vofc_users')
         .select('*')
@@ -37,58 +29,25 @@ export class AuthService {
         };
       }
 
-      // Check if account is locked
-      if (user.locked_until && new Date(user.locked_until) > new Date()) {
-        return {
-          success: false,
-          error: 'Account is temporarily locked due to too many failed attempts'
-        };
-      }
-
-      // Verify password
       const isValidPassword = await bcrypt.compare(password, user.password_hash);
-      
       if (!isValidPassword) {
-        // Increment failed login attempts
-        await supabase
-          .from('vofc_users')
-          .update({
-            failed_login_attempts: user.failed_login_attempts + 1,
-            locked_until: user.failed_login_attempts >= 4 ? 
-              new Date(Date.now() + 15 * 60 * 1000).toISOString() : null
-          })
-          .eq('user_id', user.user_id);
-
         return {
           success: false,
           error: 'Invalid credentials'
         };
       }
 
-      // Reset failed login attempts on successful login
-      await supabase
-        .from('vofc_users')
-        .update({
-          failed_login_attempts: 0,
-          locked_until: null,
-          last_login: new Date().toISOString()
-        })
-        .eq('user_id', user.user_id);
-
-      // Generate JWT token
       const token = jwt.sign(
-        {
-          userId: user.user_id,
-          username: user.username,
-          role: user.role,
-          agency: user.agency
+        { 
+          userId: user.user_id, 
+          username: user.username, 
+          role: user.role 
         },
         jwtSecret,
-        { expiresIn: '24h' }
+        { expiresIn: tokenExpiresIn }
       );
 
-      // Create session record
-      const sessionId = require('crypto').randomUUID();
+      const sessionId = crypto.randomUUID();
       await supabase
         .from('user_sessions')
         .insert({
@@ -106,8 +65,7 @@ export class AuthService {
           role: user.role,
           agency: user.agency
         },
-        token,
-        sessionId
+        token: token
       };
 
     } catch (error) {
@@ -119,17 +77,10 @@ export class AuthService {
     }
   }
 
-  /**
-   * Verify JWT token and get user
-   * @param {string} token - JWT token
-   * @returns {Promise<Object>} Verification result
-   */
   static async verifyToken(token) {
     try {
-      // Verify JWT token
       const decoded = jwt.verify(token, jwtSecret);
-      
-      // Check if session exists and is valid
+
       const { data: session, error } = await supabase
         .from('user_sessions')
         .select(`
@@ -144,7 +95,7 @@ export class AuthService {
           )
         `)
         .eq('session_token', token)
-        .eq('expires_at', '>', new Date().toISOString())
+        .gt('expires_at', new Date().toISOString())
         .single();
 
       if (error || !session || !session.user) {
@@ -174,66 +125,46 @@ export class AuthService {
     }
   }
 
-  /**
-   * Logout user and invalidate session
-   * @param {string} token - JWT token
-   * @returns {Promise<Object>} Logout result
-   */
-  static async logoutUser(token) {
+  static async invalidateSession(sessionId) {
     try {
-      // Remove session from database
       await supabase
         .from('user_sessions')
         .delete()
-        .eq('session_token', token);
+        .eq('session_id', sessionId);
 
-      return {
-        success: true,
-        message: 'Logged out successfully'
-      };
-
+      return { success: true };
     } catch (error) {
-      console.error('Logout error:', error);
-      return {
-        success: false,
-        error: 'Logout failed'
-      };
+      console.error('Session invalidation error:', error);
+      return { success: false, error: 'Failed to invalidate session' };
     }
   }
 
-  /**
-   * Get user permissions based on role
-   * @param {string} role - User role
-   * @returns {Array} Array of permissions
-   */
-  static getUserPermissions(role) {
-    const permissions = {
-      admin: [
-        'read:all',
-        'write:all',
-        'delete:all',
-        'manage:users',
-        'manage:backups',
-        'view:metrics',
-        'submit:vofc'
-      ],
-      spsa: [
-        'read:all',
-        'write:all',
-        'manage:users',
-        'submit:vofc'
-      ],
-      psa: [
-        'read:all',
-        'write:all',
-        'submit:vofc'
-      ],
-      analyst: [
-        'read:all',
-        'submit:vofc'
-      ]
-    };
+  static async getUserPermissions(userId) {
+    try {
+      const { data: user, error } = await supabase
+        .from('vofc_users')
+        .select('role, is_active')
+        .eq('user_id', userId)
+        .single();
 
-    return permissions[role] || [];
+      if (error || !user) {
+        return { success: false, error: 'User not found' };
+      }
+
+      const permissions = {
+        canViewAdmin: ['admin', 'spsa', 'analyst'].includes(user.role),
+        canManageUsers: user.role === 'admin',
+        canManageOFCs: ['admin', 'spsa', 'analyst'].includes(user.role),
+        canViewReports: ['admin', 'spsa', 'analyst'].includes(user.role)
+      };
+
+      return {
+        success: true,
+        permissions
+      };
+    } catch (error) {
+      console.error('Permission check error:', error);
+      return { success: false, error: 'Failed to check permissions' };
+    }
   }
 }

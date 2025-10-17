@@ -12,8 +12,9 @@ CREATE TABLE IF NOT EXISTS vofc_users (
     is_active BOOLEAN DEFAULT true,
     last_login TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+           updated_at TIMESTAMPTZ DEFAULT NOW(),
+           force_password_change BOOLEAN DEFAULT false
+       );
 
 -- User sessions table
 CREATE TABLE IF NOT EXISTS user_sessions (

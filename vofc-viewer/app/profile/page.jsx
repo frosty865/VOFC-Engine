@@ -145,25 +145,25 @@ export default function UserProfile() {
     }
 
     return (
-        <div className="max-w-6xl mx-auto">
+        <div className="w-full px-4">
             {/* Header */}
             <div className="card mb-6">
                 <div className="card-header">
-                    <div className="flex justify-between items-center">
+                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                         <div>
-                            <h1 className="card-title">User Profile</h1>
-                            <p className="text-secondary">Welcome back, {user.full_name}</p>
+                            <h1 className="card-title">{user.full_name}</h1>
+                            <p className="text-secondary">@{user.username}</p>
                         </div>
-                        <div className="flex space-x-2">
+                        <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
                             <button
                                 onClick={() => router.push('/')}
-                                className="btn btn-secondary"
+                                className="btn btn-secondary w-full sm:w-auto"
                             >
                                 Back to Dashboard
                             </button>
                             <button
                                 onClick={() => router.push('/submit')}
-                                className="btn btn-primary"
+                                className="btn btn-primary w-full sm:w-auto"
                             >
                                 New Submission
                             </button>
@@ -178,37 +178,48 @@ export default function UserProfile() {
                     <h2 className="card-title">Profile Information</h2>
                 </div>
                 <div className="card-body">
-                    <div className="row">
-                        <div className="col-md-6">
-                            <div className="form-group">
-                                <label className="form-label">Full Name</label>
-                                <div className="form-control-plaintext">{user.full_name}</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="form-group">
+                            <label className="form-label">Full Name</label>
+                            <div className="form-control-plaintext">{user.full_name}</div>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Username</label>
+                            <div className="form-control-plaintext">{user.username}</div>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Email</label>
+                            <div className="form-control-plaintext">{user.username}@cisa.dhs.gov</div>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Role</label>
+                            <div className="form-control-plaintext">
+                                <span className={`badge ${user.role === 'admin' ? 'bg-danger' :
+                                    user.role === 'spsa' ? 'bg-warning' :
+                                        user.role === 'psa' ? 'bg-info' :
+                                            'bg-success'
+                                    } text-white`}>
+                                    {user.role.toUpperCase()}
+                                </span>
                             </div>
                         </div>
-                        <div className="col-md-6">
-                            <div className="form-group">
-                                <label className="form-label">Username</label>
-                                <div className="form-control-plaintext">{user.username}</div>
+                        <div className="form-group">
+                            <label className="form-label">Organization</label>
+                            <div className="form-control-plaintext">{user.agency || 'CISA'}</div>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Status</label>
+                            <div className="form-control-plaintext">
+                                <span className="badge bg-success text-white">ACTIVE</span>
                             </div>
                         </div>
-                        <div className="col-md-6">
-                            <div className="form-group">
-                                <label className="form-label">Role</label>
-                                <div className="form-control-plaintext">
-                                    <span className={`badge ${user.role === 'admin' ? 'bg-danger' :
-                                        user.role === 'spsa' ? 'bg-warning' :
-                                            user.role === 'psa' ? 'bg-info' :
-                                                'bg-success'
-                                        } text-white`}>
-                                        {user.role.toUpperCase()}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="col-md-6">
-                            <div className="form-group">
-                                <label className="form-label">Organization</label>
-                                <div className="form-control-plaintext">{user.organization || 'Not specified'}</div>
+                        <div className="form-group">
+                            <label className="form-label">Last Sign In</label>
+                            <div className="form-control-plaintext">
+                                {user.last_login 
+                                    ? new Date(user.last_login).toLocaleDateString()
+                                    : 'Never'
+                                }
                             </div>
                         </div>
                     </div>
@@ -218,21 +229,21 @@ export default function UserProfile() {
             {/* Tabs */}
             <div className="card mb-6">
                 <div className="card-header">
-                    <div className="nav nav-tabs card-header-tabs">
+                    <div className="flex flex-col sm:flex-row gap-2">
                         <button
-                            className={`nav-link ${activeTab === 'overview' ? 'active' : ''}`}
+                            className={`btn ${activeTab === 'overview' ? 'btn-primary' : 'btn-secondary'} w-full sm:w-auto`}
                             onClick={() => setActiveTab('overview')}
                         >
                             Overview
                         </button>
                         <button
-                            className={`nav-link ${activeTab === 'submissions' ? 'active' : ''}`}
+                            className={`btn ${activeTab === 'submissions' ? 'btn-primary' : 'btn-secondary'} w-full sm:w-auto`}
                             onClick={() => setActiveTab('submissions')}
                         >
                             My Submissions ({userSubmissions.length})
                         </button>
                         <button
-                            className={`nav-link ${activeTab === 'returned' ? 'active' : ''}`}
+                            className={`btn ${activeTab === 'returned' ? 'btn-primary' : 'btn-secondary'} w-full sm:w-auto`}
                             onClick={() => setActiveTab('returned')}
                         >
                             Returned Submissions ({returnedSubmissions.length})
@@ -244,43 +255,35 @@ export default function UserProfile() {
                     {/* Overview Tab */}
                     {activeTab === 'overview' && (
                         <div>
-                            <div className="row">
-                                <div className="col-md-3">
-                                    <div className="card bg-primary text-white">
-                                        <div className="card-body text-center">
-                                            <div className="text-2xl font-bold">{userSubmissions.length}</div>
-                                            <div className="text-sm">Total Submissions</div>
-                                        </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div className="card bg-primary text-white">
+                                    <div className="card-body text-center">
+                                        <div className="text-2xl font-bold">{userSubmissions.length}</div>
+                                        <div className="text-sm">Total Submissions</div>
                                     </div>
                                 </div>
-                                <div className="col-md-3">
-                                    <div className="card bg-success text-white">
-                                        <div className="card-body text-center">
-                                            <div className="text-2xl font-bold">
-                                                {userSubmissions.filter(s => s.status === 'approved').length}
-                                            </div>
-                                            <div className="text-sm">Approved</div>
+                                <div className="card bg-success text-white">
+                                    <div className="card-body text-center">
+                                        <div className="text-2xl font-bold">
+                                            {userSubmissions.filter(s => s.status === 'approved').length}
                                         </div>
+                                        <div className="text-sm">Approved</div>
                                     </div>
                                 </div>
-                                <div className="col-md-3">
-                                    <div className="card bg-warning text-white">
-                                        <div className="card-body text-center">
-                                            <div className="text-2xl font-bold">
-                                                {userSubmissions.filter(s => s.status === 'pending_review').length}
-                                            </div>
-                                            <div className="text-sm">Pending Review</div>
+                                <div className="card bg-warning text-white">
+                                    <div className="card-body text-center">
+                                        <div className="text-2xl font-bold">
+                                            {userSubmissions.filter(s => s.status === 'pending_review').length}
                                         </div>
+                                        <div className="text-sm">Pending Review</div>
                                     </div>
                                 </div>
-                                <div className="col-md-3">
-                                    <div className="card bg-danger text-white">
-                                        <div className="card-body text-center">
-                                            <div className="text-2xl font-bold">
-                                                {userSubmissions.filter(s => s.status === 'rejected').length}
-                                            </div>
-                                            <div className="text-sm">Returned</div>
+                                <div className="card bg-danger text-white">
+                                    <div className="card-body text-center">
+                                        <div className="text-2xl font-bold">
+                                            {userSubmissions.filter(s => s.status === 'rejected').length}
                                         </div>
+                                        <div className="text-sm">Returned</div>
                                     </div>
                                 </div>
                             </div>

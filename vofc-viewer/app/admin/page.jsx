@@ -76,16 +76,25 @@ export default function AdminPage() {
 
       const profile = await getUserProfile();
       console.log('🔐 User profile:', profile);
+      console.log('🔐 User data:', user);
       setCurrentUser(user);
       setUserRole(profile?.role || user.role);
 
-      if (!(profile.role === 'admin' || profile.role === 'spsa' || profile.role === 'analyst')) {
-        console.log('❌ Access denied for role:', profile.role);
+      // Check both profile.role and user.role for admin access
+      const userRole = profile?.role || user.role;
+      console.log('🔐 Checking role:', userRole);
+      console.log('🔐 Profile role:', profile?.role);
+      console.log('🔐 User role:', user.role);
+      
+      if (!(userRole === 'admin' || userRole === 'spsa' || userRole === 'analyst')) {
+        console.log('❌ Access denied for role:', userRole);
+        console.log('❌ Profile role:', profile?.role);
+        console.log('❌ User role:', user.role);
         router.push('/');
         return;
       }
 
-      console.log('✅ Admin access granted for role:', profile.role);
+      console.log('✅ Admin access granted for role:', userRole);
     } catch (error) {
       console.error('Auth check failed:', error);
       router.push('/splash');
@@ -448,10 +457,22 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <div className="card mb-6">
-        <div className="card-header">
-          <h2 className="card-title">Database Health and Status</h2>
-        </div>
+        <div className="card mb-6">
+          <div className="card-header">
+            <div className="flex justify-between items-center">
+              <h2 className="card-title">Database Health and Status</h2>
+              <div className="flex gap-2">
+                <Link href="/admin/users" className="btn btn-primary btn-sm">
+                  <i className="fas fa-users mr-2"></i>
+                  Manage Users
+                </Link>
+                <Link href="/admin/ofcs" className="btn btn-success btn-sm">
+                  <i className="fas fa-lightbulb mr-2"></i>
+                  Manage OFCs
+                </Link>
+              </div>
+            </div>
+          </div>
         <div className="row">
           <div className="col-md-3">
             <div className="card bg-warning text-white">

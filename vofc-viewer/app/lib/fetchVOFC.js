@@ -149,7 +149,16 @@ export async function fetchOFCs() {
   try {
     const { data, error } = await supabase
       .from('options_for_consideration')
-      .select('*')
+      .select(`
+        *,
+        ofc_sources (
+          *,
+          sources (
+            "reference number",
+            source
+          )
+        )
+      `)
       .order('id');
     
     if (error) {

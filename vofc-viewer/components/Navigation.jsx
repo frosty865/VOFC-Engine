@@ -24,8 +24,11 @@ export default function Navigation() {
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
+          console.log('🔐 Navigation - User loaded:', result.user);
           setCurrentUser(result.user);
         }
+      } else {
+        console.log('🔐 Navigation - Auth failed:', response.status);
       }
     } catch (error) {
       console.error('Error loading user:', error);
@@ -218,34 +221,66 @@ export default function Navigation() {
             👤 My Profile
           </Link>
           {currentUser && (currentUser.role === 'admin' || currentUser.role === 'spsa') && (
-            <Link
-              href="/admin"
-              style={{
-                padding: 'var(--spacing-sm) var(--spacing-md)',
-                borderRadius: 'var(--border-radius)',
-                textDecoration: 'none',
-                color: pathname === '/admin' ? 'var(--cisa-white)' : 'rgba(255,255,255,0.8)',
-                backgroundColor: pathname === '/admin' ? 'rgba(255,255,255,0.2)' : 'transparent',
-                fontWeight: '600',
-                fontSize: 'var(--font-size-sm)',
-                transition: 'all 0.3s ease',
-                border: '2px solid transparent'
-              }}
-              onMouseEnter={(e) => {
-                if (pathname !== '/admin') {
-                  e.target.style.backgroundColor = 'rgba(255,255,255,0.1)';
-                  e.target.style.color = 'var(--cisa-white)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (pathname !== '/admin') {
-                  e.target.style.backgroundColor = 'transparent';
-                  e.target.style.color = 'rgba(255,255,255,0.8)';
-                }
-              }}
-            >
-              ⚙️ Admin Panel
-            </Link>
+            <>
+              <Link
+                href="/admin"
+                style={{
+                  padding: 'var(--spacing-sm) var(--spacing-md)',
+                  borderRadius: 'var(--border-radius)',
+                  textDecoration: 'none',
+                  color: pathname === '/admin' ? 'var(--cisa-white)' : 'rgba(255,255,255,0.8)',
+                  backgroundColor: pathname === '/admin' ? 'rgba(255,255,255,0.2)' : 'transparent',
+                  fontWeight: '600',
+                  fontSize: 'var(--font-size-sm)',
+                  transition: 'all 0.3s ease',
+                  border: '2px solid transparent'
+                }}
+                onMouseEnter={(e) => {
+                  if (pathname !== '/admin') {
+                    e.target.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                    e.target.style.color = 'var(--cisa-white)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (pathname !== '/admin') {
+                    e.target.style.backgroundColor = 'transparent';
+                    e.target.style.color = 'rgba(255,255,255,0.8)';
+                  }
+                }}
+              >
+                ⚙️ Admin Panel
+              </Link>
+              {currentUser.role === 'admin' && (
+                <Link
+                  href="/admin/ofcs"
+                  style={{
+                    padding: 'var(--spacing-sm) var(--spacing-md)',
+                    borderRadius: 'var(--border-radius)',
+                    textDecoration: 'none',
+                    color: pathname === '/admin/ofcs' ? 'var(--cisa-white)' : 'rgba(255,255,255,0.8)',
+                    backgroundColor: pathname === '/admin/ofcs' ? 'rgba(255,255,255,0.2)' : 'transparent',
+                    fontWeight: '600',
+                    fontSize: 'var(--font-size-sm)',
+                    transition: 'all 0.3s ease',
+                    border: '2px solid transparent'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (pathname !== '/admin/ofcs') {
+                      e.target.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                      e.target.style.color = 'var(--cisa-white)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (pathname !== '/admin/ofcs') {
+                      e.target.style.backgroundColor = 'transparent';
+                      e.target.style.color = 'rgba(255,255,255,0.8)';
+                    }
+                  }}
+                >
+                  💡 Manage OFCs
+                </Link>
+              )}
+            </>
           )}
         </nav>
 

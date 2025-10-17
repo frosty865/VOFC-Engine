@@ -17,7 +17,7 @@ export default function RootLayout({ children }) {
       <body className="antialiased">
         <div className="min-h-screen" style={{backgroundColor: 'var(--cisa-gray-lighter)'}}>
           <Navigation />
-          <main className="container mx-auto px-4 py-8">
+          <main className="w-full py-8">
             {children}
           </main>
         </div>
