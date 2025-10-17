@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchVulnerabilities, fetchOFCs, fetchVulnerabilityOFCLinks, getOFCsForVulnerability, fetchSectors, fetchSubsectors } from './lib/fetchVOFC';
 import { getCurrentUser } from './lib/auth';
+import { trackVOFCEvent, trackPageView } from '../components/AnalyticsProvider';
 import VulnerabilityCard from './components/VulnerabilityCard';
 import OFCCard from './components/OFCCard';
 // import SessionTimeoutWarning from '../components/SessionTimeoutWarning';
@@ -28,6 +29,9 @@ export default function VOFCViewer() {
 
   useEffect(() => {
     checkAuth();
+    // Track dashboard page view
+    trackPageView('dashboard');
+    trackVOFCEvent.viewDashboard();
   }, []);
 
   const checkAuth = async () => {

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser, logout } from '../lib/auth';
+import { trackVOFCEvent } from '../../components/AnalyticsProvider';
 // import SessionTimeoutWarning from '../../components/SessionTimeoutWarning';
 import '../../styles/cisa.css';
 
@@ -50,9 +51,13 @@ export default function SplashPage() {
       const result = await response.json();
 
       if (result.success) {
+        // Track successful login
+        trackVOFCEvent.login(result.user?.role || 'unknown');
         // Redirect to dashboard - no localStorage needed
         router.push('/');
       } else {
+        // Track failed login
+        trackVOFCEvent.error('login_failed', { username, error: result.error });
         alert('Login failed: ' + result.error);
       }
     } catch (error) {
