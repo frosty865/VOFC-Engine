@@ -52,8 +52,8 @@ cd VOFC-Engine
 
 ### 2. Install Dependencies
 ```bash
-cd vofc-viewer
-npm install
+# Install root dependencies and workspace dependencies
+npm run install-all
 ```
 
 ### 3. Environment Setup
@@ -73,6 +73,11 @@ node scripts/setup-secure-simple.js
 
 ### 5. Start Development Server
 ```bash
+# Start the frontend development server
+npm run dev
+
+# Or start from the vofc-viewer directory
+cd vofc-viewer
 npm run dev
 ```
 
@@ -117,15 +122,24 @@ Visit `http://localhost:3000` and login with:
 ## 📁 Project Structure
 
 ```
-vofc-viewer/
-├── app/                    # Next.js app directory
-│   ├── api/               # API routes
-│   ├── components/        # React components
-│   └── lib/              # Utility libraries
-├── docs/                 # Documentation
-├── scripts/              # Setup and utility scripts
+VOFC Engine/
+├── vofc-viewer/           # Next.js React Frontend
+│   ├── app/               # Next.js app directory
+│   │   ├── api/           # API routes
+│   │   ├── components/    # React components
+│   │   └── lib/          # Utility libraries
+│   ├── supabase/          # Supabase configuration
+│   └── package.json       # Frontend dependencies
+├── src/                   # Python AI Backend
+│   ├── main.py           # Main application entry
+│   ├── parsers/          # Document parsers
+│   ├── pipelines/        # Data processing pipelines
+│   └── utils/           # Utility functions
+├── scripts/              # Database and utility scripts
 ├── sql/                  # Database schema files
-└── public/               # Static assets
+├── docs/                 # Project documentation
+├── data/                 # Imported/exported data
+└── package.json          # Root project configuration
 ```
 
 ## 🚀 Deployment
