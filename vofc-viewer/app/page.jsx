@@ -124,7 +124,7 @@ export default function VOFCViewer() {
       const matchesSearch = !searchTerm ||
         (v.vulnerability && v.vulnerability.toLowerCase().includes(searchLower)) ||
         (v.discipline && v.discipline.toLowerCase().includes(searchLower)) ||
-        (v.sector && v.sector.toLowerCase().includes(searchLower));
+        (v.sector_id && v.sector_id.toString().includes(searchLower));
 
       // Discipline filter
       const matchesDiscipline = !filterDiscipline || v.discipline === filterDiscipline;
@@ -174,8 +174,8 @@ export default function VOFCViewer() {
           bValue = b.discipline || '';
           break;
         case 'sector':
-          aValue = a.sector || '';
-          bValue = b.sector || '';
+          aValue = a.sector_id || '';
+          bValue = b.sector_id || '';
           break;
         case 'vulnerability':
           aValue = a.vulnerability || '';
@@ -381,12 +381,12 @@ export default function VOFCViewer() {
             <div className="card-header">
               <div className="flex justify-between items-center">
                 <h2 className="card-title">
-                  {vulnerability.discipline || 'Vulnerability'} - {vulnerability.sector || 'General'}
+                  {vulnerability.discipline || 'Vulnerability'} - Sector {vulnerability.sector_id || 'General'}
                 </h2>
                 <button
                   onClick={() => {
                     // Pre-fill the submission form with vulnerability context
-                    const submissionUrl = `/submit?type=ofc&vulnerability_id=${vulnerability.id}&discipline=${encodeURIComponent(vulnerability.discipline || '')}&sector=${encodeURIComponent(vulnerability.sector || '')}`;
+                    const submissionUrl = `/submit?type=ofc&vulnerability_id=${vulnerability.id}&discipline=${encodeURIComponent(vulnerability.discipline || '')}&sector=${encodeURIComponent(vulnerability.sector_id || '')}`;
                     window.open(submissionUrl, '_blank');
                   }}
                   className="btn btn-sm btn-outline-primary"

@@ -76,9 +76,11 @@ const OFCCard = memo(({ ofc }) => {
             <span className="badge bg-primary text-white" style={{ color: 'white !important' }}>
               {ofc.discipline}
             </span>
-            <span className="badge bg-secondary text-white" style={{ color: 'white !important' }}>
-              {ofc.sector}
-            </span>
+            {ofc.sector_id && (
+              <span className="badge bg-secondary text-white" style={{ color: 'white !important' }}>
+                Sector {ofc.sector_id}
+              </span>
+            )}
           </div>
         </div>
         
