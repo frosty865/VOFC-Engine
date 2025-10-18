@@ -31,7 +31,7 @@ export async function GET(request) {
     }
 
     // Get all OFCs
-    const { data: ofcs, error } = await supabase
+    const { data: options_for_consideration, error } = await supabase
       .from('options_for_consideration')
       .select('*')
       .order('option_text');
@@ -42,7 +42,7 @@ export async function GET(request) {
 
     return NextResponse.json({
       success: true,
-      ofcs: ofcs || []
+      options_for_consideration: options_for_consideration || []
     });
 
   } catch (error) {
@@ -88,8 +88,8 @@ export async function PUT(request) {
       option_text, 
       discipline, 
       source, 
-      sector_id, 
-      subsector_id
+      id, 
+      id
     } = body;
 
     if (!id) {
@@ -106,8 +106,8 @@ export async function PUT(request) {
         option_text,
         discipline,
         source,
-        sector_id,
-        subsector_id,
+        id,
+        id,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)

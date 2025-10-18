@@ -90,9 +90,9 @@ export async function POST(request, { params }) {
             id: vulnerabilityId,
             vulnerability: submissionData.vulnerability,
             discipline: submissionData.discipline || 'General',
-            source: submissionData.source || 'API Submission',
-            sector_id: submissionData.sector_id || null,
-            subsector_id: submissionData.subsector_id || null
+            source: submissionData.sources || null,
+            id: submissionData.id || null,
+            id: submissionData.id || null
           }]);
 
         if (vulnError) {
@@ -101,6 +101,50 @@ export async function POST(request, { params }) {
             { error: 'Failed to add vulnerability to database', details: vulnError.message },
             { status: 500 }
           );
+        }
+
+        // Automatically generate multiple assessment assessment_questions for this vulnerability
+        try {
+          console.log('🤖 Generating multiple assessment assessment_questions for vulnerability...');
+          
+          // Generate 5-10 assessment_questions for each vulnerability
+          const numQuestions = Math.floor(Math.random() * 6) + 5; // 5-10 assessment_questions
+          const questionsToInsert = [];
+          
+          for (let i = 0; i < numQuestions; i++) {
+            try {
+              const { data: questionData, error: questionError } = await supabase.functions.invoke('generate-question-i18n', {
+                body: { text: submissionData.vulnerability }
+              });
+
+              if (!questionError && questionData) {
+                questionsToInsert.push({
+                  id: vulnerabilityId,
+                  question_text: questionData.en,
+                  question_en: questionData.en,
+                  question_es: questionData.es,
+                  is_root: true
+                });
+              }
+            } catch (singleQuestionError) {
+              console.error(`Error generating question ${i+1}:`, singleQuestionError);
+            }
+          }
+          
+          // Insert all generated assessment_questions at once
+          if (questionsToInsert.length > 0) {
+            const { error: insertQuestionsError } = await supabase
+              .from('assessment_questions')
+              .insert(questionsToInsert);
+
+            if (insertQuestionsError) {
+              console.error('Error inserting generated assessment_questions:', insertQuestionsError);
+            } else {
+              console.log(`✅ ${questionsToInsert.length} assessment assessment_questions generated and inserted`);
+            }
+          }
+        } catch (questionGenError) {
+          console.error('Error in question generation process:', questionGenError);
         }
 
         // If this vulnerability has associated OFCs, create them and link them
@@ -115,9 +159,9 @@ export async function POST(request, { params }) {
                 id: ofcId,
                 option_text: ofcText,
                 discipline: submissionData.discipline || 'General',
-                source: submissionData.source || 'API Submission',
-                sector_id: submissionData.sector_id || null,
-                subsector_id: submissionData.subsector_id || null
+                source: submissionData.sources || null,
+                id: submissionData.id || null,
+                id: submissionData.id || null
               }]);
 
             if (ofcError) {
@@ -129,8 +173,8 @@ export async function POST(request, { params }) {
             const { error: linkError } = await supabase
               .from('vulnerability_ofc_links')
               .insert([{
-                vulnerability_id: vulnerabilityId,
-                ofc_id: ofcId,
+                id: vulnerabilityId,
+                id: ofcId,
                 link_type: 'direct',
                 confidence_score: 1
               }]);
@@ -150,9 +194,9 @@ export async function POST(request, { params }) {
             id: ofcId,
             option_text: submissionData.option_text,
             discipline: submissionData.discipline || 'General',
-            source: submissionData.source || 'API Submission',
-            sector_id: submissionData.sector_id || null,
-            subsector_id: submissionData.subsector_id || null
+            source: submissionData.sources || null,
+            id: submissionData.id || null,
+            id: submissionData.id || null
           }]);
 
         if (ofcError) {
@@ -176,8 +220,8 @@ export async function POST(request, { params }) {
             const { error: linkError } = await supabase
               .from('vulnerability_ofc_links')
               .insert([{
-                vulnerability_id: vulnerabilities[0].id,
-                ofc_id: ofcId,
+                id: vulnerabilities[0].id,
+                id: ofcId,
                 link_type: 'direct',
                 confidence_score: 1
               }]);

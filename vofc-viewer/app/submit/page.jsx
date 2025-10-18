@@ -19,13 +19,15 @@ export default function VOFCSubmission() {
     vulnerability: '',
     option_text: '',
     discipline: '',
-    source: '',
-    sector_id: '',
-    subsector_id: '',
+    source_citation: '',
+    id: '',
+    id: '',
     submitter_email: ''
   });
-  const [ofcs, setOfcs] = useState([]);
+  const [options_for_consideration, setOfcs] = useState([]);
   const [currentOfc, setCurrentOfc] = useState('');
+  const [citationStatus, setCitationStatus] = useState('');
+  const [citationTimeout, setCitationTimeout] = useState(null);
 
   // Predefined discipline options
   const disciplineOptions = [
@@ -51,7 +53,7 @@ export default function VOFCSubmission() {
   const handleUrlParams = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const type = urlParams.get('type');
-    const vulnerabilityId = urlParams.get('vulnerability_id');
+    const vulnerabilityId = urlParams.get('id');
     const discipline = urlParams.get('discipline');
     const sector = urlParams.get('sector');
     
@@ -67,24 +69,24 @@ export default function VOFCSubmission() {
     if (sector && sectors.length > 0) {
       const foundSector = sectors.find(s => s.sector_name === decodeURIComponent(sector));
       if (foundSector) {
-        setFormData(prev => ({ ...prev, sector_id: foundSector.id }));
+        setFormData(prev => ({ ...prev, id: foundSector.id }));
       }
     }
   };
 
   useEffect(() => {
     // Filter subsectors when sector changes
-    if (formData.sector_id && subsectors.length > 0) {
+    if (formData.id && subsectors.length > 0) {
       const filtered = subsectors.filter(sub => {
-        return sub.sector_id === parseInt(formData.sector_id) || 
-               sub.sector_id === formData.sector_id ||
-               sub.sector_id.toString() === formData.sector_id.toString();
+        return sub.id === parseInt(formData.id) || 
+               sub.id === formData.id ||
+               sub.id.toString() === formData.id.toString();
       });
       setFilteredSubsectors(filtered);
     } else {
       setFilteredSubsectors([]);
     }
-  }, [formData.sector_id, subsectors]);
+  }, [formData.id, subsectors]);
 
   useEffect(() => {
     // Handle URL params after sectors are loaded
@@ -106,15 +108,67 @@ export default function VOFCSubmission() {
     }
   };
 
+  const assignCitation = async (sourceText) => {
+    if (!sourceText || sourceText.trim() === '') {
+      setCitationStatus('');
+      return null;
+    }
+
+    try {
+      setCitationStatus('Assigning citation...');
+      const response = await fetch('/api/sources/assign-citation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sourceText: sourceText.trim() }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        setCitationStatus(`Citation assigned: ${result.citation} ${result.isNew ? '(new source)' : '(existing source)'}`);
+        return result.citation;
+      } else {
+        setCitationStatus(`Error: ${result.error}`);
+        return null;
+      }
+    } catch (error) {
+      console.error('Citation assignment error:', error);
+      setCitationStatus('Error assigning citation');
+      return null;
+    }
+  };
+
+  const handleSourceChange = (e) => {
+    const value = e.target.value;
+    setFormData({...formData, source_citation: value});
+    
+    // Clear existing timeout
+    if (citationTimeout) {
+      clearTimeout(citationTimeout);
+    }
+    
+    // Set new timeout for citation assignment
+    if (value.trim()) {
+      const timeout = setTimeout(() => {
+        assignCitation(value);
+      }, 1000); // Wait 1 second after user stops typing
+      setCitationTimeout(timeout);
+    } else {
+      setCitationStatus('');
+    }
+  };
+
   const addOfc = () => {
     if (currentOfc.trim()) {
-      setOfcs([...ofcs, currentOfc.trim()]);
+      setOfcs([...options_for_consideration, currentOfc.trim()]);
       setCurrentOfc('');
     }
   };
 
   const removeOfc = (index) => {
-    setOfcs(ofcs.filter((_, i) => i !== index));
+    setOfcs(options_for_consideration.filter((_, i) => i !== index));
   };
 
   const checkAuth = async () => {
@@ -146,19 +200,29 @@ export default function VOFCSubmission() {
     setSubmitting(true);
 
     try {
-      if (submissionType === 'vulnerability' && ofcs.length > 0) {
+      // Assign citation if source is provided
+      let citation = null;
+      if (formData.source_citation && formData.source_citation.trim()) {
+        citation = await assignCitation(formData.source_citation);
+        if (!citation) {
+          alert('Failed to assign citation. Please try again.');
+          setSubmitting(false);
+          return;
+        }
+      }
+      if (submissionType === 'vulnerability' && options_for_consideration.length > 0) {
         // Submit vulnerability with associated OFCs
         const submissionData = {
           type: 'vulnerability',
           data: {
             vulnerability: formData.vulnerability,
             discipline: formData.discipline,
-            source: formData.source,
-            sector_id: formData.sector_id || null,
-            subsector_id: formData.subsector_id || null,
+            sources: citation,
+            id: formData.id || null,
+            id: formData.id || null,
             has_associated_ofcs: true,
-            ofc_count: ofcs.length,
-            associated_ofcs: ofcs
+            ofc_count: options_for_consideration.length,
+            associated_ofcs: options_for_consideration
           },
           submitterEmail: formData.submitter_email,
           submitted_by: currentUser.id,
@@ -179,7 +243,7 @@ export default function VOFCSubmission() {
         }
 
         const result = await response.json();
-        alert(`Vulnerability with ${ofcs.length} associated OFCs submitted successfully! Submission ID: ${result.id}`);
+        alert(`Vulnerability with ${options_for_consideration.length} associated OFCs submitted successfully! Submission ID: ${result.id}`);
       } else {
         // Submit single vulnerability or OFC
         const submissionData = {
@@ -188,16 +252,16 @@ export default function VOFCSubmission() {
             ? {
                 vulnerability: formData.vulnerability,
                 discipline: formData.discipline,
-                source: formData.source,
-                sector_id: formData.sector_id || null,
-                subsector_id: formData.subsector_id || null
+                sources: citation,
+                id: formData.id || null,
+                id: formData.id || null
               }
             : {
                 option_text: formData.option_text,
                 discipline: formData.discipline,
-                source: formData.source,
-                sector_id: formData.sector_id || null,
-                subsector_id: formData.subsector_id || null
+                sources: citation,
+                id: formData.id || null,
+                id: formData.id || null
               },
           submitterEmail: formData.submitter_email,
           submitted_by: currentUser.id,
@@ -227,9 +291,9 @@ export default function VOFCSubmission() {
         vulnerability: '',
         option_text: '',
         discipline: '',
-        source: '',
-        sector_id: '',
-        subsector_id: ''
+        source_citation: '',
+        id: '',
+        id: ''
       });
       setOfcs([]);
       setCurrentOfc('');
@@ -329,8 +393,8 @@ export default function VOFCSubmission() {
                   <label className="form-label">Sector *</label>
                   <select
                     required
-                    value={formData.sector_id}
-                    onChange={(e) => setFormData({...formData, sector_id: e.target.value, subsector_id: ''})}
+                    value={formData.id}
+                    onChange={(e) => setFormData({...formData, id: e.target.value, id: ''})}
                     className="form-select"
                   >
                     <option value="">Select a sector...</option>
@@ -346,15 +410,15 @@ export default function VOFCSubmission() {
                 <div className="form-group">
                   <label className="form-label">Subsector</label>
                   <select
-                    value={formData.subsector_id}
-                    onChange={(e) => setFormData({...formData, subsector_id: e.target.value})}
+                    value={formData.id}
+                    onChange={(e) => setFormData({...formData, id: e.target.value})}
                     className="form-select"
-                    disabled={!formData.sector_id}
+                    disabled={!formData.id}
                   >
                     <option value="">Select a subsector...</option>
                     {filteredSubsectors.map(subsector => (
                       <option key={subsector.id} value={subsector.id}>
-                        {subsector.subsector_name}
+                        {subsector.name}
                       </option>
                     ))}
                   </select>
@@ -363,14 +427,22 @@ export default function VOFCSubmission() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Source</label>
+              <label className="form-label">Source Citation</label>
               <input
                 type="text"
-                value={formData.source}
-                onChange={(e) => setFormData({...formData, source: e.target.value})}
+                value={formData.source_citation}
+                onChange={handleSourceChange}
                 className="form-input"
-                placeholder="e.g., VOFC Library, NIST Guidelines, DHS Resources"
+                placeholder="e.g., Walsh, T.J., and R.J. Healy, 2011, Protection of Assets: Security Management"
               />
+              <small className="text-secondary">
+                Enter the full source citation. The system will automatically assign a citation number.
+              </small>
+              {citationStatus && (
+                <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+                  {citationStatus}
+                </div>
+              )}
             </div>
 
             <div className="form-group">
@@ -410,10 +482,10 @@ export default function VOFCSubmission() {
                   </div>
                 </div>
                 
-                {ofcs.length > 0 && (
+                {options_for_consideration.length > 0 && (
                   <div className="space-y-2">
-                    <h5 className="text-sm font-semibold">Added OFCs ({ofcs.length}):</h5>
-                    {ofcs.map((ofc, index) => (
+                    <h5 className="text-sm font-semibold">Added OFCs ({options_for_consideration.length}):</h5>
+                    {options_for_consideration.map((ofc, index) => (
                       <div key={index} className="flex items-start gap-2 p-2 bg-light border rounded">
                         <div className="flex-1 text-sm">{ofc}</div>
                         <button
@@ -447,8 +519,8 @@ export default function VOFCSubmission() {
                     option_text: '',
                     discipline: '',
                     source: '',
-                    sector_id: '',
-                    subsector_id: ''
+                    id: '',
+                    id: ''
                   });
                   setOfcs([]);
                   setCurrentOfc('');

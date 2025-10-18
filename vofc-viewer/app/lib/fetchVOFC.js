@@ -3,102 +3,102 @@ import { supabase } from './supabaseClient';
 // Mock data for development when database is not available
 const mockQuestions = [
   {
-    question_id: 1,
+    id: 1,
     question_text: "Do you utilize cameras?",
     sector_id: 1,
-    technology_class: "Physical Security",
-    source_doc: "VOFC Library",
+    discipline: "Physical Security",
+    source: "VOFC Library",
     page_number: 1,
     display_order: 1
   },
   {
-    question_id: 2,
+    id: 2,
     question_text: "Analog or digital?",
     sector_id: 1,
-    technology_class: "Physical Security",
-    source_doc: "VOFC Library",
+    discipline: "Physical Security",
+    source: "VOFC Library",
     page_number: 1,
     display_order: 2
   },
   {
-    question_id: 3,
+    id: 3,
     question_text: "Do you have access control systems?",
     sector_id: 1,
-    technology_class: "Physical Security",
-    source_doc: "VOFC Library",
+    discipline: "Physical Security",
+    source: "VOFC Library",
     page_number: 2,
     display_order: 3
   },
   {
-    question_id: 4,
+    id: 4,
     question_text: "Are your systems connected to the internet?",
     sector_id: 2,
-    technology_class: "Cybersecurity",
-    source_doc: "VOFC Library",
+    discipline: "Cybersecurity",
+    source: "VOFC Library",
     page_number: 3,
     display_order: 4
   },
   {
-    question_id: 5,
+    id: 5,
     question_text: "Do you have backup systems in place?",
     sector_id: 2,
-    technology_class: "Cybersecurity",
-    source_doc: "VOFC Library",
+    discipline: "Cybersecurity",
+    source: "VOFC Library",
     page_number: 4,
     display_order: 5
   }
 ];
 
 const mockSectors = [
-  { sector_id: 1, sector_name: "Physical Security" },
-  { sector_id: 2, sector_name: "Cybersecurity" },
-  { sector_id: 3, sector_name: "Personnel Security" },
-  { sector_id: 4, sector_name: "Operational Security" }
+  { id: 1, sector_name: "Physical Security" },
+  { id: 2, sector_name: "Cybersecurity" },
+  { id: 3, sector_name: "Personnel Security" },
+  { id: 4, sector_name: "Operational Security" }
 ];
 
 const mockVulnerabilities = [
   {
-    vulnerability_id: 1,
-    vulnerability_name: "Unauthorized Physical Access",
-    description: "Risk of unauthorized individuals gaining physical access to restricted areas",
-    severity_level: "High",
-    source_doc: "VOFC Library",
-    page_number: 5
+    id: 1,
+    vulnerability: "Unauthorized Physical Access",
+    discipline: "Physical Security",
+    source: "VOFC Library",
+    sector_id: null,
+    subsector_id: null
   },
   {
-    vulnerability_id: 2,
-    vulnerability_name: "Network Intrusion",
-    description: "Potential for unauthorized network access and data breaches",
-    severity_level: "Critical",
-    source_doc: "VOFC Library",
-    page_number: 6
+    id: 2,
+    vulnerability: "Network Intrusion",
+    discipline: "Cybersecurity",
+    source: "VOFC Library",
+    sector_id: null,
+    subsector_id: null
   },
   {
-    vulnerability_id: 3,
-    vulnerability_name: "Insider Threat",
-    description: "Risk from malicious or negligent actions by authorized personnel",
-    severity_level: "Medium",
-    source_doc: "VOFC Library",
-    page_number: 7
+    id: 3,
+    vulnerability: "Insider Threat",
+    discipline: "Personnel Security",
+    source: "VOFC Library",
+    sector_id: null,
+    subsector_id: null
   }
 ];
 
 const mockOFCs = [
   {
-    ofc_id: 1,
-    ofc_text: "Implement multi-factor authentication for all systems",
-    technology_class: "Cybersecurity",
-    source_doc: "VOFC Library",
-    effort_level: "Medium",
-    effectiveness: "High"
+    id: 1,
+    option_text: "Implement multi-factor authentication for all systems",
+    discipline: "Cybersecurity",
+    source: "VOFC Library",
+    sector_id: null,
+    subsector_id: null
   },
   {
-    ofc_id: 2,
-    ofc_text: "Install security cameras with 24/7 monitoring",
-    technology_class: "Physical Security",
-    source_doc: "VOFC Library",
-    effort_level: "High",
-    effectiveness: "High"
+    id: 2,
+    option_text: "Install security cameras with 24/7 monitoring",
+    discipline: "Physical Security",
+    source: "VOFC Library",
+    sector_id: null,
+    subsector_id: null
   }
 ];
 
@@ -218,10 +218,11 @@ export async function getOFCsForVulnerability(vulnerabilityId) {
       .select(`
         options_for_consideration (
           id,
-          text,
-          effort_level,
-          effectiveness,
-          source
+          option_text,
+          discipline,
+          source,
+          sector_id,
+          subsector_id
         )
       `)
       .eq('vulnerability_id', vulnerabilityId);
@@ -265,7 +266,7 @@ export async function fetchSubsectors() {
     const { data, error } = await supabase
       .from('subsectors')
       .select('*')
-      .order('subsector_name');
+      .order('name');
     
     if (error) {
       console.error('Error fetching subsectors:', error);

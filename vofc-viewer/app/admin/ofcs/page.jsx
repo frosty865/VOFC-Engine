@@ -5,7 +5,7 @@ import { getCurrentUser } from '../../lib/auth';
 import { supabase } from '../../lib/supabaseClient';
 
 export default function OFCManagement() {
-  const [ofcs, setOfcs] = useState([]);
+  const [options_for_consideration, setOfcs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
   const [showEditForm, setShowEditForm] = useState(false);
@@ -19,8 +19,8 @@ export default function OFCManagement() {
     option_text: '',
     discipline: '',
     source: '',
-    sector_id: '',
-    subsector_id: ''
+    id: '',
+    id: ''
   });
   const router = useRouter();
 
@@ -94,8 +94,8 @@ export default function OFCManagement() {
       option_text: ofc.option_text || '',
       discipline: ofc.discipline || '',
       source: ofc.source || '',
-      sector_id: ofc.sector_id || '',
-      subsector_id: ofc.subsector_id || ''
+      id: ofc.id || '',
+      id: ofc.id || ''
     });
     setShowEditForm(true);
   };
@@ -109,8 +109,8 @@ export default function OFCManagement() {
           option_text: editFormData.option_text,
           discipline: editFormData.discipline,
           source: editFormData.source,
-          sector_id: editFormData.sector_id,
-          subsector_id: editFormData.subsector_id
+          id: editFormData.id,
+          id: editFormData.id
         })
         .eq('id', editFormData.id);
 
@@ -147,7 +147,7 @@ export default function OFCManagement() {
     }
   };
 
-  const filteredOFCs = ofcs.filter(ofc => {
+  const filteredOFCs = options_for_consideration.filter(ofc => {
     const matchesSearch = ofc.option_text?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          ofc.discipline?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDiscipline = !filterDiscipline || ofc.discipline === filterDiscipline;
@@ -156,7 +156,7 @@ export default function OFCManagement() {
   });
 
   const getDisciplines = () => {
-    const disciplines = [...new Set(ofcs.map(ofc => ofc.discipline).filter(Boolean))];
+    const disciplines = [...new Set(options_for_consideration.map(ofc => ofc.discipline).filter(Boolean))];
     return disciplines.sort();
   };
 
@@ -190,7 +190,7 @@ export default function OFCManagement() {
             </div>
             <div className="text-right">
               <div className="text-sm font-medium" style={{ color: 'var(--cisa-gray-medium)' }}>
-                {filteredOFCs.length} of {ofcs.length} OFCs
+                {filteredOFCs.length} of {options_for_consideration.length} OFCs
               </div>
               <div className="text-xs mt-1" style={{ color: 'var(--cisa-gray-light)' }}>
                 Total Records
@@ -418,8 +418,8 @@ export default function OFCManagement() {
                         <label className="form-label">Sector ID</label>
                         <input
                           type="text"
-                          value={editFormData.sector_id}
-                          onChange={(e) => setEditFormData({...editFormData, sector_id: e.target.value})}
+                          value={editFormData.id}
+                          onChange={(e) => setEditFormData({...editFormData, id: e.target.value})}
                           className="form-control"
                           placeholder="e.g., 1"
                         />
@@ -429,8 +429,8 @@ export default function OFCManagement() {
                         <label className="form-label">Subsector ID</label>
                         <input
                           type="text"
-                          value={editFormData.subsector_id}
-                          onChange={(e) => setEditFormData({...editFormData, subsector_id: e.target.value})}
+                          value={editFormData.id}
+                          onChange={(e) => setEditFormData({...editFormData, id: e.target.value})}
                           className="form-control"
                           placeholder="e.g., 5"
                         />
