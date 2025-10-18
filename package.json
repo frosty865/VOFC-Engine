@@ -4,73 +4,19 @@
   "description": "VOFC Engine - Vulnerability Options for Consideration Engine with AI-powered assessment generation",
   "private": true,
   "workspaces": [
-    "vofc-viewer"
+    "vofc-viewer",
+    "vofc-viewer/apps/backend"
   ],
   "scripts": {
     "dev": "npm run dev --workspace=vofc-viewer",
+    "dev:backend": "pnpm --filter backend dev",
+    "dev:viewer": "pnpm --filter vofc-viewer dev",
+    "dev:all": "powershell -Command \"Start-Process powershell -ArgumentList 'pnpm run dev:backend'; Start-Process powershell -ArgumentList 'pnpm run dev:viewer'\"",
     "build": "npm run build --workspace=vofc-viewer",
-    "start": "npm run start --workspace=vofc-viewer",
-    "install-all": "npm install && npm install --workspace=vofc-viewer",
-    "setup-db": "node scripts/setup-database.js",
-    "migrate": "node scripts/migrate_data.ps1",
-    "test-api": "node scripts/test-api-endpoints.js",
-    "test-login": "node scripts/test-login.js",
-    "check-schema": "node scripts/check-schema.js",
-    "populate-data": "node scripts/populate-sample-data.js",
-    "cleanup": "node scripts/cleanup_project.py",
-    "deploy": "node scripts/deploy-to-vercel.js",
-    "security-setup": "node scripts/setup-secure-auth.js",
-    "verify-security": "node scripts/install-secure-deps.js"
-  },
-  "keywords": [
-    "vofc",
-    "vulnerability",
-    "security",
-    "assessment",
-    "ai",
-    "cybersecurity",
-    "cisa",
-    "options-for-consideration"
-  ],
-  "author": "VOFC Engine Team",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/frosty865/VOFC-Engine.git"
-  },
-  "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=8.0.0"
+    "start": "npm run start --workspace=vofc-viewer"
   },
   "devDependencies": {
-    "dotenv": "^16.4.7"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.75.0",
-    "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2"
-  },
-  "python": {
-    "version": ">=3.8",
-    "dependencies": [
-      "supabase",
-      "pandas",
-      "python-dotenv",
-      "sqlalchemy",
-      "psycopg2-binary"
-    ]
-  },
-  "project-structure": {
-    "frontend": "vofc-viewer/ - Next.js React application",
-    "backend": "src/ - Python AI backend with parsers and pipelines",
-    "scripts": "scripts/ - Database setup, migration, and utility scripts",
-    "sql": "sql/ - Database schema and migration files",
-    "docs": "docs/ - Project documentation",
-    "data": "data/ - Imported and exported data files"
-  },
-  "deployment": {
-    "frontend": "Vercel",
-    "backend": "Supabase Edge Functions",
-    "database": "Supabase PostgreSQL"
+    "typescript": "^5.4.0",
+    "ts-node": "^10.9.1"
   }
 }
