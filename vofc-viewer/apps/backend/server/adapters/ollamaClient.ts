@@ -15,7 +15,7 @@ export async function ollamaChat(messages: any[], options?: { json?: boolean }) 
     })
   });
   if (!res.ok) throw new Error(`Ollama error ${res.status}: ${await res.text()}`);
-  const data = await res.json();
+  const data = await res.json() as any;
   const content = data?.message?.content?.trim() || "";
   if (options?.json) {
     try { return JSON.parse(content); } catch { return content; }
