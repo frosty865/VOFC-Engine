@@ -2,6 +2,7 @@ import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
+import psaParserRoutes from './routes/psa-parser.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -16,7 +17,11 @@ app.use(express.json());
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    services: ['PSA Document Parser', 'Ollama Integration']
+  });
 });
 
 // Example API endpoint
@@ -24,9 +29,13 @@ app.get('/api/test', (req, res) => {
   res.json({ message: 'Backend server is running!' });
 });
 
+// PSA Parser routes
+app.use('/api/psa', psaParserRoutes);
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
+  console.log(`PSA Document Parser available at: http://localhost:${PORT}/api/psa`);
 });
 
 export default app;
