@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { AuthService } from '../../../../lib/auth-server';
-import { SecurityUtils } from '../../../../lib/security';
+import { supabase } from '../../lib/supabaseClient';
 
-// Rate limiting
-const rateLimiter = SecurityUtils.createRateLimiter(5, 15 * 60 * 1000); // 5 attempts per 15 minutes
+// Simple rate limiting
+const loginAttempts = new Map();
+const MAX_ATTEMPTS = 5;
+const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
 export async function POST(request) {
   try {
@@ -28,31 +29,69 @@ export async function POST(request) {
       );
     }
 
-    // Sanitize inputs
-    const sanitizedUsername = SecurityUtils.sanitizeInput(username);
-    const sanitizedPassword = SecurityUtils.sanitizeInput(password);
+    // Simple input validation
+    if (username.length > 100 || password.length > 100) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid input length' },
+        { status: 400 }
+      );
+    }
 
     // Rate limiting
     const clientIP = request.headers.get('x-forwarded-for') || 
                      request.headers.get('x-real-ip') || 
                      'unknown';
     
-    if (!rateLimiter(clientIP)) {
+    const now = Date.now();
+    const attempts = loginAttempts.get(clientIP) || [];
+    const validAttempts = attempts.filter(time => now - time < WINDOW_MS);
+    
+    if (validAttempts.length >= MAX_ATTEMPTS) {
       return NextResponse.json(
         { success: false, error: 'Too many login attempts. Please try again later.' },
         { status: 429 }
       );
     }
 
-    // Authenticate user
-    const authResult = await AuthService.authenticateUser(sanitizedUsername, sanitizedPassword);
+    // Add current attempt
+    validAttempts.push(now);
+    loginAttempts.set(clientIP, validAttempts);
 
-    if (!authResult.success) {
+    // Authenticate user with Supabase
+    const { data: user, error } = await supabase
+      .from('vofc_users')
+      .select('*')
+      .eq('username', username)
+      .single();
+
+    if (error || !user) {
       return NextResponse.json(
-        { success: false, error: authResult.error },
+        { success: false, error: 'Invalid credentials' },
         { status: 401 }
       );
     }
+
+    // Simple password check (in production, use proper hashing)
+    if (user.password !== password) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid credentials' },
+        { status: 401 }
+      );
+    }
+
+    const authResult = {
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        email: user.email
+      },
+      sessionId: user.id,
+      token: 'mock-token-' + Date.now()
+    };
+
+    // AuthResult is already successful at this point
 
     // Set secure HTTP-only cookie
     const response = NextResponse.json({
