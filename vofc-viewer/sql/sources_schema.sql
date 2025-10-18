@@ -104,3 +104,4 @@ INSERT INTO sources (title, author, organization, document_type, description) VA
 ('ASIS International Standards', 'ASIS', 'ASIS International', 'standard', 'International standards for security management'),
 ('NFPA 730 Security Management', 'NFPA', 'NFPA', 'standard', 'National Fire Protection Association security management standard')
 ON CONFLICT DO NOTHING;
+

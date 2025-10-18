@@ -120,3 +120,4 @@ async function generateQuestionForVulnerability(vulnerability, isRoot = false) {
 
 // Run the script
 generateMissingQuestions();
+

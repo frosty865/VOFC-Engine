@@ -51,3 +51,4 @@ BEGIN
         CREATE POLICY "sources_are_public" ON sources FOR SELECT USING (true);
     END IF;
 END $$;
+

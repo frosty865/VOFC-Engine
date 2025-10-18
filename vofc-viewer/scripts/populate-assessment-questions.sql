@@ -53,3 +53,4 @@ CREATE POLICY "Allow admin to manage questions" ON questions FOR ALL USING (
 ) WITH CHECK (
     EXISTS (SELECT 1 FROM vofc_users WHERE user_id = auth.uid() AND role = 'admin')
 );
+

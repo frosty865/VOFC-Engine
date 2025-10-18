@@ -165,3 +165,4 @@ console.log('    EXISTS (SELECT 1 FROM vofc_users WHERE user_id = auth.uid() AND
 console.log(');');
 
 console.log('\n🎉 Copy the above SQL and run it in your Supabase SQL Editor!');
+

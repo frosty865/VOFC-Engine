@@ -3,17 +3,13 @@
   "version": "1.0.0",
   "description": "VOFC Engine - Vulnerability Options for Consideration Engine with AI-powered assessment generation",
   "private": true,
-  "workspaces": [
-    "vofc-viewer",
-    "vofc-viewer/apps/backend"
-  ],
   "scripts": {
-    "dev": "npm run dev --workspace=vofc-viewer",
+    "dev": "pnpm --filter vofc-viewer dev",
     "dev:backend": "pnpm --filter backend dev",
     "dev:viewer": "pnpm --filter vofc-viewer dev",
     "dev:all": "powershell -Command \"Start-Process powershell -ArgumentList 'pnpm run dev:backend'; Start-Process powershell -ArgumentList 'pnpm run dev:viewer'\"",
-    "build": "npm run build --workspace=vofc-viewer",
-    "start": "npm run start --workspace=vofc-viewer"
+    "build": "pnpm --filter vofc-viewer build",
+    "start": "pnpm --filter vofc-viewer start"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

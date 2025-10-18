@@ -95,3 +95,4 @@ async function setupAssessmentQuestions() {
 }
 
 setupAssessmentQuestions();
+

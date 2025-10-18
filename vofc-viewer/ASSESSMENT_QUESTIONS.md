@@ -92,3 +92,4 @@ const { data, error } = await supabase.functions.invoke('generate-question-i18n'
 });
 // Returns: { en: "Are security cameras properly positioned and functioning to monitor critical areas?", es: "¿Están las cámaras de seguridad posicionadas y funcionando correctamente para monitorear áreas críticas?" }
 ```
+

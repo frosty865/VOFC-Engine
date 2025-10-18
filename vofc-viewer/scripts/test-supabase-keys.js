@@ -82,3 +82,4 @@ console.log('2. Verify the project URL in your Supabase dashboard');
 console.log('3. Make sure the keys are not expired');
 console.log('4. Check if RLS policies are blocking access');
 console.log('5. Try regenerating the API keys in Supabase dashboard');
+

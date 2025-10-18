@@ -1,0 +1,3 @@
+packages:
+  - 'vofc-viewer'
+  - 'vofc-viewer/apps/backend'

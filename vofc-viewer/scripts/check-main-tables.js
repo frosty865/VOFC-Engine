@@ -41,3 +41,4 @@ async function checkMainTables() {
 }
 
 checkMainTables();
+
