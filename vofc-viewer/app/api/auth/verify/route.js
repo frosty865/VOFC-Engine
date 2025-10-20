@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
-import { AuthService } from '../../../../lib/auth-server';
+import { jwtVerify } from 'jose';
+
+// Secret key for JWT verification (must match the one used for signing)
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production'
+);
 
 export async function GET(request) {
   try {
@@ -12,25 +17,34 @@ export async function GET(request) {
       );
     }
 
-    const result = await AuthService.verifyToken(token);
+    // Verify and decode the JWT token
+    const { payload } = await jwtVerify(token, JWT_SECRET);
 
-    if (!result.success) {
+    // Check if token is expired (JWT handles this automatically)
+    if (!payload || !payload.email) {
       return NextResponse.json(
-        { success: false, error: result.error },
+        { success: false, error: 'Invalid token' },
         { status: 401 }
       );
     }
 
+    console.log('✅ JWT verified for:', payload.email);
+
     return NextResponse.json({
       success: true,
-      user: result.user
+      user: {
+        id: payload.userId,
+        email: payload.email,
+        role: payload.role,
+        name: payload.name
+      }
     });
 
   } catch (error) {
-    console.error('Token verification error:', error);
+    console.error('JWT verification error:', error);
     return NextResponse.json(
       { success: false, error: 'Token verification failed' },
-      { status: 500 }
+      { status: 401 }
     );
   }
 }

@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 // Removed localStorage dependencies - now using secure server-side authentication
 import '../styles/cisa.css';
+import PropTypes from 'prop-types';
 
-export default function Navigation() {
+export default function Navigation({ simple = false }) {
   const pathname = usePathname();
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -54,6 +55,29 @@ export default function Navigation() {
       console.error('Logout error:', error);
     }
   };
+
+  if (simple) {
+    // Render basic nav for public/unauth pages
+    return (
+      <nav className="bg-blue-900 shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <h1 className="text-xl font-bold text-white">VOFC Viewer</h1>
+              </div>
+              <div className="hidden md:ml-6 md:flex md:space-x-8">
+                <Link href="/" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="View and search VOFC questions">VOFC Viewer (Questions)</Link>
+                <Link href="/vulnerabilities" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Search vulnerabilities">Vulnerability Viewer</Link>
+                <Link href="/submit" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Submit new VOFCs for review">Submit VOFC For Review</Link>
+                <Link href="/admin" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="User management and database health">Admin</Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+    );
+  }
 
   return (
     <header className="header" style={{
@@ -354,3 +378,7 @@ export default function Navigation() {
     </header>
   );
 }
+
+Navigation.propTypes = {
+  simple: PropTypes.bool,
+};

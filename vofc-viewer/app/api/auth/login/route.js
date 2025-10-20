@@ -1,107 +1,63 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '../../../lib/supabaseClient';
+import { SignJWT, jwtVerify } from 'jose';
 
-// Simple rate limiting
-const loginAttempts = new Map();
-const MAX_ATTEMPTS = 5;
-const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+// Secret key for JWT signing (in production, use a secure random key)
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production'
+);
+
+// Valid users (in production, this would come from a database)
+const validUsers = [
+  { email: 'admin@vofc.gov', password: 'Admin123!', role: 'admin', name: 'Administrator' },
+  { email: 'spsa@vofc.gov', password: 'Admin123!', role: 'spsa', name: 'Senior PSA' },
+  { email: 'psa@vofc.gov', password: 'Admin123!', role: 'psa', name: 'PSA' },
+  { email: 'analyst@vofc.gov', password: 'Admin123!', role: 'analyst', name: 'Analyst' }
+];
 
 export async function POST(request) {
   try {
-    let body;
-    try {
-      body = await request.json();
-    } catch (jsonError) {
-      console.error('JSON parsing error:', jsonError);
-      return NextResponse.json(
-        { success: false, error: 'Invalid JSON in request body' },
-        { status: 400 }
-      );
-    }
-    
-    const { username, password } = body;
+    const { email, password } = await request.json();
 
-    // Validate input
-    if (!username || !password) {
-      return NextResponse.json(
-        { success: false, error: 'Username and password are required' },
-        { status: 400 }
-      );
-    }
+    console.log('🔐 Login attempt for:', email);
 
-    // Simple input validation
-    if (username.length > 100 || password.length > 100) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid input length' },
-        { status: 400 }
-      );
-    }
+    // Find user
+    const user = validUsers.find(u => u.email === email && u.password === password);
 
-    // Rate limiting
-    const clientIP = request.headers.get('x-forwarded-for') || 
-                     request.headers.get('x-real-ip') || 
-                     'unknown';
-    
-    const now = Date.now();
-    const attempts = loginAttempts.get(clientIP) || [];
-    const validAttempts = attempts.filter(time => now - time < WINDOW_MS);
-    
-    if (validAttempts.length >= MAX_ATTEMPTS) {
-      return NextResponse.json(
-        { success: false, error: 'Too many login attempts. Please try again later.' },
-        { status: 429 }
-      );
-    }
-
-    // Add current attempt
-    validAttempts.push(now);
-    loginAttempts.set(clientIP, validAttempts);
-
-    // Authenticate user with Supabase
-    const { data: user, error } = await supabase
-      .from('vofc_users')
-      .select('*')
-      .eq('username', username)
-      .single();
-
-    if (error || !user) {
+    if (!user) {
+      console.log('❌ Invalid credentials for:', email);
       return NextResponse.json(
         { success: false, error: 'Invalid credentials' },
         { status: 401 }
       );
     }
 
-    // Simple password check (in production, use proper hashing)
-    if (user.password !== password) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid credentials' },
-        { status: 401 }
-      );
-    }
+    // Create JWT token with encrypted payload
+    const token = await new SignJWT({
+      userId: user.email,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+      iat: Math.floor(Date.now() / 1000)
+    })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt()
+      .setExpirationTime('24h')
+      .sign(JWT_SECRET);
 
-    const authResult = {
-      success: true,
-      user: {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        email: user.email
-      },
-      sessionId: user.id,
-      token: 'mock-token-' + Date.now()
-    };
+    console.log('✅ Login successful for:', email, 'Role:', user.role);
 
-    // AuthResult is already successful at this point
-
-    // Set secure HTTP-only cookie
+    // Set encrypted JWT cookie
     const response = NextResponse.json({
       success: true,
-      user: authResult.user,
-      sessionId: authResult.sessionId
+      user: {
+        id: user.email,
+        email: user.email,
+        role: user.role,
+        name: user.name
+      }
     });
 
-    // Set secure, HTTP-only cookie
-    response.cookies.set('auth-token', authResult.token, {
+    response.cookies.set('auth-token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',

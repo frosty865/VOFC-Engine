@@ -1,15 +1,29 @@
 -- Fix foreign key relationships for OFC sources
 -- This script creates the proper foreign key constraints
 
--- Add foreign key constraint to ofc_sources table
-ALTER TABLE ofc_sources 
-ADD CONSTRAINT fk_ofc_sources_ofc_id 
-FOREIGN KEY (ofc_id) REFERENCES options_for_consideration(id) ON DELETE CASCADE;
+-- Add foreign key constraint to ofc_sources table (idempotent)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_ofc_sources_ofc_id'
+    ) THEN
+        ALTER TABLE ofc_sources
+        ADD CONSTRAINT fk_ofc_sources_ofc_id
+        FOREIGN KEY (ofc_id) REFERENCES options_for_consideration(id) ON DELETE CASCADE;
+    END IF;
+END $$;
 
--- Add foreign key constraint to ofc_sources table for source_id
-ALTER TABLE ofc_sources 
-ADD CONSTRAINT fk_ofc_sources_source_id 
-FOREIGN KEY (source_id) REFERENCES sources("reference number") ON DELETE CASCADE;
+-- Add foreign key constraint to ofc_sources table for source_id (idempotent)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_ofc_sources_source_id'
+    ) THEN
+        ALTER TABLE ofc_sources
+        ADD CONSTRAINT fk_ofc_sources_source_id
+        FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE;
+    END IF;
+END $$;
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_ofc_sources_ofc_id ON ofc_sources(ofc_id);

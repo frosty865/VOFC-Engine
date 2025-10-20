@@ -50,9 +50,13 @@ const formatOptionText = (text) => {
 const OFCCard = memo(({ ofc }) => {
   const formattedText = formatOptionText(ofc.option_text);
   
-  // Parse citation numbers from the sources column
+  // Check if sources are resolved or still contain citations
+  const hasResolvedSources = ofc.sources && !ofc.sources.includes('[cite:');
+  const hasCitations = ofc.sources && ofc.sources.includes('[cite:');
+  
+  // Parse citation numbers only if sources contain citations
   const parseCitations = (sourcesText) => {
-    if (!sourcesText) return [];
+    if (!sourcesText || !sourcesText.includes('[cite:')) return [];
     const citationRegex = /\[cite:\s*([^\]]+)\]/g;
     const citations = [];
     let match;
@@ -66,7 +70,12 @@ const OFCCard = memo(({ ofc }) => {
     return citations;
   };
   
-  const citationNumbers = parseCitations(ofc.sources);
+  const citationNumbers = hasCitations ? parseCitations(ofc.sources) : [];
+  
+  // Debug: Log if we have unresolved citations
+  if (hasCitations && citationNumbers.length > 0) {
+    console.log(`🔍 OFCCard: OFC ${ofc.id} has citations:`, citationNumbers);
+  }
   
   return (
     <div className="card">
@@ -96,28 +105,35 @@ const OFCCard = memo(({ ofc }) => {
           />
         </div>
         
-        {citationNumbers.length > 0 && (
+        {(hasResolvedSources || citationNumbers.length > 0) && (
           <div className="text-sm text-secondary mb-2">
             <strong>Sources:</strong>
             <div className="mt-1 space-y-2">
-              {citationNumbers.map((citationNum, idx) => {
-                // Find the matching source from ofc_sources
-                const matchingSource = ofc.ofc_sources?.find(link => 
-                  link.sources && link.sources["reference number"] == citationNum
-                );
-                
-                return (
-                  <div key={idx} className="p-2 rounded border-l-2" style={{ 
-                    backgroundColor: 'var(--cisa-gray-light)',
-                    borderColor: 'var(--cisa-blue)',
-                    color: 'var(--cisa-gray-dark)'
-                  }}>
-                    <div className="text-xs text-gray-700">
-                      <SafeHTML content={matchingSource?.sources?.source || `Source ${citationNum} not found`} />
-                    </div>
+              {hasResolvedSources ? (
+                <div className="p-2 rounded border-l-2" style={{ 
+                  backgroundColor: 'var(--cisa-gray-light)',
+                  borderColor: 'var(--cisa-blue)',
+                  color: 'var(--cisa-gray-dark)'
+                }}>
+                  <div className="text-xs text-gray-700">
+                    <SafeHTML content={ofc.sources} />
                   </div>
-                );
-              })}
+                </div>
+              ) : (
+                citationNumbers.map((citationNum, idx) => {
+                  return (
+                    <div key={idx} className="p-2 rounded border-l-2" style={{ 
+                      backgroundColor: 'var(--cisa-gray-light)',
+                      borderColor: 'var(--cisa-blue)',
+                      color: 'var(--cisa-gray-dark)'
+                    }}>
+                      <div className="text-xs text-gray-700">
+                        <strong>Reference {citationNum}:</strong> Source details not available
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         )}

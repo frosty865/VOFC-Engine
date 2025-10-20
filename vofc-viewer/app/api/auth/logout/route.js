@@ -1,27 +1,16 @@
 import { NextResponse } from 'next/server';
-import { AuthService } from '../../../../lib/auth-server';
 
 export async function POST(request) {
   try {
-    const token = request.cookies.get('auth-token')?.value;
+    console.log('✅ User logged out');
 
-    if (token) {
-      await AuthService.logoutUser(token);
-    }
-
-    // Clear the authentication cookie
     const response = NextResponse.json({
       success: true,
       message: 'Logged out successfully'
     });
 
-    response.cookies.set('auth-token', '', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 0,
-      path: '/'
-    });
+    // Clear the JWT cookie
+    response.cookies.delete('auth-token');
 
     return response;
 

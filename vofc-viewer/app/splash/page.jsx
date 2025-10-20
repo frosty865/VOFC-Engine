@@ -35,7 +35,7 @@ export default function SplashPage() {
   const handleLogin = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const username = formData.get('username');
+    const email = formData.get('email');
     const password = formData.get('password');
 
     try {
@@ -45,7 +45,7 @@ export default function SplashPage() {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
 
       const result = await response.json();
@@ -57,7 +57,7 @@ export default function SplashPage() {
         router.push('/');
       } else {
         // Track failed login
-        trackVOFCEvent.error('login_failed', { username, error: result.error });
+        trackVOFCEvent.error('login_failed', { email, error: result.error });
         alert('Login failed: ' + result.error);
       }
     } catch (error) {
@@ -172,17 +172,17 @@ export default function SplashPage() {
 
           <form onSubmit={handleLogin} style={{ marginBottom: '32px' }}>
             <div className="form-group">
-              <label htmlFor="username" className="form-label">
-                Username
+              <label htmlFor="email" className="form-label">
+                Email
               </label>
               <input
-                id="username"
-                name="username"
-                type="text"
+                id="email"
+                name="email"
+                type="email"
                 required
-                autoComplete="username"
+                autoComplete="email"
                 className="form-input"
-                placeholder="Enter your username"
+                placeholder="Enter your email"
                 style={{
                   width: '100%',
                   padding: 'var(--spacing-md)',

@@ -1,10 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    turbopack: {
-      root: '.'
+    turbo: {
+      root: process.cwd()
     }
-  }
+  },
+  outputFileTracingRoot: process.cwd()
 }
 
 export default nextConfig

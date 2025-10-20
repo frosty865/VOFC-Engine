@@ -87,9 +87,7 @@ export async function PUT(request) {
       id, 
       option_text, 
       discipline, 
-      source, 
-      id, 
-      id
+      source
     } = body;
 
     if (!id) {

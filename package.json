@@ -9,10 +9,16 @@
     "dev:viewer": "pnpm --filter vofc-viewer dev",
     "dev:all": "powershell -Command \"Start-Process powershell -ArgumentList 'pnpm run dev:backend'; Start-Process powershell -ArgumentList 'pnpm run dev:viewer'\"",
     "build": "pnpm --filter vofc-viewer build",
-    "start": "pnpm --filter vofc-viewer start"
+    "start": "pnpm --filter vofc-viewer start",
+    "embed": "node vofc-viewer/apps/backend/server/services/knowledge/embeddingPipeline.js"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "ts-node": "^10.9.1"
+    "ts-node": "^10.9.1",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "node-fetch": "^3.3.2",
+    "pdf-parse": "^2.4.3"
   }
 }
