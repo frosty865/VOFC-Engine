@@ -28,7 +28,6 @@ export async function GET(request) {
       );
     }
 
-    console.log('✅ JWT verified for:', payload.email);
 
     return NextResponse.json({
       success: true,

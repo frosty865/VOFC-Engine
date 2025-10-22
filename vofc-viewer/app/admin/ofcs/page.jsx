@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getCurrentUser } from '../../lib/auth';
-import { supabase } from '../../lib/supabaseClient';
+import { getCurrentUser } from '../lib/auth';
+import { supabase } from '../lib/supabaseClient';
 
 export default function OFCManagement() {
   const [options_for_consideration, setOfcs] = useState([]);
@@ -63,21 +63,21 @@ export default function OFCManagement() {
         .from('options_for_consideration')
         .select(`
           *,
-          sources!sources (
-            reference_number,
-            authors,
-            title,
-            publication,
-            year,
-            formatted_citation,
-            short_citation
+          ofc_sources (
+            sources (
+              "reference number",
+              authors,
+              title,
+              publication,
+              year,
+              formatted_citation,
+              short_citation
+            )
           )
         `)
         .order('option_text');
 
       if (error) throw error;
-      console.log('📊 OFCs loaded:', data?.length || 0);
-      console.log('📊 First OFC sample:', data?.[0]);
       setOfcs(data || []);
     } catch (error) {
       console.error('Error loading OFCs:', error);

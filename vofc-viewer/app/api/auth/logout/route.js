@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request) {
   try {
-    console.log('✅ User logged out');
 
     const response = NextResponse.json({
       success: true,

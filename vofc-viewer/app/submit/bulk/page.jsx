@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 import { getCurrentUser, getUserProfile, canSubmitVOFC } from '../../lib/auth';
+import { fetchSectors, fetchSubsectorsBySector } from '../../lib/fetchVOFC';
 import SessionTimeoutWarning from '../../../components/SessionTimeoutWarning';
 
 export default function BulkSubmission() {
@@ -75,37 +76,20 @@ export default function BulkSubmission() {
 
   const loadSectorsAndSubsectors = async () => {
     try {
-      // Load sectors
-      const { data: sectorsData, error: sectorsError } = await supabase
-        .from('sectors')
-        .select('*')
-        .order('sector_name');
-
-      if (sectorsError) {
-        console.error('Error loading sectors:', sectorsError);
-      } else {
-        setSectors(sectorsData || []);
-      }
+      const sectorsData = await fetchSectors();
+      setSectors(sectorsData);
     } catch (error) {
-      console.error('Error loading sectors and subsectors:', error);
+      console.error('Error loading sectors:', error);
     }
   };
 
   const loadSubsectors = async (sectorId) => {
     try {
-      const { data: subsectorsData, error: subsectorsError } = await supabase
-        .from('subsectors')
-        .select('*')
-        .eq('sector_id', sectorId)
-        .order('subsector_name');
-
-      if (subsectorsError) {
-        console.error('Error loading subsectors:', subsectorsError);
-      } else {
-        setSubsectors(subsectorsData || []);
-      }
+      const subsectorsData = await fetchSubsectorsBySector(sectorId);
+      setSubsectors(subsectorsData);
     } catch (error) {
       console.error('Error loading subsectors:', error);
+      setSubsectors([]);
     }
   };
 
@@ -399,7 +383,6 @@ export default function BulkSubmission() {
       
       const parsedData = parseCSV(csvData);
       console.log('Parsed CSV data:', parsedData);
-      console.log('First row keys:', Object.keys(parsedData[0] || {}));
       
       // Apply autocorrect
       const { data: correctedData, corrections } = autocorrectCSV(parsedData);

@@ -18,13 +18,11 @@ export async function POST(request) {
   try {
     const { email, password } = await request.json();
 
-    console.log('🔐 Login attempt for:', email);
 
     // Find user
     const user = validUsers.find(u => u.email === email && u.password === password);
 
     if (!user) {
-      console.log('❌ Invalid credentials for:', email);
       return NextResponse.json(
         { success: false, error: 'Invalid credentials' },
         { status: 401 }
@@ -44,7 +42,6 @@ export async function POST(request) {
       .setExpirationTime('24h')
       .sign(JWT_SECRET);
 
-    console.log('✅ Login successful for:', email, 'Role:', user.role);
 
     // Set encrypted JWT cookie
     const response = NextResponse.json({

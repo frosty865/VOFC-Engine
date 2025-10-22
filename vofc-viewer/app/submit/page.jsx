@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
 import { getCurrentUser, getUserProfile, canSubmitVOFC } from '../lib/auth';
-import { fetchSectors, fetchSubsectors } from '../lib/fetchVOFC';
+import { fetchSectors, fetchSubsectors, fetchSubsectorsBySector } from '../lib/fetchVOFC';
 import SessionTimeoutWarning from '../../components/SessionTimeoutWarning';
 
 export default function VOFCSubmission() {
@@ -75,18 +75,13 @@ export default function VOFCSubmission() {
   };
 
   useEffect(() => {
-    // Filter subsectors when sector changes
-    if (formData.id && subsectors.length > 0) {
-      const filtered = subsectors.filter(sub => {
-        return sub.id === parseInt(formData.id) || 
-               sub.id === formData.id ||
-               sub.id.toString() === formData.id.toString();
-      });
-      setFilteredSubsectors(filtered);
+    // Fetch subsectors when sector changes
+    if (formData.id) {
+      loadSubsectorsForSector(formData.id);
     } else {
       setFilteredSubsectors([]);
     }
-  }, [formData.id, subsectors]);
+  }, [formData.id]);
 
   useEffect(() => {
     // Handle URL params after sectors are loaded
@@ -97,14 +92,20 @@ export default function VOFCSubmission() {
 
   const loadSectorsAndSubsectors = async () => {
     try {
-      const [sectorsData, subsectorsData] = await Promise.all([
-        fetchSectors(),
-        fetchSubsectors()
-      ]);
+      const sectorsData = await fetchSectors();
       setSectors(sectorsData);
-      setSubsectors(subsectorsData);
     } catch (error) {
-      console.error('Error loading sectors and subsectors:', error);
+      console.error('Error loading sectors:', error);
+    }
+  };
+
+  const loadSubsectorsForSector = async (sectorId) => {
+    try {
+      const subsectorsData = await fetchSubsectorsBySector(sectorId);
+      setFilteredSubsectors(subsectorsData);
+    } catch (error) {
+      console.error('Error loading subsectors for sector:', error);
+      setFilteredSubsectors([]);
     }
   };
 

@@ -18,6 +18,31 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 from ai.sector_mapper import infer_sector_with_confidence
 
+def infer_domain(text):
+    """
+    Classify the domain of security content based on keywords.
+    
+    Args:
+        text (str): The text content to classify
+        
+    Returns:
+        str: The inferred domain ("Cyber", "Physical", or "Converged")
+    """
+    text_lower = text.lower()
+    
+    # Cyber security keywords
+    cyber_keywords = ["firewall", "network", "server", "encryption", "cyber", "data", "it system"]
+    if any(keyword in text_lower for keyword in cyber_keywords):
+        return "Cyber"
+    
+    # Physical security keywords  
+    physical_keywords = ["door", "camera", "barrier", "guard", "lock", "fence", "bollard"]
+    if any(keyword in text_lower for keyword in physical_keywords):
+        return "Physical"
+    
+    # Default to Converged for mixed or unclear content
+    return "Converged"
+
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "vofc-engine")
 PROMPT_PATH = Path(__file__).parent / "prompts" / "normalize_universal_prompt.txt"
 
@@ -63,11 +88,15 @@ def normalize_records(parsed_json_path: str) -> List[Dict[str, Any]]:
                 subsector = sector_info["subsector"]
                 confidence = sector_info["confidence"]
                 
+                # Infer domain classification
+                domain = infer_domain(text)
+                
                 # Create user prompt
                 user_prompt = f"""Source: {source}
 File: {source_file}
 Sector: {sector}
 Subsector: {subsector}
+Domain: {domain}
 Type: {item_type}
 Citations: {', '.join(citations) if citations else 'None'}
 
@@ -85,6 +114,7 @@ Text to normalize:
                         # Add metadata
                         vofc_obj["sector"] = sector
                         vofc_obj["subsector"] = subsector
+                        vofc_obj["domain"] = domain
                         vofc_obj["source_title"] = source
                         vofc_obj["source_file"] = source_file
                         vofc_obj["original_type"] = item_type
@@ -174,6 +204,7 @@ def validate_normalized_records(normalized_records: List[Dict[str, Any]]) -> Dic
         "valid_records": 0,
         "invalid_records": 0,
         "sector_distribution": {},
+        "domain_distribution": {},
         "category_distribution": {},
         "missing_fields": [],
         "validation_errors": []
@@ -204,6 +235,10 @@ def validate_normalized_records(normalized_records: List[Dict[str, Any]]) -> Dic
             # Track sector distribution
             sector = record.get("sector", "Unknown")
             validation_stats["sector_distribution"][sector] = validation_stats["sector_distribution"].get(sector, 0) + 1
+            
+            # Track domain distribution
+            domain = record.get("domain", "Unknown")
+            validation_stats["domain_distribution"][domain] = validation_stats["domain_distribution"].get(domain, 0) + 1
             
             # Track category distribution
             category = record.get("category", "Unknown")
@@ -285,6 +320,11 @@ def main():
         print(f"\n🏢 Sector Distribution:")
         for sector, count in validation_stats['sector_distribution'].items():
             print(f"  - {sector}: {count}")
+    
+    if validation_stats['domain_distribution']:
+        print(f"\n🔒 Domain Distribution:")
+        for domain, count in validation_stats['domain_distribution'].items():
+            print(f"  - {domain}: {count}")
     
     if validation_stats['category_distribution']:
         print(f"\n📋 Category Distribution:")

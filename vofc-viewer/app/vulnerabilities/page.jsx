@@ -1,12 +1,14 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { fetchVulnerabilities } from '../lib/fetchVOFC';
+import DomainFilter from '../components/DomainFilter';
 
 export default function VulnerabilityViewer() {
   const [vulnerabilities, setVulnerabilities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredVulnerabilities, setFilteredVulnerabilities] = useState([]);
+  const [selectedDomains, setSelectedDomains] = useState([]);
 
   useEffect(() => {
     loadVulnerabilities();
@@ -14,7 +16,7 @@ export default function VulnerabilityViewer() {
 
   useEffect(() => {
     filterVulnerabilities();
-  }, [vulnerabilities, searchTerm]);
+  }, [vulnerabilities, searchTerm, selectedDomains]);
 
   const loadVulnerabilities = async () => {
     try {
@@ -37,6 +39,10 @@ export default function VulnerabilityViewer() {
       );
     }
 
+    // Apply domain filtering
+    if (selectedDomains.length > 0 && selectedDomains.length < 3) {
+      filtered = filtered.filter(v => selectedDomains.includes(v.domain));
+    }
 
     setFilteredVulnerabilities(filtered);
   };
@@ -69,6 +75,14 @@ export default function VulnerabilityViewer() {
             </div>
           </div>
           
+        </div>
+
+        {/* Domain Filter */}
+        <div className="mt-4">
+          <DomainFilter 
+            selectedDomains={selectedDomains}
+            onDomainChange={setSelectedDomains}
+          />
         </div>
 
         <div className="text-sm text-secondary">

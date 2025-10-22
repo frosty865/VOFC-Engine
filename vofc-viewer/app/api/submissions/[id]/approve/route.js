@@ -105,7 +105,6 @@ export async function POST(request, { params }) {
 
         // Automatically generate multiple assessment assessment_questions for this vulnerability
         try {
-          console.log('🤖 Generating multiple assessment assessment_questions for vulnerability...');
           
           // Generate 5-10 assessment_questions for each vulnerability
           const numQuestions = Math.floor(Math.random() * 6) + 5; // 5-10 assessment_questions
@@ -140,7 +139,6 @@ export async function POST(request, { params }) {
             if (insertQuestionsError) {
               console.error('Error inserting generated assessment_questions:', insertQuestionsError);
             } else {
-              console.log(`✅ ${questionsToInsert.length} assessment assessment_questions generated and inserted`);
             }
           }
         } catch (questionGenError) {

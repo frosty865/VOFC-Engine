@@ -10,10 +10,25 @@ export default function Navigation({ simple = false }) {
   const pathname = usePathname();
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showSubmissionsDropdown, setShowSubmissionsDropdown] = useState(false);
 
   useEffect(() => {
     loadUser();
   }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showSubmissionsDropdown && !event.target.closest('[data-dropdown]')) {
+        setShowSubmissionsDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSubmissionsDropdown]);
 
   const loadUser = async () => {
     try {
@@ -25,11 +40,8 @@ export default function Navigation({ simple = false }) {
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
-          console.log('🔐 Navigation - User loaded:', result.user);
           setCurrentUser(result.user);
         }
-      } else {
-        console.log('🔐 Navigation - Auth failed:', response.status);
       }
     } catch (error) {
       console.error('Error loading user:', error);
@@ -70,6 +82,8 @@ export default function Navigation({ simple = false }) {
                 <Link href="/" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="View and search VOFC questions">VOFC Viewer (Questions)</Link>
                 <Link href="/vulnerabilities" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Search vulnerabilities">Vulnerability Viewer</Link>
                 <Link href="/submit" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Submit new VOFCs for review">Submit VOFC For Review</Link>
+                <Link href="/submit-psa" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Submit documents for processing">Submit Documents</Link>
+                <Link href="/assessment" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Generate vulnerability assessments">Generate Assessment</Link>
                 <Link href="/admin" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="User management and database health">Admin</Link>
               </div>
             </div>
@@ -160,91 +174,199 @@ export default function Navigation({ simple = false }) {
           >
             📊 Dashboard
           </Link>
+          {/* Submissions Dropdown */}
+          <div style={{ position: 'relative' }} data-dropdown>
+            <button
+              onClick={() => setShowSubmissionsDropdown(!showSubmissionsDropdown)}
+              style={{
+                padding: 'var(--spacing-sm) var(--spacing-md)',
+                borderRadius: 'var(--border-radius)',
+                textDecoration: 'none',
+                color: (pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/process' || pathname === '/submit-psa' || pathname === '/review') ? 'var(--cisa-white)' : 'rgba(255,255,255,0.8)',
+                backgroundColor: (pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/process' || pathname === '/submit-psa' || pathname === '/review') ? 'rgba(255,255,255,0.2)' : 'transparent',
+                fontWeight: '600',
+                fontSize: 'var(--font-size-sm)',
+                transition: 'all 0.3s ease',
+                border: '2px solid transparent',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--spacing-xs)',
+                fontFamily: 'var(--font-family)'
+              }}
+              onMouseEnter={(e) => {
+                if (!(pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/process' || pathname === '/submit-psa' || pathname === '/review')) {
+                  e.target.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                  e.target.style.color = 'var(--cisa-white)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!(pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/process' || pathname === '/submit-psa' || pathname === '/review')) {
+                  e.target.style.backgroundColor = 'transparent';
+                  e.target.style.color = 'rgba(255,255,255,0.8)';
+                }
+              }}
+            >
+              📝 Submissions
+              <span style={{ fontSize: 'var(--font-size-xs)' }}>
+                {showSubmissionsDropdown ? '▲' : '▼'}
+              </span>
+            </button>
+            
+            {showSubmissionsDropdown && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                left: '0',
+                backgroundColor: 'var(--cisa-white)',
+                border: '1px solid var(--cisa-gray-light)',
+                borderRadius: 'var(--border-radius)',
+                boxShadow: 'var(--shadow-elevated)',
+                zIndex: 1000,
+                minWidth: '200px',
+                marginTop: 'var(--spacing-xs)'
+              }}>
+                <Link
+                  href="/submit"
+                  style={{
+                    display: 'block',
+                    padding: 'var(--spacing-sm) var(--spacing-md)',
+                    color: pathname === '/submit' ? 'var(--cisa-blue)' : 'var(--cisa-blue)',
+                    textDecoration: 'none',
+                    fontSize: 'var(--font-size-sm)',
+                    fontWeight: '500',
+                    borderBottom: '1px solid var(--cisa-gray-light)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
+                    e.target.style.color = 'var(--cisa-blue-dark)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.backgroundColor = 'transparent';
+                    e.target.style.color = 'var(--cisa-blue)';
+                  }}
+                >
+                  📝 Submit VOFC
+                </Link>
+                <Link
+                  href="/submit/bulk"
+                  style={{
+                    display: 'block',
+                    padding: 'var(--spacing-sm) var(--spacing-md)',
+                    color: pathname === '/submit/bulk' ? 'var(--cisa-blue)' : 'var(--cisa-blue)',
+                    textDecoration: 'none',
+                    fontSize: 'var(--font-size-sm)',
+                    fontWeight: '500',
+                    borderBottom: '1px solid var(--cisa-gray-light)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
+                    e.target.style.color = 'var(--cisa-blue-dark)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.backgroundColor = 'transparent';
+                    e.target.style.color = 'var(--cisa-blue)';
+                  }}
+                >
+                  📁 Bulk Submit
+                </Link>
+                <Link
+                  href="/submit-psa"
+                  style={{
+                    display: 'block',
+                    padding: 'var(--spacing-sm) var(--spacing-md)',
+                    color: pathname === '/submit-psa' ? 'var(--cisa-blue)' : 'var(--cisa-blue)',
+                    textDecoration: 'none',
+                    fontSize: 'var(--font-size-sm)',
+                    fontWeight: '500',
+                    borderBottom: '1px solid var(--cisa-gray-light)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
+                    e.target.style.color = 'var(--cisa-blue-dark)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.backgroundColor = 'transparent';
+                    e.target.style.color = 'var(--cisa-blue)';
+                  }}
+                >
+                  📤 Submit Documents
+                </Link>
+                <Link
+                  href="/process"
+                  style={{
+                    display: 'block',
+                    padding: 'var(--spacing-sm) var(--spacing-md)',
+                    color: pathname === '/process' ? 'var(--cisa-blue)' : 'var(--cisa-blue)',
+                    textDecoration: 'none',
+                    fontSize: 'var(--font-size-sm)',
+                    fontWeight: '500',
+                    borderBottom: '1px solid var(--cisa-gray-light)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
+                    e.target.style.color = 'var(--cisa-blue-dark)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.backgroundColor = 'transparent';
+                    e.target.style.color = 'var(--cisa-blue)';
+                  }}
+                >
+                  🔄 Process Documents
+                </Link>
+                <Link
+                  href="/review"
+                  style={{
+                    display: 'block',
+                    padding: 'var(--spacing-sm) var(--spacing-md)',
+                    color: pathname === '/review' ? 'var(--cisa-blue)' : 'var(--cisa-blue)',
+                    textDecoration: 'none',
+                    fontSize: 'var(--font-size-sm)',
+                    fontWeight: '500'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
+                    e.target.style.color = 'var(--cisa-blue-dark)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.backgroundColor = 'transparent';
+                    e.target.style.color = 'var(--cisa-blue)';
+                  }}
+                >
+                  📋 Review Submissions
+                </Link>
+              </div>
+            )}
+          </div>
           <Link
-            href="/submit"
+            href="/assessment"
             style={{
               padding: 'var(--spacing-sm) var(--spacing-md)',
               borderRadius: 'var(--border-radius)',
               textDecoration: 'none',
-              color: pathname === '/submit' ? 'var(--cisa-white)' : 'rgba(255,255,255,0.8)',
-              backgroundColor: pathname === '/submit' ? 'rgba(255,255,255,0.2)' : 'transparent',
+              color: pathname === '/assessment' ? 'var(--cisa-white)' : 'rgba(255,255,255,0.8)',
+              backgroundColor: pathname === '/assessment' ? 'rgba(255,255,255,0.2)' : 'transparent',
               fontWeight: '600',
               fontSize: 'var(--font-size-sm)',
               transition: 'all 0.3s ease',
               border: '2px solid transparent'
             }}
             onMouseEnter={(e) => {
-              if (pathname !== '/submit') {
+              if (pathname !== '/assessment') {
                 e.target.style.backgroundColor = 'rgba(255,255,255,0.1)';
                 e.target.style.color = 'var(--cisa-white)';
               }
             }}
             onMouseLeave={(e) => {
-              if (pathname !== '/submit') {
+              if (pathname !== '/assessment') {
                 e.target.style.backgroundColor = 'transparent';
                 e.target.style.color = 'rgba(255,255,255,0.8)';
               }
             }}
           >
-            📝 Submit VOFC
+            📊 Generate Assessment
           </Link>
-          <Link
-            href="/submit/bulk"
-            style={{
-              padding: 'var(--spacing-sm) var(--spacing-md)',
-              borderRadius: 'var(--border-radius)',
-              textDecoration: 'none',
-              color: pathname === '/submit/bulk' ? 'var(--cisa-white)' : 'rgba(255,255,255,0.8)',
-              backgroundColor: pathname === '/submit/bulk' ? 'rgba(255,255,255,0.2)' : 'transparent',
-              fontWeight: '600',
-              fontSize: 'var(--font-size-sm)',
-              transition: 'all 0.3s ease',
-              border: '2px solid transparent'
-            }}
-            onMouseEnter={(e) => {
-              if (pathname !== '/submit/bulk') {
-                e.target.style.backgroundColor = 'rgba(255,255,255,0.1)';
-                e.target.style.color = 'var(--cisa-white)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (pathname !== '/submit/bulk') {
-                e.target.style.backgroundColor = 'transparent';
-                e.target.style.color = 'rgba(255,255,255,0.8)';
-              }
-            }}
-          >
-            📁 Bulk Submit
-          </Link>
-          <Link
-            href="/profile"
-            style={{
-              padding: 'var(--spacing-sm) var(--spacing-md)',
-              borderRadius: 'var(--border-radius)',
-              textDecoration: 'none',
-              color: pathname === '/profile' ? 'var(--cisa-white)' : 'rgba(255,255,255,0.8)',
-              backgroundColor: pathname === '/profile' ? 'rgba(255,255,255,0.2)' : 'transparent',
-              fontWeight: '600',
-              fontSize: 'var(--font-size-sm)',
-              transition: 'all 0.3s ease',
-              border: '2px solid transparent'
-            }}
-            onMouseEnter={(e) => {
-              if (pathname !== '/profile') {
-                e.target.style.backgroundColor = 'rgba(255,255,255,0.1)';
-                e.target.style.color = 'var(--cisa-white)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (pathname !== '/profile') {
-                e.target.style.backgroundColor = 'transparent';
-                e.target.style.color = 'rgba(255,255,255,0.8)';
-              }
-            }}
-          >
-            👤 My Profile
-          </Link>
-          {currentUser && (currentUser.role === 'admin' || currentUser.role === 'spsa') && (
+          {currentUser && (currentUser.role === 'admin' || currentUser.role === 'spsa' || currentUser.role === 'psa' || currentUser.role === 'analyst') && (
             <>
               <Link
                 href="/admin"
@@ -346,6 +468,31 @@ export default function Navigation({ simple = false }) {
                   {currentUser.full_name?.charAt(0) || 'U'}
                 </span>
               </div>
+              <Link
+                href="/profile"
+                style={{
+                  padding: 'var(--spacing-sm) var(--spacing-md)',
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                  color: 'var(--cisa-white)',
+                  border: '2px solid rgba(255,255,255,0.3)',
+                  borderRadius: 'var(--border-radius)',
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: '600',
+                  textDecoration: 'none',
+                  transition: 'all 0.3s ease',
+                  fontFamily: 'var(--font-family)'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                  e.target.style.borderColor = 'rgba(255,255,255,0.5)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                  e.target.style.borderColor = 'rgba(255,255,255,0.3)';
+                }}
+              >
+                👤 My Profile
+              </Link>
               <button
                 onClick={handleLogout}
                 style={{

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { logout } from '../app/lib/auth';
+import { logout } from './auth';
 
 const SESSION_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
 const WARNING_TIME = 1 * 60 * 1000; // 1 minute warning before timeout

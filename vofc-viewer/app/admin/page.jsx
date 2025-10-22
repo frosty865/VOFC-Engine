@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { fetchVulnerabilities, fetchOFCs } from '../lib/fetchVOFC';
+import { fetchVulnerabilities, fetchVOFC } from '../lib/fetchVOFC';
 import { getCurrentUser, getUserProfile, canAccessAdmin } from '../lib/auth';
 import { supabase } from '../lib/supabaseClient';
 // import SessionTimeoutWarning from '../../components/SessionTimeoutWarning';
@@ -49,7 +49,6 @@ export default function AdminPage() {
 
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-        console.log('🔄 Tab became visible - refreshing data');
         loadStats();
         loadSubmittedItems();
         loadSubmissions();
@@ -86,15 +85,17 @@ export default function AdminPage() {
       console.log('🔐 Profile role:', profile?.role);
       console.log('🔐 User role:', user.role);
       
-      if (!(userRole === 'admin' || userRole === 'spsa' || userRole === 'analyst')) {
+      // Allow admin, spsa, analyst, and psa roles to access admin tools
+      const allowedRoles = ['admin', 'spsa', 'analyst', 'psa'];
+      if (!allowedRoles.includes(userRole)) {
         console.log('❌ Access denied for role:', userRole);
+        console.log('❌ Allowed roles:', allowedRoles);
         console.log('❌ Profile role:', profile?.role);
         console.log('❌ User role:', user.role);
         router.push('/');
         return;
       }
 
-      console.log('✅ Admin access granted for role:', userRole);
     } catch (error) {
       console.error('Auth check failed:', error);
       router.push('/splash');
@@ -105,7 +106,7 @@ export default function AdminPage() {
     try {
       const [vulnerabilities, ofcs] = await Promise.all([
         fetchVulnerabilities(),
-        fetchOFCs()
+        fetchVOFC()
       ]);
 
       setStats({
@@ -124,8 +125,6 @@ export default function AdminPage() {
 
   const loadSubmittedItems = async () => {
     try {
-      console.log('🔍 Loading submitted items via API...');
-
       // Use API route to fetch submissions (bypasses RLS)
       const response = await fetch('/api/admin/submissions');
       const result = await response.json();
@@ -138,20 +137,6 @@ export default function AdminPage() {
       const vulnerabilitySubmissions = result.vulnerabilitySubmissions;
       const ofcSubmissions = result.ofcSubmissions;
       const allSubmissions = result.allSubmissions;
-
-      console.log('🔍 API response - vulnerability submissions:', vulnerabilitySubmissions);
-      console.log('🔍 API response - OFC submissions:', ofcSubmissions);
-      console.log('🔍 API response - all submissions:', allSubmissions);
-
-      console.log('Loaded vulnerability submissions:', vulnerabilitySubmissions?.length || 0);
-      console.log('Loaded OFC submissions:', ofcSubmissions?.length || 0);
-
-      if (vulnerabilitySubmissions && vulnerabilitySubmissions.length > 0) {
-        console.log('Sample vulnerability submission:', vulnerabilitySubmissions[0]);
-      }
-      if (ofcSubmissions && ofcSubmissions.length > 0) {
-        console.log('Sample OFC submission:', ofcSubmissions[0]);
-      }
 
       setSubmittedVulnerabilities(vulnerabilitySubmissions || []);
       setSubmittedOFCs(ofcSubmissions || []);
@@ -412,7 +397,6 @@ export default function AdminPage() {
             <div className="flex space-x-2">
               <button
                 onClick={() => {
-                  console.log('🔄 Manual refresh triggered');
                   loadStats();
                   loadSubmittedItems();
                   loadSubmissions();

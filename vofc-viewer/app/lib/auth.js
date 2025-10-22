@@ -9,7 +9,6 @@ export const getCurrentUser = async () => {
     if (response.ok) {
       const result = await response.json();
       if (result.success) {
-        console.log('🔐 Auth - User loaded:', result.user);
         return result.user;
       }
     }
@@ -45,7 +44,7 @@ export const canAccessAdmin = async () => {
     const user = await getCurrentUser();
     if (!user) return false;
     
-    return ['admin', 'spsa', 'analyst'].includes(user.role);
+    return ['admin', 'spsa', 'analyst', 'psa'].includes(user.role);
   } catch (error) {
     console.error('Error checking admin access:', error);
     return false;

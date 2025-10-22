@@ -93,8 +93,6 @@ export async function POST(request) {
     };
 
     // For now, we'll just log the email (in production, you'd use a service like SendGrid, AWS SES, etc.)
-    console.log('📧 Rejection email would be sent to:', submission.submitter_email);
-    console.log('📧 Email data:', emailData);
 
     // In a real implementation, you would send the email here
     // await sendEmail(emailData);

@@ -1,4 +1,4 @@
-import { useSessionTimeout } from '../lib/useSessionTimeout';
+import { useSessionTimeout } from '../app/lib/useSessionTimeout';
 
 export default function SessionTimeoutWarning() {
   const { showWarning, timeLeft, resetTimeout } = useSessionTimeout();
