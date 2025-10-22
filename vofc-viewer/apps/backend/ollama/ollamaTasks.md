@@ -1,0 +1,31 @@
+# Tasks for Cursor
+- Validate pdf_parser.py output matches VOFC schema.
+- Optimize linker.py Supabase calls (batch insert).
+- Add unit tests for verify.py.
+- Implement learning system integration tests.
+- Optimize vector store performance for large datasets.
+- Add confidence scoring to all auto-linking operations.
+- Deploy continuous intelligence system in production.
+- Monitor autonomous learning performance and adjust thresholds.
+- Implement real-time dashboard updates with WebSocket connections.
+- Test universal parser with various document formats and sectors.
+- Expand keyword_map.json with sector-specific terminology.
+- Optimize document processing performance for large files.
+- Test universal normalization with vofc-engine model.
+- Validate universal workflow end-to-end processing.
+- Deploy production-ready universal parser pipeline.
+
+# Notes for Ollama
+- Context path: apps/backend/data/
+- Default model: llama3
+- Tools registered: parse_pdf, parse_universal, process_document, normalize_json, normalize_universal, link_supabase, verify_json, auto_link, generate_gap_report, learn_patterns, create_sector_profiles, start_intelligence, run_intelligence_cycle, get_intelligence_status, run_proactive_recommendations, analyze_correlations, update_adaptive_prompts
+- Universal Parser: Document-agnostic parser supporting PDF, DOCX, TXT, HTML, Excel across all 16 CI sectors
+- Universal Normalization: AI-powered normalization using vofc-engine model for consistent VOFC schema
+- Sector Mapping: Automatic sector and subsector assignment based on keyword matching
+- Document Processing: Complete pipeline from raw documents to structured VOFC data
+- Universal Workflow: End-to-end processing from any document to Supabase-ready JSON
+- Continuous Intelligence: Fully autonomous system with learning, recommendations, correlation analysis, and adaptive prompts
+- Proactive Recommendations: AI-generated OFC suggestions before users ask
+- Cross-Sector Correlation: Identifies systemic risks across multiple sectors
+- Real-Time Updates: Live dashboard updates using Supabase channels
+- Adaptive Prompts: Self-evolving prompts based on learning events

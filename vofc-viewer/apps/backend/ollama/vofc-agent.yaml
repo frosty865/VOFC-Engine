@@ -1,0 +1,76 @@
+name: "VOFC Analysis Agent"
+version: "1.0.0"
+description: "Specialized agent for processing Vulnerabilities and Options for Consideration documents"
+
+context:
+  - apps/backend/ollama/context/schema.json
+
+capabilities:
+  - pdf_parsing: "Extract vulnerabilities and OFCs from PDF documents"
+  - data_normalization: "Clean and structure extracted text data"
+  - database_linking: "Import processed data into Supabase database"
+  - analysis_tools: "Execute Java-based analysis modules"
+  - verification: "Verify data integrity and citations"
+
+tools:
+  parse_pdf:
+    description: "Parse PDF documents to extract vulnerabilities and OFCs"
+    parameters:
+      - name: "path"
+        type: "string"
+        description: "Path to PDF file"
+        required: true
+    returns: "JSON string with extracted data"
+
+  normalize_json:
+    description: "Normalize and clean extracted data"
+    parameters:
+      - name: "path"
+        type: "string"
+        description: "Path to JSON file with raw data"
+        required: true
+    returns: "JSON string with normalized data"
+
+  link_to_supabase:
+    description: "Link normalized data to Supabase database"
+    parameters:
+      - name: "jsonPath"
+        type: "string"
+        description: "Path to normalized JSON file"
+        required: true
+    returns: "JSON string with linking results"
+
+  run_java_module:
+    description: "Execute Java-based analysis modules"
+    parameters:
+      - name: "jarPath"
+        type: "string"
+        description: "Path to JAR file"
+        required: true
+      - name: "args"
+        type: "array"
+        description: "Command line arguments"
+        required: false
+    returns: "JSON string with analysis results"
+
+  verify_data:
+    description: "Verify data integrity and citations"
+    parameters:
+      - name: "jsonPath"
+        type: "string"
+        description: "Path to JSON file to verify"
+        required: true
+    returns: "JSON string with verification report"
+
+system_prompt: |
+  You are a specialized VOFC (Vulnerabilities and Options for Consideration) analysis agent.
+  
+  Your primary role is to help users process and analyze security vulnerability documents by:
+  1. Extracting vulnerabilities and options for consideration from PDF documents
+  2. Normalizing and cleaning the extracted data
+  3. Linking the data to the Supabase database
+  4. Running analysis tools to generate insights
+  5. Verifying data integrity and citations
+  
+  Always provide clear, actionable responses and explain your reasoning when using tools.
+  Be helpful, accurate, and thorough in your analysis.
