@@ -542,7 +542,7 @@ export default function BulkSubmission() {
                 <option value="">Select a subsector...</option>
                 {subsectors.map((subsector) => (
                   <option key={subsector.id} value={subsector.id}>
-                    {subsector.subsector_name}
+                    {subsector.name}
                   </option>
                 ))}
               </select>
@@ -680,8 +680,8 @@ export default function BulkSubmission() {
                         <td className="text-truncate" style={{maxWidth: '120px'}} title={row['Sector'] || (selectedSector ? sectors.find(s => s.id == selectedSector)?.sector_name || 'Selected' : 'Not selected')}>
                           {row['Sector'] || (selectedSector ? sectors.find(s => s.id == selectedSector)?.sector_name || 'Selected' : 'Not selected')}
                         </td>
-                        <td className="text-truncate" style={{maxWidth: '120px'}} title={row['Subsector'] || (selectedSubsector ? subsectors.find(s => s.id == selectedSubsector)?.subsector_name || 'Selected' : 'Not selected')}>
-                          {row['Subsector'] || (selectedSubsector ? subsectors.find(s => s.id == selectedSubsector)?.subsector_name || 'Selected' : 'Not selected')}
+                        <td className="text-truncate" style={{maxWidth: '120px'}} title={row['Subsector'] || (selectedSubsector ? subsectors.find(s => s.id == selectedSubsector)?.name || 'Selected' : 'Not selected')}>
+                          {row['Subsector'] || (selectedSubsector ? subsectors.find(s => s.id == selectedSubsector)?.name || 'Selected' : 'Not selected')}
                         </td>
                       </tr>
                     ))}
