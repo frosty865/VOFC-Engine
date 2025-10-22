@@ -360,6 +360,49 @@ export async function fetchSectors() {
   }
 }
 
+// Fetch disciplines
+export async function fetchDisciplines() {
+  try {
+    const { data, error } = await supabase
+      .from('disciplines')
+      .select('*')
+      .eq('is_active', true)
+      .order('category, name');
+
+    if (error) {
+      console.error('Error fetching disciplines:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('Error in fetchDisciplines:', error);
+    return [];
+  }
+}
+
+// Fetch disciplines by category
+export async function fetchDisciplinesByCategory(category) {
+  try {
+    const { data, error } = await supabase
+      .from('disciplines')
+      .select('*')
+      .eq('category', category)
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) {
+      console.error('Error fetching disciplines by category:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('Error in fetchDisciplinesByCategory:', error);
+    return [];
+  }
+}
+
 // No mock data - all data comes from the database
 
 
