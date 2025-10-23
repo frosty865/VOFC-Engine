@@ -1,0 +1,30 @@
+{
+  "project": "VOFC Engine",
+  "description": "Federal-grade vulnerability and mitigation analysis engine aligned with DHS/CISA SAFE and VOFC frameworks.",
+  "principles": {
+    "truth": "All content must be grounded in real, verifiable data from DHS/CISA/FEMA or approved internal libraries.",
+    "accuracy": "Do not fabricate examples, statistics, or citations.",
+    "citation": "All generated vulnerabilities and OFCs must include a traceable source reference.",
+    "context": "Use only verified internal or authoritative sources."
+  },
+  "avoid": [
+    "Fake datasets or sample data",
+    "Invented citations",
+    "Unverified statistics",
+    "Placeholder or lorem text"
+  ],
+  "enforcement": {
+    "if_uncertain": "Ask the user for a source reference before proceeding.",
+    "validation_hooks": ["utils/validateDataset.js"]
+  },
+  "reference_docs": [
+    "VOFC_Library.xlsx",
+    "SAFE VOFC Library.pdf",
+    "IST VOFC HTML VIEWER.html"
+  ],
+  "style_guide": "prompts/style.md",
+  "preferred_stack": ["Next.js", "Supabase", "Node", "Postgres"],
+  "tone": "Analytical, concise, DHS/CISA professional standard"
+}
+
+

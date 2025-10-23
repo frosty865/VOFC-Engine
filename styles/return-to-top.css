@@ -1,0 +1,148 @@
+/* Return to Top Button Styles */
+
+.return-to-top-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.return-to-top-progress {
+  width: 4px;
+  height: 40px;
+  background-color: var(--cisa-gray-light);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.return-to-top-progress-bar {
+  width: 100%;
+  background-color: var(--cisa-blue);
+  border-radius: 2px;
+  transition: height 0.1s ease;
+}
+
+.return-to-top-button {
+  background-color: var(--cisa-blue);
+  color: var(--cisa-white);
+  border: none;
+  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-elevated);
+  transition: all 0.3s ease;
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.return-to-top-button:hover {
+  background-color: var(--cisa-blue-dark);
+  transform: scale(1.1);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.return-to-top-button:focus {
+  outline: 2px solid var(--cisa-blue-lighter);
+  outline-offset: 2px;
+}
+
+.return-to-top-button:active {
+  transform: scale(0.95);
+}
+
+.return-to-top-icon {
+  width: 24px;
+  height: 24px;
+  transition: transform 0.2s ease;
+}
+
+.return-to-top-button:hover .return-to-top-icon {
+  transform: translateY(-2px);
+}
+
+/* Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeOutDown {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .return-to-top-container {
+    bottom: 16px;
+    right: 16px;
+  }
+  
+  .return-to-top-button {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .return-to-top-icon {
+    width: 20px;
+    height: 20px;
+  }
+  
+  .return-to-top-progress {
+    height: 32px;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .return-to-top-button {
+    border: 2px solid var(--cisa-white);
+  }
+  
+  .return-to-top-progress-bar {
+    background-color: var(--cisa-blue-dark);
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .return-to-top-container {
+    animation: none;
+  }
+  
+  .return-to-top-button {
+    transition: none;
+  }
+  
+  .return-to-top-button:hover {
+    transform: none;
+  }
+  
+  .return-to-top-icon {
+    transition: none;
+  }
+}
+

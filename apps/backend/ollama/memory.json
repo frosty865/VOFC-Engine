@@ -1,0 +1,17 @@
+{
+  "known_vulnerabilities": [
+    "The facility lacks access control for special events",
+    "Limited CCTV coverage in parking areas",
+    "Insufficient physical barriers around critical infrastructure",
+    "Outdated security systems with known vulnerabilities",
+    "Inadequate emergency response procedures"
+  ],
+  "known_ofcs": [
+    "Implement multi-factor authentication for all systems",
+    "Establish regular security training programs",
+    "Deploy advanced monitoring and detection systems",
+    "Create comprehensive incident response plans",
+    "Conduct regular security assessments and audits"
+  ],
+  "last_updated": "2024-01-01T00:00:00Z"
+}
