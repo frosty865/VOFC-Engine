@@ -1,4 +1,5 @@
 'use client';
+// Admin User Management Page
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser, USER_ROLES, getRoleDisplayName, getRoleBadgeColor } from '../../lib/auth';

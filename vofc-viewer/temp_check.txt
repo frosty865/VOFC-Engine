@@ -1,5 +1,4 @@
 'use client';
-// Admin OFC Management Page
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser } from '../../lib/auth';
