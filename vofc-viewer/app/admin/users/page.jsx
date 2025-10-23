@@ -2,7 +2,7 @@
 // Admin User Management Page
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getCurrentUser, USER_ROLES, getRoleDisplayName, getRoleBadgeColor } from '@/app/lib/auth';
+import { getCurrentUser, USER_ROLES, getRoleDisplayName, getRoleBadgeColor } from '@/lib/auth';
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
