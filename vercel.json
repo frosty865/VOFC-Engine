@@ -1,20 +1,6 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "vofc-viewer/package.json",
-      "use": "@vercel/next",
-      "config": {
-        "distDir": "vofc-viewer/.next"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "vofc-viewer/$1"
-    }
-  ],
-  "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "cd vofc-viewer && pnpm build"
+  "buildCommand": "cd vofc-viewer && npm install && npm run build",
+  "outputDirectory": "vofc-viewer/.next",
+  "framework": "nextjs",
+  "installCommand": "cd vofc-viewer && npm install"
 }
