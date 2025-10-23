@@ -124,6 +124,6 @@
     "pipeline_version": "ollama_v1.0",
     "extraction_method": "ollama_heuristic_hybrid"
   },
-  "parsed_at": "2025-10-22T20:19:17.578573",
+  "parsed_at": "2025-10-23T15:03:36.553553",
   "parser_version": "ollama_pipeline_v1.0"
 }

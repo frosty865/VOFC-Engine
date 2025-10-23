@@ -1,7 +1,44 @@
 #!/usr/bin/env node
 
 require('dotenv').config({ path: '.env.local' });
-const fetch = require('node-fetch');
+const https = require('https');
+const http = require('http');
+
+// Simple fetch replacement using native Node.js modules
+function makeRequest(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const isHttps = urlObj.protocol === 'https:';
+    const client = isHttps ? https : http;
+    
+    const requestOptions = {
+      hostname: urlObj.hostname,
+      port: urlObj.port || (isHttps ? 443 : 80),
+      path: urlObj.pathname + urlObj.search,
+      method: options.method || 'GET',
+      headers: options.headers || {}
+    };
+    
+    const req = client.request(requestOptions, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        resolve({
+          ok: res.statusCode >= 200 && res.statusCode < 300,
+          status: res.statusCode,
+          json: () => Promise.resolve(JSON.parse(data))
+        });
+      });
+    });
+    
+    req.on('error', reject);
+    
+    if (options.body) {
+      req.write(options.body);
+    }
+    req.end();
+  });
+}
 
 console.log('🧪 Testing Submission with Ollama Pipeline...');
 console.log('=============================================\n');
@@ -21,7 +58,7 @@ async function testSubmissionWithOllama() {
   };
   
   try {
-    const response = await fetch('http://localhost:3001/api/submissions', {
+    const response = await makeRequest('http://localhost:3000/api/submissions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
