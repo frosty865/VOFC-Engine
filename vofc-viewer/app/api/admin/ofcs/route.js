@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
-import { AuthService } from '@/lib/auth-server';
+import { supabase } from '../../../lib/supabaseClient';
+import { AuthService } from '../../../lib/auth-server';
 
 // Get all OFCs (admin only)
 export async function GET(request) {

@@ -2,8 +2,8 @@
 // Admin OFC Management Page
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getCurrentUser } from '@/lib/auth';
-import { supabase } from '@/lib/supabaseClient';
+import { getCurrentUser } from '../../lib/auth';
+import { supabase } from '../../lib/supabaseClient';
 
 export default function OFCManagement() {
   const [options_for_consideration, setOfcs] = useState([]);
