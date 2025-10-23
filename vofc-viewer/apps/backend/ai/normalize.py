@@ -6,12 +6,13 @@ Uses Ollama for intelligent text cleaning and structuring
 
 import sys
 import json
+import os
 import requests
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 # Ollama configuration
-OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_BASE_URL = os.getenv("OLLAMA_API_BASE_URL", os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"))
 OLLAMA_MODEL = "llama3:latest"
 
 def call_ollama(prompt: str, model: str = OLLAMA_MODEL) -> str:

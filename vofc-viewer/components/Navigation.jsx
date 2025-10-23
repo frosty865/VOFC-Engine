@@ -81,10 +81,11 @@ export default function Navigation({ simple = false }) {
               <div className="hidden md:ml-6 md:flex md:space-x-8">
                 <Link href="/" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="View and search VOFC questions">VOFC Viewer (Questions)</Link>
                 <Link href="/vulnerabilities" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Search vulnerabilities">Vulnerability Viewer</Link>
-                <Link href="/submit" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Submit new VOFCs for review">Submit VOFC For Review</Link>
+                <Link href="/submit" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Submit new vulnerabilities for review">Submit New Vulnerability</Link>
                 <Link href="/submit-psa" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Submit documents for processing">Submit Documents</Link>
                 <Link href="/assessment" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Generate vulnerability assessments">Generate Assessment</Link>
                 <Link href="/admin" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="User management and database health">Admin</Link>
+                <Link href="/learning" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Monitor continuous learning system">Learning Monitor</Link>
               </div>
             </div>
           </div>
@@ -246,7 +247,7 @@ export default function Navigation({ simple = false }) {
                     e.target.style.color = 'var(--cisa-blue)';
                   }}
                 >
-                  📝 Submit VOFC
+                  📝 Submit New Vulnerability
                 </Link>
                 <Link
                   href="/submit/bulk"

@@ -3,7 +3,7 @@ import { tools } from "./ollamaTools.js";
 import fs from "fs";
 import path from "path";
 
-const OLLAMA_BASE_URL = "http://localhost:11434";
+const OLLAMA_BASE_URL = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || "http://localhost:11434";
 const MODEL = "llama3:latest";
 
 // Logging function

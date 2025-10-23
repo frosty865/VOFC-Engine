@@ -138,7 +138,7 @@ export default function AssessmentPage() {
               📊 View Dashboard
             </a>
             <a href="/submit" className="btn btn-secondary">
-              📝 Submit VOFC
+              📝 Submit New Vulnerability
             </a>
           </div>
         </div>

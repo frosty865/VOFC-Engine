@@ -3,12 +3,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser } from './lib/auth';
 import { fetchVulnerabilities } from './lib/fetchVOFC';
-import DomainFilter from './components/DomainFilter';
 
 export default function VOFCViewer() {
   const router = useRouter();
   const [authenticated, setAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [vulnerabilities, setVulnerabilities] = useState([]);
   const [filteredVulnerabilities, setFilteredVulnerabilities] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -17,8 +16,8 @@ export default function VOFCViewer() {
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedVulnerability, setSelectedVulnerability] = useState(null);
-  const [selectedDomains, setSelectedDomains] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
+  const [mounted, setMounted] = useState(false);
 
   const checkAuth = async () => {
     try {
@@ -65,6 +64,7 @@ export default function VOFCViewer() {
   };
 
   useEffect(() => {
+    setMounted(true);
     checkAuth();
   }, []);
 
@@ -88,13 +88,22 @@ export default function VOFCViewer() {
       filtered = filtered.filter(v => v.discipline === selectedDiscipline);
     }
 
-    // Apply domain filtering
-    if (selectedDomains.length > 0 && selectedDomains.length < 3) {
-      filtered = filtered.filter(v => selectedDomains.includes(v.domain));
-    }
 
     setFilteredVulnerabilities(filtered);
-  }, [vulnerabilities, searchTerm, selectedDiscipline, selectedDomains]);
+  }, [vulnerabilities, searchTerm, selectedDiscipline]);
+
+  if (!mounted) {
+    return (
+      <div className="page-container">
+        <div className="content-wrapper">
+          <div className="text-center py-8">
+            <div className="loading"></div>
+            <p className="text-secondary mt-3">Loading dashboard...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -137,7 +146,7 @@ export default function VOFCViewer() {
             </div>
             <div className="flex gap-3">
               <a href="/submit" className="btn btn-primary">
-                📝 Submit VOFC
+                📝 Submit New Vulnerability
               </a>
               <a href="/profile" className="btn btn-secondary">
                 👤 Profile
@@ -150,15 +159,6 @@ export default function VOFCViewer() {
         <div className="card">
           <div className="card-header">
             <h2 className="card-title">Filters</h2>
-          </div>
-          
-          {/* Domain Filter */}
-          <div className="mb-4">
-            <DomainFilter 
-              selectedDomains={selectedDomains}
-              onDomainChange={setSelectedDomains}
-              userRole={currentUser?.role}
-            />
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -204,7 +204,6 @@ export default function VOFCViewer() {
                 onClick={() => {
                   setSearchTerm('');
                   setSelectedDiscipline('');
-                  setSelectedDomains([]);
                 }}
                 className="btn btn-secondary w-full"
               >
@@ -240,6 +239,7 @@ export default function VOFCViewer() {
                   <VulnerabilityCard
                     key={vulnerability.id}
                     vulnerability={vulnerability}
+                    currentUser={currentUser}
                   />
                 );
               })}
@@ -252,8 +252,46 @@ export default function VOFCViewer() {
 }
 
 // Vulnerability Card Component
-function VulnerabilityCard({ vulnerability }) {
+function VulnerabilityCard({ vulnerability, currentUser }) {
   const ofcs = vulnerability.ofcs || [];
+  const [showAddOFC, setShowAddOFC] = useState(false);
+  const [ofcText, setOfcText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  
+  const handleAddOFC = async () => {
+    if (!ofcText.trim()) return;
+    
+    setSubmitting(true);
+    try {
+      const response = await fetch('/api/submissions/ofc-request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          vulnerability_id: vulnerability.id,
+          ofc_text: ofcText.trim(),
+          submitter: currentUser?.email || 'unknown@vofc.gov',
+          vulnerability_text: vulnerability.vulnerability,
+          discipline: vulnerability.discipline
+        }),
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        alert('OFC request submitted for supervisor review!');
+        setOfcText('');
+        setShowAddOFC(false);
+      } else {
+        alert(`Failed to submit OFC request: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error submitting OFC request:', error);
+      alert('Error submitting OFC request. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
   
   return (
     <div className="card">
@@ -270,8 +308,56 @@ function VulnerabilityCard({ vulnerability }) {
               </span>
             )}
           </div>
+          <div className="ml-4">
+            <button
+              onClick={() => setShowAddOFC(!showAddOFC)}
+              className="btn btn-primary btn-sm"
+            >
+              <i className="fas fa-plus mr-1"></i>
+              Add OFC
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Add OFC Form */}
+      {showAddOFC && (
+        <div className="card-body border-t border-gray-200 bg-blue-50">
+          <h4 className="font-semibold text-blue-900 mb-3">Add Option for Consideration</h4>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-blue-800 mb-1">
+                OFC Text:
+              </label>
+              <textarea
+                value={ofcText}
+                onChange={(e) => setOfcText(e.target.value)}
+                placeholder="Enter the option for consideration..."
+                className="w-full p-2 border border-blue-300 rounded-md text-sm"
+                rows="3"
+              />
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={handleAddOFC}
+                disabled={!ofcText.trim() || submitting}
+                className="btn btn-success btn-sm"
+              >
+                {submitting ? 'Submitting...' : 'Submit for Review'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowAddOFC(false);
+                  setOfcText('');
+                }}
+                className="btn btn-secondary btn-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* OFCs Section */}
       <div>
@@ -301,7 +387,14 @@ function OFCCard({ ofc }) {
         <h5 className="font-semibold mb-2">
           Option for Consideration
         </h5>
-        <p className="text-secondary mb-3">
+        <p className="text-secondary mb-3" style={{
+          wordWrap: 'break-word',
+          wordBreak: 'break-word',
+          overflowWrap: 'break-word',
+          hyphens: 'auto',
+          maxWidth: '100%',
+          overflow: 'hidden'
+        }}>
           {ofc.option_text}
         </p>
 
@@ -311,7 +404,14 @@ function OFCCard({ ofc }) {
             <h6 className="font-semibold mb-2">Sources:</h6>
             {ofc.sources.map((source, index) => (
               <div key={index} className="card p-3 mb-2">
-                <p className="text-sm text-secondary">
+                <p className="text-sm text-secondary" style={{
+                  wordWrap: 'break-word',
+                  wordBreak: 'break-word',
+                  overflowWrap: 'break-word',
+                  hyphens: 'auto',
+                  maxWidth: '100%',
+                  overflow: 'hidden'
+                }}>
                   {source.source_text}
                 </p>
               </div>

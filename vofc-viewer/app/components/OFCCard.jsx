@@ -100,7 +100,13 @@ const OFCCard = memo(({ ofc }) => {
             className="formatted-text"
             style={{
               lineHeight: '1.6',
-              fontSize: '14px'
+              fontSize: '14px',
+              wordWrap: 'break-word',
+              wordBreak: 'break-word',
+              overflowWrap: 'break-word',
+              hyphens: 'auto',
+              maxWidth: '100%',
+              overflow: 'hidden'
             }}
           />
         </div>

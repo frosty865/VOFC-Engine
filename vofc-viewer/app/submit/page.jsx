@@ -19,6 +19,7 @@ export default function VOFCSubmission() {
     vulnerability: '',
     option_text: '',
     discipline: '',
+    subdiscipline: '',
     source_citation: '',
     id: '',
     id: '',
@@ -29,20 +30,62 @@ export default function VOFCSubmission() {
   const [citationStatus, setCitationStatus] = useState('');
   const [citationTimeout, setCitationTimeout] = useState(null);
 
-  // Predefined discipline options
+  // Predefined discipline options with sub-disciplines
   const disciplineOptions = [
-    'Physical Security',
-    'Cybersecurity', 
-    'Personnel Security',
-    'Operational Security',
-    'Information Security',
-    'Facility Information',
-    'Emergency Management',
-    'Risk Management',
-    'Compliance',
-    'Training and Awareness'
+    {
+      name: 'Physical Security',
+      subdisciplines: [
+        'Barriers and Fencing',
+        'Electronic Security Systems',
+        'Video Security Systems',
+        'Access Control Systems',
+        'Intrusion Detection Systems',
+        'Perimeter Security',
+        'Security Lighting',
+        'Physical Barriers',
+        'Security Hardware'
+      ]
+    },
+    {
+      name: 'Cybersecurity',
+      subdisciplines: []
+    },
+    {
+      name: 'Personnel Security',
+      subdisciplines: []
+    },
+    {
+      name: 'Operational Security',
+      subdisciplines: []
+    },
+    {
+      name: 'Information Security',
+      subdisciplines: []
+    },
+    {
+      name: 'Facility Information',
+      subdisciplines: []
+    },
+    {
+      name: 'Emergency Management',
+      subdisciplines: []
+    },
+    {
+      name: 'Risk Management',
+      subdisciplines: []
+    },
+    {
+      name: 'Training and Awareness',
+      subdisciplines: []
+    }
   ];
   const router = useRouter();
+
+  // Get sub-disciplines for selected discipline
+  const getSubdisciplines = (disciplineName) => {
+    const discipline = disciplineOptions.find(d => d.name === disciplineName);
+    return discipline ? discipline.subdisciplines : [];
+  };
 
   useEffect(() => {
     checkAuth();
@@ -201,6 +244,13 @@ export default function VOFCSubmission() {
     setSubmitting(true);
 
     try {
+      // Validate that vulnerabilities must have at least one option for consideration
+      if (submissionType === 'vulnerability' && options_for_consideration.length === 0) {
+        alert('Vulnerabilities must have at least one associated option for consideration.');
+        setSubmitting(false);
+        return;
+      }
+
       // Assign citation if source is provided
       let citation = null;
       if (formData.source_citation && formData.source_citation.trim()) {
@@ -218,6 +268,7 @@ export default function VOFCSubmission() {
           data: {
             vulnerability: formData.vulnerability,
             discipline: formData.discipline,
+            subdiscipline: formData.subdiscipline || null,
             sources: citation,
             id: formData.id || null,
             id: formData.id || null,
@@ -253,6 +304,7 @@ export default function VOFCSubmission() {
             ? {
                 vulnerability: formData.vulnerability,
                 discipline: formData.discipline,
+                subdiscipline: formData.subdiscipline || null,
                 sources: citation,
                 id: formData.id || null,
                 id: formData.id || null
@@ -260,6 +312,7 @@ export default function VOFCSubmission() {
             : {
                 option_text: formData.option_text,
                 discipline: formData.discipline,
+                subdiscipline: formData.subdiscipline || null,
                 sources: citation,
                 id: formData.id || null,
                 id: formData.id || null
@@ -292,6 +345,7 @@ export default function VOFCSubmission() {
         vulnerability: '',
         option_text: '',
         discipline: '',
+        subdiscipline: '',
         source_citation: '',
         id: '',
         id: ''
@@ -319,7 +373,7 @@ export default function VOFCSubmission() {
       <SessionTimeoutWarning />
       <div className="card">
         <div className="card-header">
-          <h1 className="card-title">Submit VOFC</h1>
+          <h1 className="card-title">Submit New Vulnerability</h1>
           <p className="text-secondary">Contribute vulnerabilities and options for consideration</p>
         </div>
 
@@ -376,17 +430,35 @@ export default function VOFCSubmission() {
               <select
                 required
                 value={formData.discipline}
-                onChange={(e) => setFormData({...formData, discipline: e.target.value})}
+                onChange={(e) => setFormData({...formData, discipline: e.target.value, subdiscipline: ''})}
                 className="form-select"
               >
                 <option value="">Select a discipline...</option>
                 {disciplineOptions.map(discipline => (
-                  <option key={discipline} value={discipline}>
-                    {discipline}
+                  <option key={discipline.name} value={discipline.name}>
+                    {discipline.name}
                   </option>
                 ))}
               </select>
             </div>
+
+            {formData.discipline && getSubdisciplines(formData.discipline).length > 0 && (
+              <div className="form-group">
+                <label className="form-label">Sub-discipline</label>
+                <select
+                  value={formData.subdiscipline}
+                  onChange={(e) => setFormData({...formData, subdiscipline: e.target.value})}
+                  className="form-select"
+                >
+                  <option value="">Select a sub-discipline...</option>
+                  {getSubdisciplines(formData.discipline).map(subdiscipline => (
+                    <option key={subdiscipline} value={subdiscipline}>
+                      {subdiscipline}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="row">
               <div className="col-md-6">
@@ -461,7 +533,7 @@ export default function VOFCSubmission() {
 
             {submissionType === 'vulnerability' && (
               <div className="form-group">
-                <label className="form-label">Associated Options for Consideration</label>
+                <label className="form-label">Associated Options for Consideration *</label>
                 <div className="mb-3">
                   <div className="flex gap-2">
                     <textarea
@@ -519,7 +591,8 @@ export default function VOFCSubmission() {
                     vulnerability: '',
                     option_text: '',
                     discipline: '',
-                    source: '',
+                    subdiscipline: '',
+                    source_citation: '',
                     id: '',
                     id: ''
                   });

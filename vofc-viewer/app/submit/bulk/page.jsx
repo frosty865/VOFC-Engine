@@ -597,7 +597,7 @@ export default function BulkSubmission() {
               • <strong>Multiple OFCs</strong> = Automatically grouped with vulnerability<br />
               • <strong>Vulnerability-OFC Links</strong> = Created automatically during approval<br />
               <br />
-              <strong>Common Categories:</strong> Physical Security, Physical Security Systems, Cybersecurity, Personnel Security, Operational Security, Information Security, Facility Information, Emergency Management, Risk Management, Compliance, Training and Awareness
+              <strong>Common Categories:</strong> Physical Security (with sub-disciplines: Barriers and Fencing, Electronic Security Systems, Video Security Systems, Access Control Systems, Intrusion Detection Systems, Perimeter Security, Security Lighting, Physical Barriers, Security Hardware), Cybersecurity, Personnel Security, Operational Security, Information Security, Facility Information, Emergency Management, Risk Management, Training and Awareness
             </div>
           </div>
 

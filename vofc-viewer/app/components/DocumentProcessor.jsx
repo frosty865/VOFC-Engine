@@ -9,30 +9,30 @@ export default function DocumentProcessor() {
   const [failed, setFailed] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [previewData, setPreviewData] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  // Fetch documents from different folders
+  // Fetch documents from consolidated API
   const fetchDocuments = async () => {
     try {
       setLoading(true);
       
-      const [docsRes, statusRes, completedRes, failedRes] = await Promise.all([
-        fetch('/api/documents/list'),
-        fetch('/api/documents/status'),
-        fetch('/api/documents/completed'),
-        fetch('/api/documents/failed')
-      ]);
+      // Single API call instead of 4 separate calls
+      const response = await fetch('/api/documents/status-all');
+      const data = await response.json();
 
-      const [docs, status, completed, failed] = await Promise.all([
-        docsRes.json(),
-        statusRes.json(),
-        completedRes.json(),
-        failedRes.json()
-      ]);
-
-      setDocuments(docs.documents || []);
-      setProcessing(status.statuses || []);
-      setCompleted(completed.documents || []);
-      setFailed(failed.documents || []);
+      if (data.success) {
+        setDocuments(data.documents || []);
+        setProcessing(data.processing || []);
+        setCompleted(data.completed || []);
+        setFailed(data.failed || []);
+        setLastRefresh(Date.now());
+      } else {
+        console.error('Error fetching documents:', data.error);
+      }
       
     } catch (error) {
       console.error('Error fetching documents:', error);
@@ -42,11 +42,50 @@ export default function DocumentProcessor() {
   };
 
   useEffect(() => {
+    setMounted(true);
     fetchDocuments();
-    // Refresh every 5 seconds
-    const interval = setInterval(fetchDocuments, 5000);
-    return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (mounted) {
+      setLastRefresh(Date.now());
+    }
+  }, [mounted]);
+
+  useEffect(() => {
+    if (mounted && autoRefresh) {
+      const interval = setInterval(() => {
+        // Only refresh if there are files being processed
+        if (processing.length > 0) {
+          fetchDocuments();
+        }
+      }, 30000); // 30 seconds
+      return () => clearInterval(interval);
+    }
+  }, [mounted, autoRefresh, processing.length]);
+
+  // Preview document
+  const previewDocument = async (filename) => {
+    try {
+      const response = await fetch('/api/documents/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        setPreviewData(result.data);
+        setShowPreview(true);
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error previewing document:', error);
+      alert('Error previewing document');
+    }
+  };
 
   // Process single document
   const processDocument = async (filename) => {
@@ -61,6 +100,10 @@ export default function DocumentProcessor() {
       
       if (result.success) {
         await fetchDocuments();
+        // Show processing results
+        if (result.data) {
+          alert(`Document processed successfully!\n\nTitle: ${result.data.title}\nVulnerabilities found: ${result.data.vulnerabilities.length}\nOFCs found: ${result.data.ofcs.length}\nSectors: ${result.data.sectors.length}`);
+        }
       } else {
         alert(`Error: ${result.error}`);
       }
@@ -162,17 +205,54 @@ export default function DocumentProcessor() {
 
   // Format date
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString();
+    if (!dateString) return 'Unknown';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Invalid Date';
+    return date.toLocaleString();
   };
+
+  if (!mounted) {
+    return (
+      <div className="text-center py-8">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p className="text-gray-600">Loading document processor...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto p-6">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">Document Processor</h1>
-        <p className="text-gray-600">
-          Process documents from the docs folder using the universal VOFC parser.
-          Documents are automatically moved to completed/failed folders after processing.
-        </p>
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Document Processor</h1>
+            <p className="text-gray-600">
+              Process documents from the docs folder using the universal VOFC parser.
+              Documents are automatically moved to completed/failed folders after processing.
+            </p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+                className="mr-2"
+              />
+              <span className="text-sm">Auto-refresh</span>
+            </label>
+            <button
+              onClick={fetchDocuments}
+              disabled={loading}
+              className="btn btn-primary"
+            >
+              {loading ? 'Refreshing...' : 'Refresh'}
+            </button>
+            <span className="text-sm text-gray-500">
+              Last: {new Date(lastRefresh).toLocaleTimeString()}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Action Buttons */}
@@ -284,12 +364,20 @@ export default function DocumentProcessor() {
                         {formatDate(doc.modified)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          onClick={() => processDocument(doc.filename)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          Process
-                        </button>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => previewDocument(doc.filename)}
+                            className="text-green-600 hover:text-green-900"
+                          >
+                            Preview
+                          </button>
+                          <button
+                            onClick={() => processDocument(doc.filename)}
+                            className="text-blue-600 hover:text-blue-900"
+                          >
+                            Process
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -332,7 +420,7 @@ export default function DocumentProcessor() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(doc.timestamp)}
+                        {formatDate(doc.modified)}
                       </td>
                     </tr>
                   ))}
@@ -376,7 +464,7 @@ export default function DocumentProcessor() {
                         {formatFileSize(doc.size)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(doc.completed)}
+                        {formatDate(doc.modified)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
@@ -425,7 +513,7 @@ export default function DocumentProcessor() {
                         {formatFileSize(doc.size)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(doc.failed)}
+                        {formatDate(doc.modified)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <button
@@ -455,6 +543,103 @@ export default function DocumentProcessor() {
           <p className="text-gray-500">
             Add documents to the <code className="bg-gray-100 px-2 py-1 rounded">data/docs</code> folder to start processing.
           </p>
+        </div>
+      )}
+
+      {/* Document Preview Modal */}
+      {showPreview && previewData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-semibold">Document Preview</h3>
+              <button
+                onClick={() => setShowPreview(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-semibold text-lg">{previewData.title}</h4>
+                <p className="text-sm text-gray-600">
+                  {previewData.word_count} words • {previewData.line_count} lines • 
+                  {formatFileSize(previewData.size)} • 
+                  Est. {previewData.estimated_processing_time}
+                </p>
+              </div>
+              
+              <div>
+                <h5 className="font-semibold mb-2">Content Preview:</h5>
+                <div className="bg-gray-50 p-3 rounded text-sm max-h-40 overflow-y-auto">
+                  {previewData.preview}
+                </div>
+              </div>
+              
+              {previewData.sections.vulnerabilities.length > 0 && (
+                <div>
+                  <h5 className="font-semibold mb-2">Potential Vulnerabilities:</h5>
+                  <ul className="list-disc list-inside text-sm space-y-1">
+                    {previewData.sections.vulnerabilities.map((vuln, idx) => (
+                      <li key={`vuln-${idx}-${vuln.slice(0, 20)}`} className="text-red-700">{vuln}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {previewData.sections.ofcs.length > 0 && (
+                <div>
+                  <h5 className="font-semibold mb-2">Potential Options for Consideration:</h5>
+                  <ul className="list-disc list-inside text-sm space-y-1">
+                    {previewData.sections.ofcs.map((ofc, idx) => (
+                      <li key={`ofc-${idx}-${ofc.slice(0, 20)}`} className="text-blue-700">{ofc}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {previewData.sections.sectors.length > 0 && (
+                <div>
+                  <h5 className="font-semibold mb-2">Potential Sectors:</h5>
+                  <ul className="list-disc list-inside text-sm space-y-1">
+                    {previewData.sections.sectors.map((sector, idx) => (
+                      <li key={`sector-${idx}-${sector.slice(0, 20)}`} className="text-green-700">{sector}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {previewData.sections.sources.length > 0 && (
+                <div>
+                  <h5 className="font-semibold mb-2">Potential Sources:</h5>
+                  <ul className="list-disc list-inside text-sm space-y-1">
+                    {previewData.sections.sources.map((source, idx) => (
+                      <li key={`source-${idx}-${source.slice(0, 20)}`} className="text-gray-700">{source}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex justify-end space-x-2 mt-6">
+              <button
+                onClick={() => setShowPreview(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  setShowPreview(false);
+                  processDocument(previewData.filename);
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Process Document
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

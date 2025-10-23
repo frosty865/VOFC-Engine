@@ -1,0 +1,27 @@
+# VOFC Engine Cursor Rules
+# This file tells Cursor about the canonical integration points
+
+heuristic_pipeline:
+  path: "C:\\Users\\frost\\AppData\\Local\\Ollama\\pipeline\\heuristic_pipeline.py"
+  entrypoint: "process_submission"
+  description: >
+    This is the canonical VOFC heuristic integration.
+    It replaces all previous heuristic parsers.
+    It segments document text into vulnerabilities and options for consideration,
+    deduplicates OFCs, scores confidence, and inserts into Supabase.
+
+heuristic_bridge:
+  path: "apps/backend/server/pipeline/heuristic_bridge.py"
+  entrypoint: "run_heuristics"
+  description: >
+    Bridge script that connects VOFC Engine to the global Ollama pipeline.
+    Use this for all heuristic processing within the VOFC Engine project.
+
+# Legacy parsers (deprecated)
+# enhanced_parser.py - replaced by global pipeline
+# ollama_pipeline.py - replaced by global pipeline
+# universal_parser.py - replaced by global pipeline
+
+# Current integration points:
+# - app/api/submissions/route.js -> heuristic_bridge.py -> global pipeline
+# - app/api/documents/process/route.js -> heuristic_bridge.py -> global pipeline

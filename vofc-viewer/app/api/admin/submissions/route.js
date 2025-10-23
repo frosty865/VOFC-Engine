@@ -37,16 +37,29 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Failed to load OFC submissions' }, { status: 500 });
     }
 
+    // Load document submissions
+    const { data: documentSubmissions, error: docError } = await supabase
+      .from('submissions')
+      .select('*')
+      .eq('type', 'document')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (docError) {
+      console.error('Error loading document submissions:', docError);
+    }
+
     // Load all submissions for debugging
     const { data: allSubmissions, error: allError } = await supabase
       .from('submissions')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(10);
+      .limit(20);
 
     console.log('🔍 Admin API: Found submissions:', {
       vulnerabilities: vulnerabilitySubmissions?.length || 0,
       ofcs: ofcSubmissions?.length || 0,
+      documents: documentSubmissions?.length || 0,
       total: allSubmissions?.length || 0
     });
 
@@ -54,6 +67,7 @@ export async function GET(request) {
       success: true,
       vulnerabilitySubmissions: vulnerabilitySubmissions || [],
       ofcSubmissions: ofcSubmissions || [],
+      documentSubmissions: documentSubmissions || [],
       allSubmissions: allSubmissions || []
     });
 

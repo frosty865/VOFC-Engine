@@ -79,3 +79,6 @@ ALTER VIEW vulnerabilities_with_ofcs SET (security_invoker = true);
 
 
 
+
+
+

@@ -14,7 +14,8 @@ from datetime import datetime
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
 
-from parsers.universal_parser import parse_document, parse_multiple_documents
+from parsers.enhanced_parser import parse_document_enhanced as parse_document
+from parsers.universal_parser import parse_multiple_documents
 from ai.sector_mapper import map_document_sectors, get_sector_statistics, infer_sector_with_confidence
 
 class DocumentProcessor:

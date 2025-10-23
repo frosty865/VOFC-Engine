@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getProcessedByValue } from '../../../utils/get-user-id';
 
 // Use service role for API submissions to bypass RLS
 const supabase = createClient(
@@ -56,9 +57,39 @@ export async function POST(request, { params }) {
       updated_at: new Date().toISOString()
     };
     
-    // Only add processed_by if it's a valid UUID
-    if (processedBy && processedBy !== '00000000-0000-0000-0000-000000000000') {
-      updateData.processed_by = processedBy;
+    // Record learning event for continuous learning
+    try {
+      const learningEvent = {
+        event_type: newStatus === 'approved' ? 'submission_approved' : 'submission_rejected',
+        submission_id: id,
+        confidence: 1.0, // Human decision has full confidence
+        approved: newStatus === 'approved',
+        processed_by: processedBy,
+        comments: comments || null,
+        created_at: new Date().toISOString()
+      };
+      
+      // Insert learning event
+      const { error: learningError } = await supabase
+        .from('learning_events')
+        .insert([learningEvent]);
+      
+      if (learningError) {
+        console.warn('⚠️ Failed to record learning event:', learningError);
+      } else {
+        console.log('📚 Learning event recorded for continuous learning');
+      }
+    } catch (learningError) {
+      console.warn('⚠️ Error recording learning event:', learningError);
+    }
+    
+    // Get the correct processed_by value (convert email to UUID if needed)
+    const validProcessedBy = await getProcessedByValue(processedBy);
+    if (validProcessedBy) {
+      updateData.processed_by = validProcessedBy;
+    } else if (processedBy && processedBy.includes('@')) {
+      // If we can't convert email to UUID, store it in comments
+      updateData.comments = `Processed by: ${processedBy}`;
     }
     
     const { data: updatedSubmission, error: updateError } = await supabase

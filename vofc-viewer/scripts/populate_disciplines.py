@@ -12,12 +12,14 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'apps', 'backend')
 
 def get_supabase_client():
     """Get Supabase client"""
-    url = os.getenv('SUPABASE_URL')
-    key = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+    # Try different environment variable names
+    url = os.getenv('SUPABASE_URL') or os.getenv('NEXT_PUBLIC_SUPABASE_URL')
+    key = os.getenv('SUPABASE_SERVICE_ROLE_KEY') or os.getenv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
     
     if not url or not key:
-        print("❌ Missing Supabase credentials")
+        print("Missing Supabase credentials")
         print("Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables")
+        print("Or ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set")
         return None
     
     return create_client(url, key)
@@ -195,22 +197,22 @@ def populate_disciplines():
     ]
     
     try:
-        print("🔄 Populating disciplines table...")
+        print("Populating disciplines table...")
         
         # Insert disciplines (ignore conflicts)
         for discipline in disciplines:
             try:
                 result = supabase.table('disciplines').insert(discipline).execute()
-                print(f"✅ Added discipline: {discipline['name']}")
+                print(f"Added discipline: {discipline['name']}")
             except Exception as e:
                 if "duplicate key" in str(e).lower() or "unique constraint" in str(e).lower():
-                    print(f"⚠️  Discipline already exists: {discipline['name']}")
+                    print(f"Discipline already exists: {discipline['name']}")
                 else:
-                    print(f"❌ Error adding discipline {discipline['name']}: {e}")
+                    print(f"Error adding discipline {discipline['name']}: {e}")
         
         # Get final count
         result = supabase.table('disciplines').select('id', count='exact').execute()
-        print(f"\n📊 Total disciplines in database: {result.count}")
+        print(f"\nTotal disciplines in database: {result.count}")
         
         # Show disciplines by category
         result = supabase.table('disciplines').select('name, category').order('category, name').execute()
@@ -221,24 +223,24 @@ def populate_disciplines():
                 categories[disc['category']] = []
             categories[disc['category']].append(disc['name'])
         
-        print("\n📋 Disciplines by category:")
+        print("\nDisciplines by category:")
         for category, names in categories.items():
             print(f"\n{category} ({len(names)}):")
             for name in names:
-                print(f"  • {name}")
+                print(f"  - {name}")
         
         return True
         
     except Exception as e:
-        print(f"❌ Error populating disciplines: {e}")
+        print(f"Error populating disciplines: {e}")
         return False
 
 if __name__ == "__main__":
-    print("🚀 Starting disciplines population...")
+    print("Starting disciplines population...")
     success = populate_disciplines()
     
     if success:
-        print("\n✅ Disciplines table populated successfully!")
+        print("\nDisciplines table populated successfully!")
     else:
-        print("\n❌ Failed to populate disciplines table")
+        print("\nFailed to populate disciplines table")
         sys.exit(1)

@@ -1,22 +1,24 @@
 {
-  "name": "backend",
+  "name": "vofc-backend",
+  "version": "1.0.0",
+  "description": "VOFC Engine Backend Services",
   "type": "module",
-  "main": "server/index.ts",
+  "main": "server/services/knowledge/generateOFCs.js",
   "scripts": {
-    "dev": "node server/index.js",
-    "start": "node server/index.js"
+    "generate-ofcs": "node server/services/knowledge/generateOFCs.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.42.0",
-    "express": "^4.19.0",
+    "@supabase/supabase-js": "^2.39.0",
     "node-fetch": "^3.3.2",
-    "ollama": "^0.5.0",
-    "uuid": "^9.0.1",
-    "zod": "^3.22.4"
+    "dotenv": "^16.3.1"
   },
-  "devDependencies": {
-    "@types/express": "^4.17.21",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.4.0"
-  }
+  "keywords": [
+    "vofc",
+    "security",
+    "ollama",
+    "ai"
+  ],
+  "author": "VOFC Engine Team",
+  "license": "MIT"
 }

@@ -20,6 +20,8 @@ export default function PSASubmission() {
   
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
+  const [parsing, setParsing] = useState(false);
+  const [parsedData, setParsedData] = useState(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -74,7 +76,7 @@ export default function PSASubmission() {
     }));
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (file) {
       // Validate file type
@@ -97,6 +99,50 @@ export default function PSASubmission() {
         file: file
       }));
       setMessage("");
+      
+      // Parse document for auto-fill
+      await parseDocument(file);
+    }
+  };
+
+  const parseDocument = async (file) => {
+    try {
+      setParsing(true);
+      setMessage("🔍 Analyzing document to auto-fill form fields...");
+      
+      // Create FormData for parsing
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch('/api/documents/parse-metadata', {
+        method: 'POST',
+        body: formData
+      });
+      
+      const result = await response.json();
+      
+      if (result.success && result.parsedData) {
+        setParsedData(result.parsedData);
+        
+        // Auto-populate form fields
+        setFormData(prev => ({
+          ...prev,
+          source_title: result.parsedData.title || prev.source_title,
+          author_org: result.parsedData.organization || prev.author_org,
+          publication_year: result.parsedData.year || prev.publication_year,
+          source_type: result.parsedData.sourceType || prev.source_type,
+          source_url: result.parsedData.url || prev.source_url
+        }));
+        
+        setMessage("✅ Document analyzed! Form fields have been auto-filled. Please review and adjust as needed.");
+      } else {
+        setMessage("⚠️ Could not auto-parse document. Please fill in the form fields manually.");
+      }
+    } catch (error) {
+      console.error('Document parsing error:', error);
+      setMessage("⚠️ Document parsing failed. Please fill in the form fields manually.");
+    } finally {
+      setParsing(false);
     }
   };
 
@@ -188,7 +234,7 @@ export default function PSASubmission() {
             </div>
             <div className="flex gap-3">
               <a href="/submit" className="btn btn-secondary">
-                📝 Submit VOFC
+                📝 Submit New Vulnerability
               </a>
               <a href="/profile" className="btn btn-secondary">
                 👤 Profile
@@ -225,16 +271,53 @@ export default function PSASubmission() {
         </div>
 
         <form onSubmit={handleSubmit}>
+          {/* File Upload - MOVED TO TOP */}
+          <div className="card">
+            <div className="card-header">
+              <h2 className="card-title">📄 Document Upload</h2>
+              <p className="text-sm text-gray-600">Upload your document first to auto-fill the form fields</p>
+            </div>
+            <div className="card-body">
+              <div className="form-group">
+                <label htmlFor="file" className="form-label">
+                  Select Document *
+                </label>
+                <input
+                  type="file"
+                  id="file"
+                  name="file"
+                  onChange={handleFileChange}
+                  accept=".pdf,.docx,.txt,.html,.xlsx"
+                  required
+                  className="form-input"
+                />
+                <p className="form-help">
+                  Supported formats: PDF, DOCX, TXT, HTML, XLSX (max 10MB)
+                </p>
+                {parsing && (
+                  <div className="mt-2 flex items-center text-blue-600">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                    <span className="text-sm">Analyzing document...</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Document Information */}
           <div className="card">
             <div className="card-header">
-              <h2 className="card-title">Document Information</h2>
+              <h2 className="card-title">📋 Document Information</h2>
+              <p className="text-sm text-gray-600">Review and adjust the auto-filled information</p>
             </div>
             <div className="card-body">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="form-group">
                   <label htmlFor="source_title" className="form-label">
                     Document Title *
+                    {parsedData?.title && formData.source_title === parsedData.title && (
+                      <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Auto-filled</span>
+                    )}
                   </label>
                   <input
                     type="text"
@@ -243,7 +326,7 @@ export default function PSASubmission() {
                     value={formData.source_title}
                     onChange={handleInputChange}
                     required
-                    className="form-input"
+                    className={`form-input ${parsedData?.title && formData.source_title === parsedData.title ? 'border-green-300 bg-green-50' : ''}`}
                     placeholder="e.g., Stadium Security Best Practices"
                   />
                 </div>
@@ -275,6 +358,9 @@ export default function PSASubmission() {
                 <div className="form-group">
                   <label htmlFor="author_org" className="form-label">
                     Authoring Organization
+                    {parsedData?.organization && formData.author_org === parsedData.organization && (
+                      <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Auto-filled</span>
+                    )}
                   </label>
                   <input
                     type="text"
@@ -282,7 +368,7 @@ export default function PSASubmission() {
                     name="author_org"
                     value={formData.author_org}
                     onChange={handleInputChange}
-                    className="form-input"
+                    className={`form-input ${parsedData?.organization && formData.author_org === parsedData.organization ? 'border-green-300 bg-green-50' : ''}`}
                     placeholder="e.g., Department of Homeland Security"
                   />
                 </div>
@@ -290,6 +376,9 @@ export default function PSASubmission() {
                 <div className="form-group">
                   <label htmlFor="publication_year" className="form-label">
                     Publication Year
+                    {parsedData?.year && formData.publication_year === parsedData.year && (
+                      <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Auto-filled</span>
+                    )}
                   </label>
                   <input
                     type="number"
@@ -299,7 +388,7 @@ export default function PSASubmission() {
                     onChange={handleInputChange}
                     min="1900"
                     max={new Date().getFullYear()}
-                    className="form-input"
+                    className={`form-input ${parsedData?.year && formData.publication_year === parsedData.year ? 'border-green-300 bg-green-50' : ''}`}
                   />
                 </div>
               </div>
@@ -351,31 +440,6 @@ export default function PSASubmission() {
             </div>
           </div>
 
-          {/* File Upload */}
-          <div className="card">
-            <div className="card-header">
-              <h2 className="card-title">Document Upload</h2>
-            </div>
-            <div className="card-body">
-              <div className="form-group">
-                <label htmlFor="file" className="form-label">
-                  Select Document *
-                </label>
-                <input
-                  type="file"
-                  id="file"
-                  name="file"
-                  onChange={handleFileChange}
-                  accept=".pdf,.docx,.txt,.html,.xlsx"
-                  required
-                  className="form-input"
-                />
-                <p className="form-help">
-                  Supported formats: PDF, DOCX, TXT, HTML, XLSX (max 10MB)
-                </p>
-              </div>
-            </div>
-          </div>
 
           {/* Submission */}
           <div className="card">

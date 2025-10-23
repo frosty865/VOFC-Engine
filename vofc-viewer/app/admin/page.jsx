@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { fetchVulnerabilities, fetchVOFC } from '../lib/fetchVOFC';
 import { getCurrentUser, getUserProfile, canAccessAdmin } from '../lib/auth';
 import { supabase } from '../lib/supabaseClient';
-// import SessionTimeoutWarning from '../../components/SessionTimeoutWarning';
 
 export default function AdminPage() {
   const [stats, setStats] = useState({
@@ -15,13 +14,6 @@ export default function AdminPage() {
     pendingVulnerabilities: 0,
     pendingOFCs: 0
   });
-  const [submittedVulnerabilities, setSubmittedVulnerabilities] = useState([]);
-  const [submittedOFCs, setSubmittedOFCs] = useState([]);
-  const [submissions, setSubmissions] = useState([]);
-  const [processingSubmission, setProcessingSubmission] = useState(null);
-  const [comments, setComments] = useState('');
-  const [editingSubmission, setEditingSubmission] = useState(null);
-  const [editData, setEditData] = useState({});
   const [dbHealth, setDbHealth] = useState({
     connection: 'Unknown',
     responseTime: 0,
@@ -36,8 +28,6 @@ export default function AdminPage() {
   useEffect(() => {
     checkAuth();
     loadStats();
-    loadSubmittedItems();
-    loadSubmissions();
     checkDatabaseHealth();
   }, []);
 
@@ -47,326 +37,80 @@ export default function AdminPage() {
       setShowBackToTop(scrollTop > 300);
     };
 
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden) {
         loadStats();
-        loadSubmittedItems();
-        loadSubmissions();
         checkDatabaseHealth();
       }
     };
 
-    window.addEventListener('scroll', handleScroll);
     document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
   const checkAuth = async () => {
     try {
       const user = await getCurrentUser();
       if (!user) {
-        router.push('/splash');
+        router.push('/login');
         return;
       }
 
-      const profile = await getUserProfile();
-      console.log('🔐 User profile:', profile);
-      console.log('🔐 User data:', user);
-      setCurrentUser(user);
-      setUserRole(profile?.role || user.role);
+      const profile = await getUserProfile(user.id);
+      const canAccess = await canAccessAdmin(user.id);
 
-      // Check both profile.role and user.role for admin access
-      const userRole = profile?.role || user.role;
-      console.log('🔐 Checking role:', userRole);
-      console.log('🔐 Profile role:', profile?.role);
-      console.log('🔐 User role:', user.role);
-      
-      // Allow admin, spsa, analyst, and psa roles to access admin tools
-      const allowedRoles = ['admin', 'spsa', 'analyst', 'psa'];
-      if (!allowedRoles.includes(userRole)) {
-        console.log('❌ Access denied for role:', userRole);
-        console.log('❌ Allowed roles:', allowedRoles);
-        console.log('❌ Profile role:', profile?.role);
-        console.log('❌ User role:', user.role);
+      if (!canAccess) {
+        alert('You do not have admin access');
         router.push('/');
         return;
       }
 
+      setCurrentUser(user);
+      setUserRole(profile?.role || 'user');
     } catch (error) {
       console.error('Auth check failed:', error);
-      router.push('/splash');
-    }
-  };
-
-  const loadStats = async () => {
-    try {
-      const [vulnerabilities, ofcs] = await Promise.all([
-        fetchVulnerabilities(),
-        fetchVOFC()
-      ]);
-
-      setStats({
-        vulnerabilities: vulnerabilities.length,
-        ofcs: ofcs.length,
-        users: 4, // We know we have 4 users
-        pendingVulnerabilities: 0,
-        pendingOFCs: 0
-      });
-    } catch (error) {
-      console.error('Error loading stats:', error);
+      router.push('/login');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadSubmittedItems = async () => {
+  const loadStats = async () => {
     try {
-      // Use API route to fetch submissions (bypasses RLS)
-      const response = await fetch('/api/admin/submissions');
-      const result = await response.json();
+      const [vulnerabilities, ofcs, users] = await Promise.all([
+        fetchVulnerabilities(),
+        fetchVOFC(),
+        supabase.from('user_profiles').select('*')
+      ]);
 
-      if (!result.success) {
-        console.error('API error:', result.error);
-        throw new Error(result.error);
-      }
-
-      const vulnerabilitySubmissions = result.vulnerabilitySubmissions;
-      const ofcSubmissions = result.ofcSubmissions;
-      const allSubmissions = result.allSubmissions;
-
-      setSubmittedVulnerabilities(vulnerabilitySubmissions || []);
-      setSubmittedOFCs(ofcSubmissions || []);
-
-      // Update pending counts
-      const pendingVulns = (vulnerabilitySubmissions || []).filter(v => v.status === 'pending_review').length;
-      const pendingOFCs = (ofcSubmissions || []).filter(o => o.status === 'pending_review').length;
-
-      console.log('Pending vulnerabilities:', pendingVulns);
-      console.log('Pending OFCs:', pendingOFCs);
-
-      setStats(prev => ({
-        ...prev,
-        pendingVulnerabilities: pendingVulns,
-        pendingOFCs: pendingOFCs
-      }));
-
-    } catch (error) {
-      console.error('Error loading submitted items:', error);
-    }
-  };
-
-  const loadSubmissions = async () => {
-    try {
-      const { data: submissions, error } = await supabase
-        .from('submissions')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (error) {
-        console.log('Submissions table not found or error:', error.message);
-        return;
-      }
-
-      setSubmissions(submissions || []);
-    } catch (error) {
-      console.error('Error loading submissions:', error);
-    }
-  };
-
-  const handleApproveSubmission = async (submissionId) => {
-    if (!currentUser) return;
-
-    setProcessingSubmission(submissionId);
-    try {
-      const response = await fetch(`/api/submissions/${submissionId}/approve`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          action: 'approve',
-          comments: comments,
-          processedBy: currentUser.id
-        })
+      setStats({
+        vulnerabilities: vulnerabilities?.length || 0,
+        ofcs: ofcs?.length || 0,
+        users: users.data?.length || 0,
+        pendingVulnerabilities: 0,
+        pendingOFCs: 0
       });
-
-      const result = await response.json();
-
-      if (result.success) {
-        // Reload submissions and stats
-        loadSubmissions();
-        loadStats();
-        setComments('');
-        alert('Submission approved and added to database!');
-      } else {
-        alert('Error approving submission: ' + result.error);
-      }
     } catch (error) {
-      console.error('Error approving submission:', error);
-      alert('Error approving submission');
-    } finally {
-      setProcessingSubmission(null);
-    }
-  };
-
-  const handleRejectSubmission = async (submissionId) => {
-    if (!currentUser) return;
-
-    setProcessingSubmission(submissionId);
-    try {
-      // Use the new move_to_rejected_submissions function
-      const { data, error } = await supabase.rpc('move_to_rejected_submissions', {
-        p_submission_id: submissionId,
-        p_rejection_reason: comments,
-        p_rejected_by: currentUser.id
-      });
-
-      if (error) {
-        console.error('Error moving to rejected submissions:', error);
-        alert('Error rejecting submission: ' + error.message);
-        return;
-      }
-
-      const result = Array.isArray(data) ? data[0] : data;
-
-      if (result.success) {
-        // Send rejection email notification
-        try {
-          const emailResponse = await fetch('/api/email/reject-notification', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              submissionId: submissionId,
-              comments: comments,
-              processedBy: currentUser.id
-            })
-          });
-
-          const emailResult = await emailResponse.json();
-          if (emailResult.success) {
-            console.log('📧 Rejection email sent to:', emailResult.recipient);
-          } else {
-            console.log('⚠️ Failed to send rejection email:', emailResult.error);
-          }
-        } catch (emailError) {
-          console.error('Email notification error:', emailError);
-        }
-
-        // Reload all data to refresh the lists
-        loadStats();
-        loadSubmittedItems();
-        loadSubmissions();
-        setComments('');
-        alert('Submission rejected and moved to user profile. User will be notified.');
-      } else {
-        alert('Error rejecting submission: ' + result.message);
-      }
-    } catch (error) {
-      console.error('Error rejecting submission:', error);
-      alert('Error rejecting submission');
-    } finally {
-      setProcessingSubmission(null);
-    }
-  };
-
-  const handleEditSubmission = (submission) => {
-    const data = typeof submission.data === 'string'
-      ? JSON.parse(submission.data)
-      : submission.data;
-
-    setEditingSubmission(submission.id);
-    setEditData(data);
-  };
-
-  const handleSaveEdit = async (submissionId) => {
-    if (!currentUser) return;
-
-    setProcessingSubmission(submissionId);
-    try {
-      const response = await fetch(`/api/submissions/${submissionId}/edit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          data: editData,
-          editedBy: currentUser.id
-        })
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        // Reload all data to refresh the lists
-        loadStats();
-        loadSubmittedItems();
-        loadSubmissions();
-        setEditingSubmission(null);
-        setEditData({});
-        alert('Submission updated successfully');
-      } else {
-        alert('Error updating submission: ' + result.error);
-      }
-    } catch (error) {
-      console.error('Error updating submission:', error);
-      alert('Error updating submission');
-    } finally {
-      setProcessingSubmission(null);
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditingSubmission(null);
-    setEditData({});
-  };
-
-  const handleSignOut = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Error signing out:', error);
-        alert('Error signing out');
-      } else {
-        router.push('/login');
-      }
-    } catch (error) {
-      console.error('Error signing out:', error);
-      alert('Error signing out');
+      console.error('Error loading stats:', error);
     }
   };
 
   const checkDatabaseHealth = async () => {
+    const startTime = Date.now();
     try {
-      const startTime = Date.now();
-
-      // Test database connection with a simple query
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('count')
-        .limit(1);
-
+      const { data, error } = await supabase.from('vulnerabilities').select('count').limit(1);
       const responseTime = Date.now() - startTime;
-
-      if (error) {
-        setDbHealth({
-          connection: 'Error',
-          responseTime: responseTime,
-          lastChecked: new Date().toLocaleTimeString()
-        });
-      } else {
-        setDbHealth({
-          connection: 'Healthy',
-          responseTime: responseTime,
-          lastChecked: new Date().toLocaleTimeString()
-        });
-      }
+      
+      setDbHealth({
+        connection: error ? 'Error' : 'Connected',
+        responseTime: responseTime,
+        lastChecked: new Date().toLocaleTimeString()
+      });
     } catch (error) {
       setDbHealth({
         connection: 'Error',
@@ -376,71 +120,104 @@ export default function AdminPage() {
     }
   };
 
+  const handleSignOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Error signing out:', error);
+      } else {
+        router.push('/');
+      }
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-lg">Loading admin dashboard...</div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading admin panel...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
-      {/* <SessionTimeoutWarning /> */}
-      <div className="card mb-6">
-        <div className="card-header">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="card-title">Admin Dashboard</h1>
-              <p className="text-secondary">Welcome, {currentUser?.email} ({userRole})</p>
-            </div>
-            <div className="flex space-x-2">
-              <button
-                onClick={() => {
-                  loadStats();
-                  loadSubmittedItems();
-                  loadSubmissions();
-                  checkDatabaseHealth();
-                }}
-                className="btn btn-primary"
-              >
-                Refresh Data
-              </button>
-              <button
-                onClick={async () => {
-                  console.log('🔧 Disabling RLS...');
-                  try {
-                    const response = await fetch('/api/admin/disable-rls', { method: 'POST' });
-                    const result = await response.json();
-                    if (result.success) {
-                      alert(`RLS disabled! Found ${result.submissionsFound} submissions.`);
-                      loadSubmittedItems(); // Refresh data
-                    } else {
-                      alert('Error disabling RLS: ' + result.error);
-                    }
-                  } catch (error) {
-                    console.error('Error:', error);
-                    alert('Error disabling RLS');
-                  }
-                }}
-                className="btn btn-warning"
-              >
-                Fix RLS
-              </button>
-              <Link href="/" className="btn btn-secondary">
-                Back to Dashboard
-              </Link>
-              <button
-                onClick={handleSignOut}
-                className="btn btn-danger"
-              >
-                Sign Out
-              </button>
-            </div>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-blue-900 text-white p-4">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold">Admin Panel</h1>
+            <p className="text-blue-200">System Administration and Management</p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <span className="text-sm">Welcome, {currentUser?.email}</span>
+            <button
+              onClick={handleSignOut}
+              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
+            >
+              Sign Out
+            </button>
           </div>
         </div>
       </div>
 
+      <div className="max-w-7xl mx-auto p-6">
+        {/* Stats Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="p-3 rounded-full bg-red-100 text-red-600">
+                <i className="fas fa-shield-alt text-xl"></i>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Vulnerabilities</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.vulnerabilities}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="p-3 rounded-full bg-blue-100 text-blue-600">
+                <i className="fas fa-lightbulb text-xl"></i>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">OFCs</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.ofcs}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="p-3 rounded-full bg-green-100 text-green-600">
+                <i className="fas fa-users text-xl"></i>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Users</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.users}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="p-3 rounded-full bg-yellow-100 text-yellow-600">
+                <i className="fas fa-clock text-xl"></i>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Pending</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.pendingVulnerabilities + stats.pendingOFCs}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Database Health and Status */}
         <div className="card mb-6">
           <div className="card-header">
             <div className="flex justify-between items-center">
@@ -450,484 +227,118 @@ export default function AdminPage() {
                   <i className="fas fa-users mr-2"></i>
                   Manage Users
                 </Link>
-                <Link href="/admin/ofcs" className="btn btn-success btn-sm">
-                  <i className="fas fa-lightbulb mr-2"></i>
-                  Manage OFCs
-                </Link>
+              <Link href="/admin/ofcs" className="btn btn-success btn-sm">
+                <i className="fas fa-lightbulb mr-2"></i>
+                Manage OFCs
+              </Link>
+              <Link href="/admin/ofc-requests" className="btn btn-info btn-sm">
+                <i className="fas fa-clipboard-list mr-2"></i>
+                Review OFC Requests
+              </Link>
               </div>
             </div>
           </div>
-        <div className="row">
-          <div className="col-md-3">
-            <div className="card bg-warning text-white">
-              <div className="card-body text-center">
-                <div className="text-2xl font-bold">{stats.vulnerabilities}</div>
-                <div className="text-sm">Vulnerabilities</div>
-                {stats.pendingVulnerabilities > 0 && (
-                  <div className="text-xs mt-1">
-                    {stats.pendingVulnerabilities} pending
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="col-md-3">
-            <div className="card bg-info text-white">
-              <div className="card-body text-center">
-                <div className="text-2xl font-bold">{stats.ofcs}</div>
-                <div className="text-sm">OFCs</div>
-                {stats.pendingOFCs > 0 && (
-                  <div className="text-xs mt-1">
-                    {stats.pendingOFCs} pending
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="col-md-3">
-            <div className="card bg-primary text-white">
-              <div className="card-body text-center">
-                <div className="text-2xl font-bold">{stats.users}</div>
-                <div className="text-sm">Users</div>
-              </div>
-            </div>
-          </div>
-          <div className="col-md-3">
-            <div className={`card ${dbHealth.connection === 'Healthy' ? 'bg-success' : 'bg-danger'} text-white`}>
-              <div className="card-body text-center">
-                <div className="text-2xl font-bold">{dbHealth.responseTime}ms</div>
-                <div className="text-sm">DB Response</div>
-                <div className="text-xs mt-1">
+          <div className="card-body">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="text-center">
+                <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                  dbHealth.connection === 'Connected' 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-red-100 text-red-800'
+                }`}>
+                  <div className={`w-2 h-2 rounded-full mr-2 ${
+                    dbHealth.connection === 'Connected' ? 'bg-green-500' : 'bg-red-500'
+                  }`}></div>
                   {dbHealth.connection}
                 </div>
+                <p className="text-sm text-gray-600 mt-1">Database Status</p>
               </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-gray-900">{dbHealth.responseTime}ms</p>
+                <p className="text-sm text-gray-600">Response Time</p>
+              </div>
+              <div className="text-center">
+                <p className="text-sm text-gray-600">Last Checked</p>
+                <p className="text-sm font-medium text-gray-900">{dbHealth.lastChecked}</p>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-center">
+              <button
+                onClick={() => {
+                  loadStats();
+                  checkDatabaseHealth();
+                }}
+                className="btn btn-secondary btn-sm"
+              >
+                <i className="fas fa-sync-alt mr-2"></i>
+                Refresh Status
+              </button>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="card mb-6">
-        <div className="card-header">
-          <h2 className="card-title">Admin Actions</h2>
-        </div>
-        <div className="card-body">
-          <div className="row">
-            <div className="col-md-6">
-              <div className="card">
-                <div className="card-body">
-                  <h4 className="card-title">User Management</h4>
-                  <p className="card-text">Create, edit, and manage user accounts and roles.</p>
-                  <Link href="/admin/users" className="btn btn-primary">
-                    Manage Users
-                  </Link>
-                </div>
-              </div>
+        {/* Quick Actions */}
+        <div className="card mb-6">
+          <div className="card-header">
+            <h2 className="card-title">Quick Actions</h2>
+          </div>
+          <div className="card-body">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Link href="/review" className="btn btn-primary">
+                <i className="fas fa-clipboard-check mr-2"></i>
+                Review Submissions
+              </Link>
+              <Link href="/admin/users" className="btn btn-secondary">
+                <i className="fas fa-users mr-2"></i>
+                Manage Users
+              </Link>
+              <Link href="/admin/ofcs" className="btn btn-success">
+                <i className="fas fa-lightbulb mr-2"></i>
+                Manage OFCs
+              </Link>
+              <Link href="/admin/ofc-requests" className="btn btn-info">
+                <i className="fas fa-clipboard-list mr-2"></i>
+                Review OFC Requests
+              </Link>
+              <button 
+                onClick={async () => {
+                  if (confirm('Generate OFCs for vulnerabilities with fewer than 3 OFCs? This may take a few minutes.')) {
+                    try {
+                      const response = await fetch('/api/admin/generate-ofcs', { method: 'POST' });
+                      const result = await response.json();
+                      if (result.success) {
+                        alert(`OFC generation completed! Processed ${result.vulnerabilities_processed || 0} vulnerabilities.`);
+                      } else {
+                        alert(`OFC generation failed: ${result.error}`);
+                      }
+                    } catch (error) {
+                      alert(`Error: ${error.message}`);
+                    }
+                  }
+                }}
+                className="btn btn-warning"
+              >
+                <i className="fas fa-robot mr-2"></i>
+                Generate OFCs
+              </button>
+              <Link href="/admin/disciplines" className="btn btn-warning">
+                <i className="fas fa-tags mr-2"></i>
+                Manage Disciplines
+              </Link>
             </div>
-            <div className="col-md-6">
-              <div className="card">
-                <div className="card-body">
-                  <h4 className="card-title">System Settings</h4>
-                  <p className="card-text">Configure system-wide settings and preferences.</p>
-                  <button className="btn btn-secondary" disabled>
-                    Coming Soon
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
-      </div>
 
-      {/* Submitted Vulnerabilities */}
-      <div className="mb-6">
-        <div className="mb-4">
-          <h2 className="text-2xl font-bold text-primary">Active Vulnerability Submissions</h2>
-          <p className="text-sm text-secondary">Vulnerabilities with associated OFCs (pending review or approved)</p>
-        </div>
-
-        {submittedVulnerabilities.filter(s => s.status !== 'rejected').length === 0 ? (
-          <div className="text-center py-8 text-secondary">
-            <p>No vulnerabilities submitted yet</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {submittedVulnerabilities.filter(s => s.status !== 'rejected').slice(0, 6).map((submission) => {
-              const data = typeof submission.data === 'string'
-                ? JSON.parse(submission.data)
-                : submission.data;
-              console.log('Vulnerability submission data:', data);
-              return (
-                <div key={submission.id} className="card">
-                  <div className="card-header">
-                    <div className="flex justify-between items-start">
-                      <h4 className="card-title text-lg">{data.vulnerability}</h4>
-                      <div className="flex flex-col space-y-1">
-                        <span className="badge bg-primary text-white text-xs">
-                          {data.discipline}
-                        </span>
-                        <span className={`badge ${submission.status === 'pending_review' ? 'bg-warning' :
-                          submission.status === 'approved' ? 'bg-success' :
-                            submission.status === 'rejected' ? 'bg-danger' :
-                              'bg-secondary'
-                          } text-white text-xs`}>
-                          {submission.status === 'pending_review' ? 'Pending Review' :
-                            submission.status === 'approved' ? 'Approved' :
-                              submission.status === 'rejected' ? 'Rejected' :
-                                submission.status}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="card-body">
-                    {editingSubmission === submission.id ? (
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium mb-1">Vulnerability:</label>
-                          <textarea
-                            value={editData.vulnerability || ''}
-                            onChange={(e) => setEditData({ ...editData, vulnerability: e.target.value })}
-                            className="w-full p-2 border rounded text-sm"
-                            rows="3"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium mb-1">Discipline:</label>
-                          <input
-                            type="text"
-                            value={editData.discipline || ''}
-                            onChange={(e) => setEditData({ ...editData, discipline: e.target.value })}
-                            className="w-full p-2 border rounded text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium mb-1">Source:</label>
-                          <input
-                            type="text"
-                            value={editData.source || ''}
-                            onChange={(e) => setEditData({ ...editData, source: e.target.value })}
-                            className="w-full p-2 border rounded text-sm"
-                          />
-                        </div>
-                        {editData.associated_ofcs && editData.associated_ofcs.length > 0 && (
-                          <div>
-                            <label className="block text-sm font-medium mb-1">Associated OFCs:</label>
-                            {editData.associated_ofcs.map((ofc, index) => (
-                              <input
-                                key={index}
-                                type="text"
-                                value={ofc}
-                                onChange={(e) => {
-                                  const newOfcs = [...editData.associated_ofcs];
-                                  newOfcs[index] = e.target.value;
-                                  setEditData({ ...editData, associated_ofcs: newOfcs });
-                                }}
-                                className="w-full p-2 border rounded text-sm mb-2"
-                              />
-                            ))}
-                          </div>
-                        )}
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => handleSaveEdit(submission.id)}
-                            disabled={processingSubmission === submission.id}
-                            className="btn btn-success btn-sm"
-                          >
-                            {processingSubmission === submission.id ? 'Saving...' : 'Save'}
-                          </button>
-                          <button
-                            onClick={handleCancelEdit}
-                            className="btn btn-secondary btn-sm"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="mb-4">
-                          <h5 className="font-medium mb-2">Vulnerability:</h5>
-                          <p className="text-sm text-secondary">{data.vulnerability}</p>
-                        </div>
-
-                        {/* Show associated OFCs if they exist */}
-                        {data.associated_ofcs && data.associated_ofcs.length > 0 && (
-                          <div className="mb-4">
-                            <h5 className="font-medium mb-2">Associated Options for Consideration:</h5>
-                            <ul className="list-disc list-inside space-y-1">
-                              {data.associated_ofcs.map((ofc, index) => (
-                                <li key={index} className="text-sm text-secondary">{ofc}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        <div className="text-xs text-secondary space-y-1">
-                          <div>Discipline: {data.discipline}</div>
-                          <div>Source: {data.source || 'N/A'}</div>
-                          <div>Associated OFCs: {data.ofc_count || data.associated_ofcs?.length || 0}</div>
-                          <div>Submitter Email: {submission.submitter_email || 'Not provided'}</div>
-                          <div>Submitted: {new Date(submission.created_at).toLocaleDateString()}</div>
-                        </div>
-                      </>
-                    )}
-
-                    {submission.status === 'pending_review' && (userRole === 'spsa' || userRole === 'admin') && (
-                      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
-                        <h5 className="font-medium mb-2 text-sm">Admin Actions:</h5>
-                        <div className="space-y-2">
-                          <textarea
-                            value={comments}
-                            onChange={(e) => setComments(e.target.value)}
-                            placeholder="Add comments (optional)"
-                            className="w-full p-2 border rounded text-xs"
-                            rows="2"
-                          />
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => handleApproveSubmission(submission.id)}
-                              disabled={processingSubmission === submission.id}
-                              className="btn btn-success btn-sm"
-                            >
-                              {processingSubmission === submission.id ? 'Processing...' : 'Approve'}
-                            </button>
-                            <button
-                              onClick={() => handleRejectSubmission(submission.id)}
-                              disabled={processingSubmission === submission.id}
-                              className="btn btn-danger btn-sm"
-                            >
-                              {processingSubmission === submission.id ? 'Processing...' : 'Reject'}
-                            </button>
-                            <button
-                              onClick={() => handleEditSubmission(submission)}
-                              disabled={processingSubmission === submission.id}
-                              className="btn btn-warning btn-sm"
-                            >
-                              Edit
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        {/* Back to Top Button */}
+        {showBackToTop && (
+          <button
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="fixed bottom-6 right-6 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-lg transition-all duration-200 z-50"
+          >
+            <i className="fas fa-arrow-up"></i>
+          </button>
         )}
       </div>
-
-      {/* Submitted OFCs */}
-      <div className="mb-6">
-        <div className="mb-4">
-          <h2 className="text-2xl font-bold text-primary">Active Standalone OFC Submissions</h2>
-          <p className="text-sm text-secondary">Standalone OFCs not associated with vulnerabilities (pending review or approved)</p>
-        </div>
-
-        {submittedOFCs.filter(s => s.status !== 'rejected').length === 0 ? (
-          <div className="text-center py-8 text-secondary">
-            <p>No OFCs submitted yet</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {submittedOFCs.filter(s => s.status !== 'rejected').slice(0, 6).map((submission) => {
-              const data = typeof submission.data === 'string'
-                ? JSON.parse(submission.data)
-                : submission.data;
-              console.log('OFC submission data:', data);
-              return (
-                <div key={submission.id} className="card">
-                  <div className="card-header">
-                    <div className="flex justify-between items-start">
-                      <h4 className="card-title text-lg">{data.option_text}</h4>
-                      <div className="flex flex-col space-y-1">
-                        <span className="badge bg-primary text-white text-xs">
-                          {data.discipline}
-                        </span>
-                        <span className={`badge ${submission.status === 'pending_review' ? 'bg-warning' :
-                          submission.status === 'approved' ? 'bg-success' :
-                            submission.status === 'rejected' ? 'bg-danger' :
-                              'bg-secondary'
-                          } text-white text-xs`}>
-                          {submission.status === 'pending_review' ? 'Pending Review' :
-                            submission.status === 'approved' ? 'Approved' :
-                              submission.status === 'rejected' ? 'Rejected' :
-                                submission.status}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="card-body">
-                    <p className="text-sm text-secondary mb-3">{data.option_text}</p>
-                    <div className="text-xs text-secondary space-y-1">
-                      <div>Discipline: {data.discipline}</div>
-                      <div>Source: {data.source || 'N/A'}</div>
-                      <div>Associated Vulnerability: {data.associated_vulnerability ? 'Yes' : 'No'}</div>
-                      <div>Submitter Email: {submission.submitter_email || 'Not provided'}</div>
-                      <div>Submitted: {new Date(submission.created_at).toLocaleDateString()}</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* API Submissions Section */}
-      <div className="mb-6">
-        <div className="mb-4">
-          <h2 className="text-2xl font-bold text-primary">Active API Submissions</h2>
-          <p className="text-sm text-secondary">External system submissions (pending review or approved)</p>
-        </div>
-
-        {submissions.filter(s => s.status !== 'rejected').length === 0 ? (
-          <div className="text-center py-8 text-secondary">
-            <p>No API submissions found</p>
-            <p className="text-sm">Submissions will appear here when external systems submit data via the API endpoints</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {submissions.filter(s => s.status !== 'rejected').map((submission) => (
-              <div key={submission.id} className="card">
-                <div className="card-header">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="card-title text-lg">
-                        {submission.type === 'vulnerability' ? 'Vulnerability' : 'OFC'} Submission
-                      </h4>
-                      <p className="text-sm text-secondary">ID: {submission.id.slice(0, 8)}...</p>
-                    </div>
-                    <div className="flex flex-col space-y-1">
-                      <span className={`badge ${submission.status === 'pending_review' ? 'bg-warning' :
-                        submission.status === 'approved' ? 'bg-success' :
-                          submission.status === 'rejected' ? 'bg-danger' :
-                            'bg-info'
-                        } text-white`}>
-                        {submission.status}
-                      </span>
-                      <span className="badge bg-secondary text-white text-xs">
-                        {submission.source}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="card-body">
-                  <div className="mb-3">
-                    <h5 className="font-medium mb-2 text-sm">Submission Data:</h5>
-                    <div className="bg-gray-50 p-3 rounded text-xs max-h-32 overflow-y-auto">
-                      <pre className="whitespace-pre-wrap">{JSON.stringify(
-                        typeof submission.data === 'string'
-                          ? JSON.parse(submission.data)
-                          : submission.data,
-                        null, 2
-                      )}</pre>
-                    </div>
-                  </div>
-
-                  <div className="text-xs text-secondary space-y-1">
-                    <div>Created: {new Date(submission.created_at).toLocaleString()}</div>
-                    <div>Updated: {new Date(submission.updated_at).toLocaleString()}</div>
-                  </div>
-
-                  {/* SPSA Approval/Rejection Section */}
-                  {(() => {
-                    console.log('Submission status:', submission.status);
-                    console.log('User role:', userRole);
-                    console.log('Show approval section:', submission.status === 'pending_review' && (userRole === 'spsa' || userRole === 'admin'));
-                    return null;
-                  })()}
-                  {submission.status === 'pending_review' && (userRole === 'spsa' || userRole === 'admin') && (
-                    <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
-                      <h6 className="font-medium mb-2 text-sm">SPSA Review</h6>
-                      <div className="mb-3">
-                        <label className="block text-xs font-medium mb-1">Comments (optional):</label>
-                        <textarea
-                          className="form-input w-full text-xs"
-                          rows="2"
-                          value={comments}
-                          onChange={(e) => setComments(e.target.value)}
-                          placeholder="Add comments for the submitter..."
-                        />
-                      </div>
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleApproveSubmission(submission.id)}
-                          disabled={processingSubmission === submission.id}
-                          className="btn bg-success text-white text-xs px-3 py-1"
-                        >
-                          {processingSubmission === submission.id ? 'Processing...' : 'Approve'}
-                        </button>
-                        <button
-                          onClick={() => handleRejectSubmission(submission.id)}
-                          disabled={processingSubmission === submission.id}
-                          className="btn bg-danger text-white text-xs px-3 py-1"
-                        >
-                          {processingSubmission === submission.id ? 'Processing...' : 'Reject'}
-                        </button>
-                        <button
-                          onClick={() => handleEditSubmission(submission)}
-                          disabled={processingSubmission === submission.id}
-                          className="btn bg-warning text-white text-xs px-3 py-1"
-                        >
-                          Edit
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Show comments if submission was processed */}
-                  {submission.comments && (
-                    <div className="mt-3 p-2 bg-gray-50 rounded text-xs">
-                      <strong>Review Comments:</strong> {submission.comments}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="card">
-        <div className="card-header">
-          <h2 className="card-title">System Status</h2>
-        </div>
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <span>Database Connection</span>
-            <span className={`px-2 py-1 rounded-full text-xs ${dbHealth.connection === 'Healthy' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-              }`}>
-              {dbHealth.connection} ({dbHealth.responseTime}ms)
-            </span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span>Last Health Check</span>
-            <span className="text-sm text-secondary">{dbHealth.lastChecked}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span>Authentication Service</span>
-            <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">Operational</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span>API Endpoints</span>
-            <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">All Systems Go</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Back to Top Button */}
-      {showBackToTop && (
-        <button
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="back-to-top"
-          title="Back to top"
-        >
-          <i className="fas fa-arrow-up"></i>
-        </button>
-      )}
     </div>
   );
 }
-
-

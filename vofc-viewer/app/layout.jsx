@@ -2,6 +2,7 @@ import '../styles/cisa.css'
 import './globals.css'
 import Navigation from '../components/Navigation'
 import AnalyticsProvider from '../components/AnalyticsProvider'
+import AdvancedReturnToTop from '../components/AdvancedReturnToTop'
 
 export const metadata = {
   title: 'VOFC Viewer',
@@ -20,6 +21,7 @@ export default function RootLayout({ children }) {
           <main className="w-full py-8">
             {children}
           </main>
+          <AdvancedReturnToTop />
         </div>
         <AnalyticsProvider />
       </body>
