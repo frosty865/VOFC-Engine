@@ -1,25 +1,29 @@
 {
-  "name": "vofc-engine",
+  "name": "vofc-engine-tools",
   "version": "1.0.0",
-  "description": "VOFC Engine - Vulnerability Options for Consideration Engine with AI-powered assessment generation",
-  "private": true,
+  "description": "Tools for VOFC Engine database management",
+  "main": "create-submission-tables.js",
   "scripts": {
-    "dev": "pnpm --filter vofc-viewer dev",
-    "dev:backend": "pnpm --filter backend dev",
-    "dev:viewer": "pnpm --filter vofc-viewer dev",
-    "dev:all": "powershell -Command \"Start-Process powershell -ArgumentList 'pnpm run dev:backend'; Start-Process powershell -ArgumentList 'pnpm run dev:viewer'\"",
-    "build": "pnpm --filter vofc-viewer build",
-    "start": "pnpm --filter vofc-viewer start",
-    "embed": "node vofc-viewer/apps/backend/server/services/knowledge/embeddingPipeline.js"
-  },
-  "devDependencies": {
-    "ts-node": "^10.9.1",
-    "typescript": "^5.4.0"
+    "create-tables": "node create-submission-tables.js",
+    "migrate-data": "node vofc-viewer/scripts/migrate-to-structured-tables.js",
+    "setup-submissions": "npm run create-tables && npm run migrate-data",
+    "heuristic-parse": "node heuristic-parser-tool.js",
+    "heuristic-test": "node heuristic-parser-tool.js --test",
+    "heuristic-process": "node heuristic-parser-tool.js --process",
+    "heuristic-install": "node heuristic-parser-tool.js --install",
+    "full-setup": "npm run create-tables && npm run migrate-data && npm run heuristic-parse",
+    "complete-setup": "node create-submission-tables.js"
   },
   "dependencies": {
-    "dotenv": "^16.6.1",
-    "multer": "^2.0.2",
-    "node-fetch": "^3.3.2",
-    "pdf-parse": "^2.4.3"
-  }
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^16.3.1"
+  },
+  "keywords": [
+    "vofc",
+    "database",
+    "submissions",
+    "supabase"
+  ],
+  "author": "VOFC Engine Team",
+  "license": "MIT"
 }

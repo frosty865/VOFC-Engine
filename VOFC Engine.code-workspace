@@ -1,7 +1,11 @@
 {
-    "folders": [
-        {
-            "path": "vofc-viewer"
-        }
-    ]
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../Tools/CSV"
+		}
+	],
+	"settings": {}
 }

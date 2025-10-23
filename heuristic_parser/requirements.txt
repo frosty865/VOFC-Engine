@@ -1,0 +1,9 @@
+
+# Optional accelerators (install what you need)
+pdfminer.six>=20221105
+PyPDF2>=3.0.0
+python-docx>=1.1.2
+beautifulsoup4>=4.12.3
+sentence-transformers>=3.0.1
+numpy>=1.26.0
+scikit-learn>=1.4.2
