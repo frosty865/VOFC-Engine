@@ -6,6 +6,8 @@ import { getCurrentUser } from '../../lib/auth';
 import { supabase } from '../../lib/supabaseClient';
 
 export default function OFCManagement() {
+  console.log('🎯 OFCManagement component is rendering');
+  
   const [options_for_consideration, setOfcs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
@@ -36,6 +38,8 @@ export default function OFCManagement() {
         console.log('✅ Component initialization completed');
       } catch (error) {
         console.error('❌ Component initialization error:', error);
+        console.error('❌ Error stack:', error.stack);
+        setLoading(false);
       }
     };
     
