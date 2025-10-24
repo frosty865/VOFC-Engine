@@ -59,22 +59,58 @@ export default function OFCManagement() {
   const loadOFCs = async () => {
     try {
       setLoading(true);
-      // Load OFCs with their sources
-      const { data, error } = await supabase
-        .from('options_for_consideration')
-        .select(`
-          *,
-          ofc_sources (
-            sources (
-              reference_number,
-              source_text
-            )
-          )
-        `)
-        .order('option_text');
+      
+      // Use API route for loading OFCs
+      const response = await fetch('/api/admin/ofcs', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include' // Include cookies for authentication
+      });
 
-      if (error) throw error;
-      setOfcs(data || []);
+      const result = await response.json();
+      console.log('📡 API Response:', { status: response.status, result });
+
+      if (!response.ok) {
+        console.error('❌ API Error:', result);
+        throw new Error(result.error || 'Failed to load OFCs');
+      }
+
+      if (!result.success) {
+        console.error('❌ API Success False:', result);
+        throw new Error(result.error || 'Load failed');
+      }
+
+      // Load sources separately for each OFC
+      const ofcsWithSources = await Promise.all(
+        (result.options_for_consideration || []).map(async (ofc) => {
+          try {
+            const { data: sources } = await supabase
+              .from('ofc_sources')
+              .select(`
+                sources (
+                  reference_number,
+                  source_text
+                )
+              `)
+              .eq('ofc_id', ofc.id);
+            
+            return {
+              ...ofc,
+              ofc_sources: sources || []
+            };
+          } catch (error) {
+            console.warn('Failed to load sources for OFC:', ofc.id, error);
+            return {
+              ...ofc,
+              ofc_sources: []
+            };
+          }
+        })
+      );
+
+      setOfcs(ofcsWithSources);
     } catch (error) {
       console.error('Error loading OFCs:', error);
       alert('Error loading OFCs: ' + error.message);
@@ -84,6 +120,7 @@ export default function OFCManagement() {
   };
 
   const handleEditOFC = (ofc) => {
+    console.log('🔧 handleEditOFC called with OFC:', ofc);
     setEditingOFC(ofc);
     setEditFormData({
       id: ofc.id,
@@ -93,7 +130,14 @@ export default function OFCManagement() {
       sector_id: ofc.sector_id || '',
       subsector_id: ofc.subsector_id || ''
     });
+    console.log('🔧 Edit form data set:', {
+      id: ofc.id,
+      option_text: ofc.option_text || '',
+      discipline: ofc.discipline || '',
+      source: ofc.source || ''
+    });
     setShowEditForm(true);
+    console.log('🔧 Edit form should now be visible');
   };
 
   const handleUpdateOFC = async (e) => {
@@ -102,30 +146,69 @@ export default function OFCManagement() {
       console.log('🔄 Updating OFC with data:', editFormData);
       
       const updateData = {
+        id: editFormData.id,
         option_text: editFormData.option_text,
         discipline: editFormData.discipline,
-        source: editFormData.source,
-        sector_id: editFormData.sector_id || null,
-        subsector_id: editFormData.subsector_id || null
+        source: editFormData.source
       };
       
       console.log('📝 Update data:', updateData);
       
-      const { error } = await supabase
-        .from('options_for_consideration')
-        .update(updateData)
-        .eq('id', editFormData.id);
+      // Try API route first
+      try {
+        const response = await fetch('/api/admin/ofcs', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include', // Include cookies for authentication
+          body: JSON.stringify(updateData)
+        });
 
-      if (error) {
-        console.error('❌ Supabase error:', error);
-        throw error;
+        const result = await response.json();
+        console.log('📡 Update API Response:', { status: response.status, result });
+
+        if (!response.ok) {
+          console.error('❌ Update API Error:', result);
+          throw new Error(result.error || 'Failed to update OFC');
+        }
+
+        if (!result.success) {
+          console.error('❌ Update API Success False:', result);
+          throw new Error(result.error || 'Update failed');
+        }
+
+        console.log('✅ OFC updated successfully via API');
+        alert('OFC updated successfully!');
+        setShowEditForm(false);
+        setEditingOFC(null);
+        loadOFCs();
+        return;
+      } catch (apiError) {
+        console.warn('⚠️ API route failed, trying direct Supabase update:', apiError.message);
+        
+        // Fallback to direct Supabase update
+        const { error } = await supabase
+          .from('options_for_consideration')
+          .update({
+            option_text: editFormData.option_text,
+            discipline: editFormData.discipline,
+            source: editFormData.source,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editFormData.id);
+
+        if (error) {
+          console.error('❌ Direct Supabase error:', error);
+          throw error;
+        }
+
+        console.log('✅ OFC updated successfully via direct Supabase');
+        alert('OFC updated successfully!');
+        setShowEditForm(false);
+        setEditingOFC(null);
+        loadOFCs();
       }
-
-      console.log('✅ OFC updated successfully');
-      alert('OFC updated successfully!');
-      setShowEditForm(false);
-      setEditingOFC(null);
-      loadOFCs();
     } catch (error) {
       console.error('❌ Error updating OFC:', error);
       alert('Error updating OFC: ' + error.message);
@@ -138,12 +221,24 @@ export default function OFCManagement() {
     }
 
     try {
-      const { error } = await supabase
-        .from('options_for_consideration')
-        .delete()
-        .eq('id', ofcId);
+      // Use API route instead of direct Supabase call
+      const response = await fetch(`/api/admin/ofcs?id=${ofcId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include' // Include cookies for authentication
+      });
 
-      if (error) throw error;
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to delete OFC');
+      }
+
+      if (!result.success) {
+        throw new Error(result.error || 'Delete failed');
+      }
 
       alert('OFC deleted successfully!');
       loadOFCs();
@@ -193,6 +288,10 @@ export default function OFCManagement() {
               <p className="text-lg" style={{ color: 'var(--cisa-gray-medium)' }}>
                 Manage and edit Options for Consideration
               </p>
+              {/* Debug info */}
+              <div className="text-xs text-gray-500 mt-2">
+                Debug: showEditForm={showEditForm.toString()}, editingOFC={editingOFC?.id || 'null'}
+              </div>
             </div>
             <div className="text-right">
               <div className="text-sm font-medium" style={{ color: 'var(--cisa-gray-medium)' }}>
@@ -298,7 +397,10 @@ export default function OFCManagement() {
 
                 <div className="flex gap-2 pt-4 border-t" style={{ borderColor: 'var(--cisa-gray-light)' }}>
                   <button
-                    onClick={() => handleEditOFC(ofc)}
+                    onClick={() => {
+                      console.log('🔧 Edit button clicked for OFC:', ofc.id);
+                      handleEditOFC(ofc);
+                    }}
                     className="btn btn-primary flex-1"
                   >
                     <i className="fas fa-edit mr-2"></i>
@@ -336,6 +438,7 @@ export default function OFCManagement() {
       {showEditForm && editingOFC && (
         <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="absolute right-0 top-0 h-full w-full max-w-2xl bg-white shadow-2xl overflow-y-auto" style={{ borderLeft: '3px solid var(--cisa-blue)' }}>
+            {console.log('🔧 Rendering edit modal for OFC:', editingOFC.id)}
             <div className="p-6">
               <div className="flex justify-between items-center mb-6 pb-4 border-b" style={{ borderColor: 'var(--cisa-gray-light)' }}>
                 <h3 className="text-xl font-bold" style={{ color: 'var(--cisa-gray-dark)' }}>

@@ -104,8 +104,6 @@ export async function PUT(request) {
         option_text,
         discipline,
         source,
-        id,
-        id,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)

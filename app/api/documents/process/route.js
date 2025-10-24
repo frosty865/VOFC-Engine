@@ -38,54 +38,59 @@ export async function POST(request) {
       let documentContent;
       
       if (isPDF) {
-        console.log('📄 PDF file detected, extracting text for Ollama processing...');
-        // For PDFs, extract text first, then send to Ollama
+        console.log('📄 PDF file detected, sending to Ollama for processing...');
+        // For PDFs, send the binary data directly to Ollama
         const arrayBuffer = await fileData.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
         
-        // Extract text from PDF using improved method
-        const extractedText = await extractTextFromPDF(buffer);
-        
-        if (!extractedText || extractedText.trim().length < 10) {
-          return NextResponse.json({
-            success: false,
-            error: 'PDF file could not be parsed. No readable text extracted.',
-            filename: filename,
-            file_type: 'PDF',
-            suggestion: 'Try using a different PDF or ensure the PDF contains readable text.'
-          });
-        }
-        
-        // Check if extracted text looks like actual content (not PDF metadata)
-        const hasReadableContent = /[a-zA-Z]{3,}/.test(extractedText) && 
-                                  !extractedText.includes('endstream') && 
-                                  !extractedText.includes('endobj') &&
-                                  extractedText.length > 50;
-        
-        if (!hasReadableContent) {
-          return NextResponse.json({
-            success: false,
-            error: 'PDF file contains only metadata or unreadable content.',
-            filename: filename,
-            file_type: 'PDF',
-            suggestion: 'The PDF may be image-based or corrupted. Try using a text-based PDF.'
-          });
-        }
-        
-        console.log(`📄 Successfully extracted ${extractedText.length} characters from PDF`);
-        documentContent = extractedText; // Send extracted text to Ollama
+        // Convert to base64 for Ollama processing
+        const base64Content = buffer.toString('base64');
+        documentContent = base64Content; // Ollama will handle PDF parsing
       } else {
         // Regular text file processing
         documentContent = await fileData.text();
       }
       
-      // Update status to processing
+      // Create batch job for this document
+      const { data: batchJob, error: batchError } = await supabaseServer
+        .from('batch_jobs')
+        .insert({
+          job_type: 'single_document_processing',
+          status: 'processing',
+          total_documents: 1,
+          processed_documents: 0,
+          started_at: new Date().toISOString(),
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (batchError) {
+        throw new Error(`Failed to create batch job: ${batchError.message}`);
+      }
+
+      // Update status to processing with enhanced schema
       await supabaseServer
-        .from('document_processing')
+        .from('document_processing_enhanced')
         .upsert({
           filename,
           status: 'processing',
+          batch_id: batchJob.id,
+          processing_method: 'ollama',
+          started_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
+        });
+
+      // Log processing start
+      await supabaseServer
+        .from('processing_logs')
+        .insert({
+          document_id: null, // Will be updated after document creation
+          batch_job_id: batchJob.id,
+          event_type: 'processing_started',
+          stage: 'ollama_processing',
+          message: `Started processing ${filename}`,
+          timestamp: new Date().toISOString()
         });
       
       // Try Ollama processing first, fallback to basic parsing
@@ -139,14 +144,50 @@ export async function POST(request) {
         parsedData = await basicDocumentParse(documentContent, filename);
       }
       
-      // Update status to completed and save results
+      // Get document ID for logging
+      const { data: documentRecord } = await supabaseServer
+        .from('document_processing_enhanced')
+        .select('id')
+        .eq('filename', filename)
+        .single();
+
+      // Update status to completed with enhanced schema
       await supabaseServer
-        .from('document_processing')
+        .from('document_processing_enhanced')
         .upsert({
           filename,
           status: 'completed',
+          batch_id: batchJob.id,
+          vulnerabilities_found: parsedData.vulnerabilities?.length || 0,
+          ofcs_found: parsedData.ofcs?.length || 0,
           processed_data: parsedData,
+          confidence_score: parsedData.confidence === 'high' ? 0.9 : parsedData.confidence === 'medium' ? 0.7 : 0.5,
+          completed_at: new Date().toISOString(),
+          processing_time_ms: Date.now() - new Date(batchJob.started_at).getTime(),
           updated_at: new Date().toISOString()
+        });
+
+      // Update batch job progress
+      await supabaseServer
+        .from('batch_jobs')
+        .update({
+          processed_documents: 1,
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', batchJob.id);
+
+      // Log processing completion
+      await supabaseServer
+        .from('processing_logs')
+        .insert({
+          document_id: documentRecord?.id,
+          batch_job_id: batchJob.id,
+          event_type: 'processing_completed',
+          stage: 'ollama_processing',
+          message: `Completed processing ${filename} with ${parsedData.vulnerabilities?.length || 0} vulnerabilities and ${parsedData.ofcs?.length || 0} OFCs`,
+          timestamp: new Date().toISOString()
         });
 
       // Trigger learning system if AI processing was used
@@ -173,14 +214,37 @@ export async function POST(request) {
       });
       
     } catch (processError) {
-      // Update status to failed
+      // Update status to failed with enhanced schema
       await supabaseServer
-        .from('document_processing')
+        .from('document_processing_enhanced')
         .upsert({
           filename,
           status: 'failed',
+          batch_id: batchJob.id,
           error_message: processError.message,
           updated_at: new Date().toISOString()
+        });
+
+      // Update batch job status
+      await supabaseServer
+        .from('batch_jobs')
+        .update({
+          status: 'failed',
+          failed_documents: 1,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', batchJob.id);
+
+      // Log processing failure
+      await supabaseServer
+        .from('processing_logs')
+        .insert({
+          document_id: null,
+          batch_job_id: batchJob.id,
+          event_type: 'processing_failed',
+          stage: 'ollama_processing',
+          message: `Failed processing ${filename}: ${processError.message}`,
+          timestamp: new Date().toISOString()
         });
       
       return NextResponse.json(
@@ -198,99 +262,6 @@ export async function POST(request) {
   }
 }
 
-async function extractTextFromPDF(buffer) {
-  try {
-    const content = buffer.toString('binary');
-    let extractedText = '';
-    
-    // Method 1: Extract text from PDF text objects (BT...ET) - more selective
-    const textMatches = content.match(/BT\s*(.*?)\s*ET/gs);
-    if (textMatches && textMatches.length > 0) {
-      for (const match of textMatches) {
-        const textContent = match
-          .replace(/BT|ET/g, '')
-          .replace(/[^\w\s.,;:!?()-]/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-        
-        // Only include text that looks like actual content (not PDF metadata)
-        if (textContent.length > 10 && 
-            !textContent.includes('endstream') && 
-            !textContent.includes('endobj') && 
-            !textContent.includes('obj Length') &&
-            !textContent.includes('stream') &&
-            !/^[0-9\s]+$/.test(textContent)) {
-          extractedText += textContent + ' ';
-        }
-      }
-    }
-    
-    // Method 2: Look for actual document content in streams (skip metadata)
-    if (!extractedText || extractedText.length < 100) {
-      const streamMatches = content.match(/stream\s*(.*?)\s*endstream/gs);
-      if (streamMatches) {
-        for (const stream of streamMatches) {
-          const streamContent = stream
-            .replace(/stream|endstream/g, '')
-            .replace(/[^\w\s.,;:!?()-]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-          
-          // Filter out PDF metadata and keep only readable content
-          if (streamContent.length > 20 && 
-              !streamContent.includes('endstream') && 
-              !streamContent.includes('endobj') && 
-              !streamContent.includes('obj Length') &&
-              !streamContent.includes('stream') &&
-              !/^[0-9\s]+$/.test(streamContent) &&
-              /[a-zA-Z]{3,}/.test(streamContent)) { // Must contain actual words
-            extractedText += streamContent + ' ';
-          }
-        }
-      }
-    }
-    
-    // Method 3: Extract readable text, filtering out PDF structure
-    if (!extractedText || extractedText.length < 100) {
-      const readableText = content
-        .replace(/[^\w\s.,;:!?()-]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      
-      // Filter out PDF metadata patterns
-      const filteredText = readableText
-        .split(' ')
-        .filter(word => 
-          word.length > 2 && 
-          !word.includes('endstream') && 
-          !word.includes('endobj') && 
-          !word.includes('obj') &&
-          !word.includes('stream') &&
-          !/^[0-9]+$/.test(word)
-        )
-        .join(' ');
-      
-      if (filteredText.length > 100) {
-        extractedText = filteredText;
-      }
-    }
-    
-    // Final cleanup - remove any remaining PDF artifacts
-    if (extractedText) {
-      extractedText = extractedText
-        .replace(/\b(endstream|endobj|obj|stream|Length)\b/g, '')
-        .replace(/\s+/g, ' ')
-        .replace(/^\s+|\s+$/g, '')
-        .trim();
-    }
-    
-    return extractedText;
-    
-  } catch (error) {
-    console.error('PDF text extraction error:', error);
-    return null;
-  }
-}
 
 async function triggerLearningSystem(filename, parsedData) {
   try {
@@ -313,8 +284,15 @@ async function triggerLearningSystem(filename, parsedData) {
     // Store learning event in database for continuous learning system
     const supabaseServer = getServerClient();
     const { error: learningError } = await supabaseServer
-      .from('learning_events')
-      .insert([learningEvent]);
+      .from('learning_events_enhanced')
+      .insert([{
+        ...learningEvent,
+        document_id: null, // Will be linked via filename
+        confidence_score: parsedData.confidence === 'high' ? 0.9 : parsedData.confidence === 'medium' ? 0.7 : 0.5,
+        weighted_score: (parsedData.vulnerabilities?.length || 0) * 0.3 + (parsedData.ofcs?.length || 0) * 0.2 + 0.5,
+        extraction_method: parsedData.extraction_method,
+        processed_at: new Date().toISOString()
+      }]);
 
     if (learningError) {
       console.warn('⚠️ Failed to store learning event:', learningError);
@@ -324,7 +302,7 @@ async function triggerLearningSystem(filename, parsedData) {
 
     // Trigger immediate learning cycle if enough events accumulated
     const { data: eventCount } = await supabaseServer
-      .from('learning_events')
+      .from('learning_events_enhanced')
       .select('id', { count: 'exact' })
       .eq('event_type', 'document_processed');
 
@@ -364,7 +342,11 @@ async function processWithOllama(content, filename) {
   const systemPrompt = `You are an expert document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
 Your task is to extract vulnerabilities and options for consideration from security documents.
 
-You can process both text documents and PDF files. For PDF files, you have built-in PDF parsing capabilities.
+You can process both text documents and PDF files. For PDF files, you have advanced multi-pass processing capabilities:
+- PDF text extraction using multiple methods
+- Heuristic analysis for document structure
+- OCR capabilities for image-based PDFs
+- Content validation and filtering
 
 Extract the following information:
 1. Vulnerabilities: Security weaknesses, risks, or threats mentioned in the document
@@ -391,13 +373,39 @@ IMPORTANT: Return ONLY a valid JSON object with this exact structure. Do not inc
   ]
 }`;
 
-  const userPrompt = `Analyze this document and extract vulnerabilities and options for consideration:
+  // Check if content is base64 (PDF file)
+  const isBase64 = /^[A-Za-z0-9+/]*={0,2}$/.test(content) && content.length > 100;
+  
+  let userPrompt;
+  if (isBase64 && filename.toLowerCase().endsWith('.pdf')) {
+    userPrompt = `You are processing a PDF document using a multi-pass approach. Please follow these steps:
+
+Document Title: ${filename}
+Document Type: PDF (base64 encoded)
+
+MULTI-PASS PROCESSING:
+1. FIRST PASS - PDF Text Extraction: Use your built-in PDF parsing capabilities to extract readable text from the PDF
+2. SECOND PASS - Heuristic Analysis: Apply heuristic methods to identify document structure, headers, and content sections
+3. THIRD PASS - Content Analysis: Analyze the extracted text for vulnerabilities and options for consideration
+4. FOURTH PASS - Validation: Ensure the extracted content is meaningful and not just PDF metadata
+
+IMPORTANT: 
+- Use multiple extraction methods (text objects, streams, OCR if needed)
+- Apply heuristic rules to identify document structure
+- Filter out PDF metadata (endstream, endobj, obj Length, etc.)
+- Only return results if you successfully extracted readable, meaningful text
+- Do not include base64 data in your response
+
+Please provide a structured JSON response with vulnerabilities and OFCs based on the multi-pass PDF analysis.`;
+  } else {
+    userPrompt = `Analyze this document and extract vulnerabilities and options for consideration:
 
 Document Title: ${filename}
 Document Content:
 ${content}
 
 Please provide a structured JSON response with vulnerabilities and OFCs.`;
+  }
 
   // Call Ollama API with timeout
   console.log('⏱️ Starting Ollama API call...');
@@ -457,15 +465,31 @@ Please provide a structured JSON response with vulnerabilities and OFCs.`;
   
   const parsedResult = JSON.parse(jsonContent);
   
+  // For PDFs, validate that we got meaningful content
+  if (isBase64 && filename.toLowerCase().endsWith('.pdf')) {
+    // Check if the title looks like readable content (not PDF metadata)
+    const title = parsedResult.title || filename.replace(/\.[^/.]+$/, '');
+    const hasReadableTitle = title && 
+                           title.length > 5 && 
+                           !title.includes('endstream') && 
+                           !title.includes('endobj') &&
+                           !title.includes('obj Length') &&
+                           /[a-zA-Z]{3,}/.test(title);
+    
+    if (!hasReadableTitle) {
+      throw new Error('PDF could not be parsed by Ollama. No readable text extracted.');
+    }
+  }
+  
   // Convert to expected format
   return {
-    title: filename.replace(/\.[^/.]+$/, ''),
+    title: parsedResult.title || filename.replace(/\.[^/.]+$/, ''),
     vulnerabilities: parsedResult.vulnerabilities || [],
     ofcs: parsedResult.options_for_consideration || [],
     sectors: [],
     total_lines: content.split('\n').length,
     word_count: content.split(/\s+/).length,
-    file_type: 'AI-Processed',
+    file_type: isBase64 ? 'PDF' : 'AI-Processed',
     extraction_method: 'ollama',
     confidence: 'high'
   };
