@@ -106,24 +106,39 @@ export default function SplashPage() {
       <div style={{ maxWidth: '500px', width: '100%' }}>
         {/* Header Section */}
         <div className="text-center" style={{ marginBottom: '32px' }}>
-          {/* Official CISA Logo */}
-          <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'center' }}>
-            <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <linearGradient id="splashShieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" style={{stopColor:'#1a365d',stopOpacity:1}} />
-                  <stop offset="100%" style={{stopColor:'#2c5282',stopOpacity:1}} />
-                </linearGradient>
-              </defs>
-              <path d="M60 15 L90 10 L105 15 L105 45 L97.5 75 L60 105 L22.5 75 L15 45 L15 15 L30 10 Z" 
-                    fill="url(#splashShieldGradient)" 
-                    stroke="#ffffff" 
-                    strokeWidth="2"/>
-              <text x="60" y="50" fontFamily="Arial, sans-serif" fontSize="24" fontWeight="bold" fill="#ffffff" textAnchor="middle">CISA</text>
-              <text x="60" y="70" fontFamily="Arial, sans-serif" fontSize="8" fill="#ffffff" textAnchor="middle">Cybersecurity & Infrastructure</text>
-              <text x="60" y="82" fontFamily="Arial, sans-serif" fontSize="8" fill="#ffffff" textAnchor="middle">Security Agency</text>
-            </svg>
-          </div>
+            {/* Official CISA Logo */}
+            <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'center' }}>
+              <img 
+                src="/images/cisa-logo.png" 
+                alt="CISA Logo" 
+                style={{ 
+                  height: '120px', 
+                  width: 'auto',
+                  objectFit: 'contain'
+                }}
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  e.target.nextSibling.style.display = 'block';
+                }}
+              />
+              <div style={{ display: 'none' }}>
+                <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <defs>
+                    <linearGradient id="splashShieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" style={{stopColor:'#1a365d',stopOpacity:1}} />
+                      <stop offset="100%" style={{stopColor:'#2c5282',stopOpacity:1}} />
+                    </linearGradient>
+                  </defs>
+                  <path d="M60 15 L90 10 L105 15 L105 45 L97.5 75 L60 105 L22.5 75 L15 45 L15 15 L30 10 Z" 
+                        fill="url(#splashShieldGradient)" 
+                        stroke="#ffffff" 
+                        strokeWidth="2"/>
+                  <text x="60" y="50" fontFamily="Arial, sans-serif" fontSize="24" fontWeight="bold" fill="#ffffff" textAnchor="middle">CISA</text>
+                  <text x="60" y="70" fontFamily="Arial, sans-serif" fontSize="8" fill="#ffffff" textAnchor="middle">Cybersecurity & Infrastructure</text>
+                  <text x="60" y="82" fontFamily="Arial, sans-serif" fontSize="8" fill="#ffffff" textAnchor="middle">Security Agency</text>
+                </svg>
+              </div>
+            </div>
 
           <h1 style={{
             fontSize: 'var(--font-size-xxl)',

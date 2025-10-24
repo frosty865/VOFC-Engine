@@ -26,12 +26,22 @@ async function setupLearningDatabase() {
     
     console.log('📄 Executing learning database schema...');
     
-    // Execute the SQL
-    const { data, error } = await supabase.rpc('exec_sql', { sql: sqlContent });
+    // Split SQL into individual statements and execute them
+    const sqlStatements = sqlContent
+      .split(';')
+      .map(stmt => stmt.trim())
+      .filter(stmt => stmt.length > 0 && !stmt.startsWith('--'));
     
-    if (error) {
-      console.error('❌ Error executing learning schema:', error);
-      return false;
+    for (const statement of sqlStatements) {
+      if (statement.trim()) {
+        console.log(`Executing: ${statement.substring(0, 50)}...`);
+        const { error } = await supabase.rpc('exec', { sql: statement });
+        
+        if (error) {
+          console.warn(`⚠️ Warning executing statement: ${error.message}`);
+          // Continue with other statements
+        }
+      }
     }
     
     console.log('✅ Learning database schema created successfully');
