@@ -1,19 +1,6 @@
-'use client';
-// Admin OFC Management Page
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { getCurrentUser } from '../../lib/auth';
-import { supabase } from '../../lib/supabaseClient';
-
 export default function OFCManagement() {
   console.log('🎯 OFCManagement component is rendering');
   
-  // Simple test to see if component is working
-  if (typeof window !== 'undefined') {
-    console.log('🌐 Component is running in browser environment');
-  }
-  
-  // TEMPORARY: Simple test return to see if component renders
   return (
     <div>
       <h1>OFC Management Test</h1>
