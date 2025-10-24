@@ -45,43 +45,58 @@ export async function POST(request) {
     // Try to read as text, handle binary files gracefully
     let content = '';
     let isBinary = false;
+    let isPDF = false;
     
     try {
       content = await fileData.text();
       
+      // Check if this is a PDF file
+      if (content.startsWith('%PDF')) {
+        isPDF = true;
+        content = `[PDF file - ${filename}]`;
+      }
       // Check if content looks like binary data (contains null bytes or high percentage of non-printable chars)
-      const nullBytes = (content.match(/\0/g) || []).length;
-      const nonPrintableChars = (content.match(/[\x00-\x08\x0E-\x1F\x7F-\xFF]/g) || []).length;
-      const totalChars = content.length;
-      
-      if (nullBytes > 0 || (nonPrintableChars / totalChars) > 0.3) {
-        isBinary = true;
-        content = `[Binary file - ${filename}]`;
+      else {
+        const nullBytes = (content.match(/\0/g) || []).length;
+        const nonPrintableChars = (content.match(/[\x00-\x08\x0E-\x1F\x7F-\xFF]/g) || []).length;
+        const totalChars = content.length;
+        
+        if (nullBytes > 0 || (nonPrintableChars / totalChars) > 0.3) {
+          isBinary = true;
+          content = `[Binary file - ${filename}]`;
+        }
       }
     } catch (textError) {
       isBinary = true;
       content = `[Binary file - ${filename}]`;
     }
     
-    if (isBinary) {
+    if (isBinary || isPDF) {
+      const fileType = isPDF ? 'PDF' : 'binary';
+      const message = isPDF 
+        ? `This is a PDF file (${filename}). PDF files require specialized parsing tools for content extraction.`
+        : `This appears to be a binary file (${filename}). Preview not available for binary files.`;
+      
       return NextResponse.json({
         success: true,
         data: {
           filename,
-          title: filename,
+          title: filename.replace(/\.[^/.]+$/, ''), // Remove file extension
           size: fileSize,
           modified: fileModified,
           word_count: 0,
           line_count: 0,
-          preview: `This appears to be a binary file (${filename}). Preview not available for binary files.`,
+          preview: message,
           sections: {
             vulnerabilities: [],
             ofcs: [],
             sectors: [],
             sources: []
           },
-          estimated_processing_time: 'Cannot process binary files',
-          is_binary: true
+          estimated_processing_time: isPDF ? 'PDF parsing not available' : 'Cannot process binary files',
+          is_binary: isBinary,
+          is_pdf: isPDF,
+          file_type: fileType
         }
       });
     }

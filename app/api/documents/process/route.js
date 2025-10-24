@@ -97,11 +97,37 @@ export async function POST(request) {
 }
 
 async function basicDocumentParse(content, filename) {
-  // Basic parsing logic
-  const lines = content.split('\n').filter(line => line.trim());
+  // Check if this is a PDF file (starts with %PDF)
+  const isPDF = content.startsWith('%PDF');
   
-  // Extract title (first non-empty line or filename)
-  const title = lines[0] || filename;
+  if (isPDF) {
+    // For PDF files, we can't parse the content directly
+    // Return a basic structure indicating it's a PDF
+    return {
+      title: filename.replace(/\.(pdf|PDF)$/, ''), // Remove .pdf extension
+      vulnerabilities: [],
+      ofcs: [],
+      sectors: [],
+      total_lines: 0,
+      word_count: 0,
+      file_type: 'PDF',
+      note: 'PDF files require specialized parsing tools. Consider using a PDF-to-text converter.'
+    };
+  }
+  
+  // Clean up content - remove PDF artifacts and control characters
+  let cleanContent = content
+    .replace(/[\x00-\x08\x0E-\x1F\x7F-\xFF]/g, '') // Remove control characters
+    .replace(/%.*?%/g, '') // Remove PDF comments
+    .replace(/^\s*$/gm, '') // Remove empty lines
+    .trim();
+  
+  // Basic parsing logic for text files
+  const lines = cleanContent.split('\n').filter(line => line.trim().length > 0);
+  
+  // Extract title (first substantial line or filename)
+  const title = lines.find(line => line.trim().length > 10 && !line.includes('%')) || 
+                filename.replace(/\.[^/.]+$/, ''); // Remove file extension
   
   // Look for vulnerabilities and OFCs
   const vulnerabilities = [];
@@ -109,28 +135,34 @@ async function basicDocumentParse(content, filename) {
   const sectors = [];
   
   for (const line of lines) {
-    const lowerLine = line.toLowerCase();
+    const cleanLine = line.trim();
+    if (cleanLine.length < 10) continue; // Skip very short lines
+    
+    const lowerLine = cleanLine.toLowerCase();
     
     // Look for vulnerability indicators
-    if (lowerLine.includes('vulnerability') || lowerLine.includes('risk') || lowerLine.includes('threat')) {
+    if (lowerLine.includes('vulnerability') || lowerLine.includes('risk') || lowerLine.includes('threat') ||
+        lowerLine.includes('security') || lowerLine.includes('weakness') || lowerLine.includes('exploit')) {
       vulnerabilities.push({
-        text: line.trim(),
+        text: cleanLine,
         confidence: 0.7
       });
     }
     
     // Look for OFC indicators
-    if (lowerLine.includes('option') || lowerLine.includes('consideration') || lowerLine.includes('recommendation')) {
+    if (lowerLine.includes('option') || lowerLine.includes('consideration') || lowerLine.includes('recommendation') ||
+        lowerLine.includes('mitigation') || lowerLine.includes('solution') || lowerLine.includes('action')) {
       ofcs.push({
-        text: line.trim(),
+        text: cleanLine,
         confidence: 0.7
       });
     }
     
     // Look for sector indicators
-    if (lowerLine.includes('sector') || lowerLine.includes('industry') || lowerLine.includes('critical infrastructure')) {
+    if (lowerLine.includes('sector') || lowerLine.includes('industry') || lowerLine.includes('critical infrastructure') ||
+        lowerLine.includes('energy') || lowerLine.includes('healthcare') || lowerLine.includes('finance')) {
       sectors.push({
-        name: line.trim(),
+        name: cleanLine,
         confidence: 0.6
       });
     }
@@ -142,6 +174,7 @@ async function basicDocumentParse(content, filename) {
     ofcs,
     sectors,
     total_lines: lines.length,
-    word_count: content.split(/\s+/).length
+    word_count: cleanContent.split(/\s+/).filter(word => word.length > 0).length,
+    file_type: isPDF ? 'PDF' : 'Text'
   };
 }
