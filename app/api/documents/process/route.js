@@ -49,8 +49,48 @@ export async function POST(request) {
       let parsedData;
       try {
         console.log('🤖 Attempting Ollama processing...');
-        parsedData = await processWithOllama(documentContent, filename);
-        console.log('✅ Ollama processing successful');
+        console.log(`📄 Document: ${filename}, Content length: ${documentContent.length}`);
+        
+        // Check if this is a PDF file
+        const isPDF = documentContent.startsWith('%PDF');
+        if (isPDF) {
+          console.log('📄 PDF file detected, attempting text extraction for Ollama...');
+          
+          // Try to extract readable text from PDF for Ollama processing
+          let extractedText = '';
+          
+          // Extract text from PDF content using basic parsing
+          const textMatches = documentContent.match(/BT\s+.*?ET/gs);
+          if (textMatches) {
+            for (const match of textMatches) {
+              const textContent = match.replace(/BT|ET/g, '').replace(/[^\w\s.,;:!?-]/g, ' ').trim();
+              if (textContent.length > 3) {
+                extractedText += textContent + ' ';
+              }
+            }
+          }
+          
+          // If no structured text found, try to extract any readable text
+          if (!extractedText) {
+            extractedText = documentContent
+              .replace(/[^\w\s.,;:!?-]/g, ' ') // Keep only readable characters
+              .replace(/\s+/g, ' ') // Normalize whitespace
+              .trim();
+          }
+          
+          if (extractedText.length > 50) {
+            console.log(`📄 Extracted ${extractedText.length} characters from PDF for Ollama processing`);
+            parsedData = await processWithOllama(extractedText, filename);
+            console.log('✅ Ollama PDF processing successful');
+          } else {
+            console.log('⚠️ Insufficient text extracted from PDF, using basic parsing');
+            parsedData = await basicDocumentParse(documentContent, filename);
+          }
+        } else {
+          // Non-PDF file, process directly with Ollama
+          parsedData = await processWithOllama(documentContent, filename);
+          console.log('✅ Ollama processing successful');
+        }
       } catch (ollamaError) {
         console.log('⚠️ Ollama processing failed, using basic parsing:', ollamaError.message);
         parsedData = await basicDocumentParse(documentContent, filename);
@@ -178,6 +218,11 @@ async function processWithOllama(content, filename) {
   const ollamaBaseUrl = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
   const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
   
+  console.log(`🤖 Calling Ollama API: ${ollamaBaseUrl}/api/chat`);
+  console.log(`📄 Processing document: ${filename}`);
+  console.log(`📝 Content length: ${content.length} characters`);
+  console.log(`🤖 Model: ${ollamaModel}`);
+  
   // Create system prompt for document analysis
   const systemPrompt = `You are an expert document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
 Your task is to extract vulnerabilities and options for consideration from security documents.
@@ -215,7 +260,10 @@ ${content}
 
 Please provide a structured JSON response with vulnerabilities and OFCs.`;
 
-  // Call Ollama API
+  // Call Ollama API with timeout
+  console.log('⏱️ Starting Ollama API call...');
+  const startTime = Date.now();
+  
   const response = await fetch(`${ollamaBaseUrl}/api/chat`, {
     method: 'POST',
     headers: {
@@ -228,8 +276,12 @@ Please provide a structured JSON response with vulnerabilities and OFCs.`;
         { role: 'user', content: userPrompt }
       ],
       stream: false
-    })
+    }),
+    signal: AbortSignal.timeout(60000) // 60 second timeout
   });
+  
+  const endTime = Date.now();
+  console.log(`⏱️ Ollama API call completed in ${endTime - startTime}ms`);
 
   if (!response.ok) {
     throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
@@ -285,18 +337,50 @@ async function basicDocumentParse(content, filename) {
   const isPDF = content.startsWith('%PDF');
   
   if (isPDF) {
-    // For PDF files, we can't parse the content directly
-    // Return a basic structure indicating it's a PDF
-    return {
-      title: filename.replace(/\.(pdf|PDF)$/, ''), // Remove .pdf extension
-      vulnerabilities: [],
-      ofcs: [],
-      sectors: [],
-      total_lines: 0,
-      word_count: 0,
-      file_type: 'PDF',
-      note: 'PDF files require specialized parsing tools. Consider using a PDF-to-text converter.'
-    };
+    // For PDF files, try to extract readable text from the raw content
+    console.log('📄 Processing PDF file with basic text extraction...');
+    
+    // Extract text from PDF content using basic parsing
+    let extractedText = '';
+    
+    // Try to extract readable text from PDF content
+    const textMatches = content.match(/BT\s+.*?ET/gs);
+    if (textMatches) {
+      for (const match of textMatches) {
+        // Extract text between BT and ET (PDF text objects)
+        const textContent = match.replace(/BT|ET/g, '').replace(/[^\w\s.,;:!?-]/g, ' ').trim();
+        if (textContent.length > 3) {
+          extractedText += textContent + ' ';
+        }
+      }
+    }
+    
+    // If no structured text found, try to extract any readable text
+    if (!extractedText) {
+      extractedText = content
+        .replace(/[^\w\s.,;:!?-]/g, ' ') // Keep only readable characters
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .trim();
+    }
+    
+    // If we have extracted text, process it
+    if (extractedText.length > 50) {
+      console.log(`📄 Extracted ${extractedText.length} characters from PDF`);
+      return await parseExtractedText(extractedText, filename, 'PDF');
+    } else {
+      // If no readable text could be extracted
+      return {
+        title: filename.replace(/\.(pdf|PDF)$/, ''),
+        vulnerabilities: [],
+        ofcs: [],
+        sectors: [],
+        total_lines: 0,
+        word_count: 0,
+        file_type: 'PDF',
+        extraction_method: 'basic',
+        note: 'PDF file detected but no readable text could be extracted. Consider using a PDF-to-text converter.'
+      };
+    }
   }
   
   // Clean up content - remove PDF artifacts and control characters
@@ -359,6 +443,81 @@ async function basicDocumentParse(content, filename) {
     sectors,
     total_lines: lines.length,
     word_count: cleanContent.split(/\s+/).filter(word => word.length > 0).length,
-    file_type: isPDF ? 'PDF' : 'Text'
+    file_type: isPDF ? 'PDF' : 'Text',
+    extraction_method: 'basic'
+  };
+}
+
+async function parseExtractedText(text, filename, fileType) {
+  console.log(`🔍 Parsing extracted text (${text.length} characters)...`);
+  
+  // Clean up the extracted text
+  const cleanText = text
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .replace(/[^\w\s.,;:!?-]/g, ' ') // Remove special characters
+    .trim();
+  
+  const lines = cleanText.split(/[.!?]+/).filter(line => line.trim().length > 10);
+  
+  // Extract title
+  const title = filename.replace(/\.[^/.]+$/, '');
+  
+  // Look for vulnerabilities and OFCs
+  const vulnerabilities = [];
+  const ofcs = [];
+  const sectors = [];
+  
+  for (const line of lines) {
+    const cleanLine = line.trim();
+    if (cleanLine.length < 10) continue;
+    
+    const lowerLine = cleanLine.toLowerCase();
+    
+    // Look for vulnerability indicators
+    if (lowerLine.includes('vulnerability') || lowerLine.includes('risk') || lowerLine.includes('threat') ||
+        lowerLine.includes('security') || lowerLine.includes('weakness') || lowerLine.includes('exploit') ||
+        lowerLine.includes('attack') || lowerLine.includes('breach') || lowerLine.includes('compromise')) {
+      vulnerabilities.push({
+        text: cleanLine,
+        confidence: 0.6,
+        source: 'extracted_text'
+      });
+    }
+    
+    // Look for OFC indicators
+    if (lowerLine.includes('option') || lowerLine.includes('consideration') || lowerLine.includes('recommendation') ||
+        lowerLine.includes('mitigation') || lowerLine.includes('solution') || lowerLine.includes('action') ||
+        lowerLine.includes('implement') || lowerLine.includes('deploy') || lowerLine.includes('establish')) {
+      ofcs.push({
+        text: cleanLine,
+        confidence: 0.6,
+        source: 'extracted_text'
+      });
+    }
+    
+    // Look for sector indicators
+    if (lowerLine.includes('sector') || lowerLine.includes('industry') || lowerLine.includes('critical infrastructure') ||
+        lowerLine.includes('energy') || lowerLine.includes('healthcare') || lowerLine.includes('finance') ||
+        lowerLine.includes('government') || lowerLine.includes('defense') || lowerLine.includes('telecommunications')) {
+      sectors.push({
+        name: cleanLine,
+        confidence: 0.5,
+        source: 'extracted_text'
+      });
+    }
+  }
+  
+  console.log(`📊 Found ${vulnerabilities.length} vulnerabilities, ${ofcs.length} OFCs, ${sectors.length} sectors`);
+  
+  return {
+    title,
+    vulnerabilities,
+    ofcs,
+    sectors,
+    total_lines: lines.length,
+    word_count: cleanText.split(/\s+/).filter(word => word.length > 0).length,
+    file_type: fileType,
+    extraction_method: 'basic',
+    confidence: 'medium'
   };
 }
