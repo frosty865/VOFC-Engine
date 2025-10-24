@@ -33,10 +33,33 @@ export default function Login() {
         
         // Check if response is ok before parsing JSON
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorText = await response.text();
+          console.error('❌ HTTP error response:', errorText);
+          throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
         }
         
-        const result = await response.json();
+        // Check if response has content before parsing JSON
+        const responseText = await response.text();
+        console.log('📝 Raw response:', responseText);
+        
+        if (!responseText || responseText.trim() === '') {
+          throw new Error('Empty response from server');
+        }
+        
+        let result;
+        try {
+          result = JSON.parse(responseText);
+        } catch (jsonError) {
+          console.error('❌ JSON parsing error:', jsonError);
+          console.error('❌ Response text:', responseText);
+          
+          // Check if response is HTML (error page)
+          if (responseText.includes('<html>') || responseText.includes('<!DOCTYPE')) {
+            throw new Error('Server returned HTML error page instead of JSON. This might be a deployment issue.');
+          }
+          
+          throw new Error(`Invalid JSON response: ${jsonError.message}`);
+        }
         
         console.log('Signup response:', result);
         
@@ -69,10 +92,33 @@ export default function Login() {
         
         // Check if response is ok before parsing JSON
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorText = await response.text();
+          console.error('❌ HTTP error response:', errorText);
+          throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
         }
         
-        const result = await response.json();
+        // Check if response has content before parsing JSON
+        const responseText = await response.text();
+        console.log('📝 Raw response:', responseText);
+        
+        if (!responseText || responseText.trim() === '') {
+          throw new Error('Empty response from server');
+        }
+        
+        let result;
+        try {
+          result = JSON.parse(responseText);
+        } catch (jsonError) {
+          console.error('❌ JSON parsing error:', jsonError);
+          console.error('❌ Response text:', responseText);
+          
+          // Check if response is HTML (error page)
+          if (responseText.includes('<html>') || responseText.includes('<!DOCTYPE')) {
+            throw new Error('Server returned HTML error page instead of JSON. This might be a deployment issue.');
+          }
+          
+          throw new Error(`Invalid JSON response: ${jsonError.message}`);
+        }
         
         console.log('Login response:', result);
         
