@@ -95,7 +95,7 @@ export async function linkOFCtoSource(ofcId, referenceNumber) {
   const { data: source, error: sourceError } = await supabase
     .from('sources')
     .select('id')
-    .eq('"reference number"', referenceNumber)
+    .eq('reference_number', referenceNumber)
     .single();
 
   if (sourceError || !source) throw sourceError || new Error('Source not found');
