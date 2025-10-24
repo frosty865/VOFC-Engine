@@ -33,8 +33,23 @@ export async function POST(request) {
         );
       }
       
-      // Convert blob to text for processing
-      const documentContent = await fileData.text();
+      // Check if it's a PDF file and handle accordingly
+      const isPDF = filename.toLowerCase().endsWith('.pdf');
+      let documentContent;
+      
+      if (isPDF) {
+        console.log('📄 PDF file detected, sending to Ollama for processing...');
+        // For PDFs, send the binary data directly to Ollama
+        const arrayBuffer = await fileData.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        
+        // Convert to base64 for Ollama processing
+        const base64Content = buffer.toString('base64');
+        documentContent = base64Content; // Ollama will handle PDF parsing
+      } else {
+        // Regular text file processing
+        documentContent = await fileData.text();
+      }
       
       // Update status to processing
       await supabaseServer
@@ -155,6 +170,7 @@ export async function POST(request) {
   }
 }
 
+
 async function triggerLearningSystem(filename, parsedData) {
   try {
     // Create learning event data
@@ -227,6 +243,8 @@ async function processWithOllama(content, filename) {
   const systemPrompt = `You are an expert document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
 Your task is to extract vulnerabilities and options for consideration from security documents.
 
+You can process both text documents and PDF files. For PDF files, you have built-in PDF parsing capabilities.
+
 Extract the following information:
 1. Vulnerabilities: Security weaknesses, risks, or threats mentioned in the document
 2. Options for Consideration (OFCs): Mitigation strategies, recommendations, or actions to address vulnerabilities
@@ -252,13 +270,27 @@ IMPORTANT: Return ONLY a valid JSON object with this exact structure. Do not inc
   ]
 }`;
 
-  const userPrompt = `Analyze this document and extract vulnerabilities and options for consideration:
+  // Check if content is base64 (PDF file)
+  const isBase64 = /^[A-Za-z0-9+/]*={0,2}$/.test(content) && content.length > 100;
+  
+  let userPrompt;
+  if (isBase64 && filename.toLowerCase().endsWith('.pdf')) {
+    userPrompt = `Analyze this PDF document and extract vulnerabilities and options for consideration:
+
+Document Title: ${filename}
+Document Type: PDF (base64 encoded)
+Document Content: ${content}
+
+Please parse the PDF content and provide a structured JSON response with vulnerabilities and OFCs.`;
+  } else {
+    userPrompt = `Analyze this document and extract vulnerabilities and options for consideration:
 
 Document Title: ${filename}
 Document Content:
 ${content}
 
 Please provide a structured JSON response with vulnerabilities and OFCs.`;
+  }
 
   // Call Ollama API with timeout
   console.log('⏱️ Starting Ollama API call...');

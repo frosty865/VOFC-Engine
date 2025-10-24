@@ -74,7 +74,7 @@ export async function POST(request) {
     if (isBinary || isPDF) {
       const fileType = isPDF ? 'PDF' : 'binary';
       const message = isPDF 
-        ? `This is a PDF file (${filename}). PDF files require specialized parsing tools for content extraction.`
+        ? `This is a PDF file (${filename}). PDF content will be processed by Ollama AI for text extraction and analysis.`
         : `This appears to be a binary file (${filename}). Preview not available for binary files.`;
       
       return NextResponse.json({
