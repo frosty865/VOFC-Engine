@@ -2,12 +2,7 @@
  * VOFC Fetching Functions - Optimized with proper relationships
  */
 
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from './supabaseClient';
 
 // Database Schema Discovery Function - Query actual column information
 export async function discoverDatabaseSchema() {
@@ -95,7 +90,7 @@ export async function linkOFCtoSource(ofcId, referenceNumber) {
   const { data: source, error: sourceError } = await supabase
     .from('sources')
     .select('id')
-    .eq('"reference number"', referenceNumber)
+    .eq('reference_number', referenceNumber)
     .single();
 
   if (sourceError || !source) throw sourceError || new Error('Source not found');

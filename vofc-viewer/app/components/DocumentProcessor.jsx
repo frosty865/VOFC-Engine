@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import '../../styles/cisa.css';
 
 export default function DocumentProcessor() {
   const [documents, setDocuments] = useState([]);
@@ -14,6 +15,8 @@ export default function DocumentProcessor() {
   const [lastRefresh, setLastRefresh] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [processingWithAI, setProcessingWithAI] = useState(false);
+  const [learningStatus, setLearningStatus] = useState(null);
 
   // Fetch documents from consolidated API
   const fetchDocuments = async () => {
@@ -221,14 +224,14 @@ export default function DocumentProcessor() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="max-w-7xl mx-auto p-6" style={{ fontFamily: 'var(--font-family)' }}>
       <div className="mb-8">
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Document Processor</h1>
-            <p className="text-gray-600">
-              Process documents from the docs folder using the universal VOFC parser.
-              Documents are automatically moved to completed/failed folders after processing.
+            <h1 className="text-3xl font-bold" style={{ color: 'var(--cisa-blue)' }}>Document Processor</h1>
+            <p style={{ color: 'var(--cisa-gray)', fontSize: 'var(--font-size-md)' }}>
+              Process documents using AI-powered VOFC analysis with Ollama integration.
+              Documents are automatically analyzed for vulnerabilities and options for consideration.
             </p>
           </div>
           <div className="flex items-center space-x-4">
@@ -260,50 +263,159 @@ export default function DocumentProcessor() {
         <button
           onClick={processAll}
           disabled={loading || documents.length === 0}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          className="btn btn-primary"
+          style={{
+            backgroundColor: 'var(--cisa-blue)',
+            color: 'var(--cisa-white)',
+            padding: 'var(--spacing-sm) var(--spacing-md)',
+            borderRadius: 'var(--border-radius)',
+            border: 'none',
+            cursor: loading || documents.length === 0 ? 'not-allowed' : 'pointer',
+            opacity: loading || documents.length === 0 ? 0.5 : 1,
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: '600'
+          }}
         >
-          Process All ({documents.length})
+          🤖 Process All ({documents.length})
         </button>
         
         {selectedFiles.length > 0 && (
           <button
             onClick={processSelected}
             disabled={loading}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
+            className="btn btn-success"
+            style={{
+              backgroundColor: 'var(--cisa-success)',
+              color: 'var(--cisa-white)',
+              padding: 'var(--spacing-sm) var(--spacing-md)',
+              borderRadius: 'var(--border-radius)',
+              border: 'none',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.5 : 1,
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: '600'
+            }}
           >
-            Process Selected ({selectedFiles.length})
+            ✅ Process Selected ({selectedFiles.length})
           </button>
         )}
         
         <button
           onClick={fetchDocuments}
           disabled={loading}
-          className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 disabled:opacity-50"
+          className="btn btn-secondary"
+          style={{
+            backgroundColor: 'var(--cisa-gray)',
+            color: 'var(--cisa-white)',
+            padding: 'var(--spacing-sm) var(--spacing-md)',
+            borderRadius: 'var(--border-radius)',
+            border: 'none',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            opacity: loading ? 0.5 : 1,
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: '600'
+          }}
         >
-          {loading ? 'Refreshing...' : 'Refresh'}
+          {loading ? '🔄 Refreshing...' : '🔄 Refresh'}
         </button>
       </div>
 
-      {/* Status Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-blue-50 p-4 rounded-lg">
-          <h3 className="font-semibold text-blue-900">Pending</h3>
-          <p className="text-2xl font-bold text-blue-600">{documents.length}</p>
+      {/* AI Processing Status */}
+      {processingWithAI && (
+        <div className="mb-6 p-4 rounded-lg" style={{ 
+          backgroundColor: 'var(--cisa-blue-lightest)', 
+          border: '1px solid var(--cisa-blue-lighter)',
+          color: 'var(--cisa-blue)'
+        }}>
+          <div className="flex items-center">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-3"></div>
+            <div>
+              <strong>🤖 AI Processing Active</strong>
+              <p className="text-sm mt-1">Using Ollama AI to analyze documents for vulnerabilities and OFCs...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Learning System Status */}
+      {learningStatus && (
+        <div className="mb-6 p-4 rounded-lg" style={{ 
+          backgroundColor: 'var(--cisa-green-lightest)', 
+          border: '1px solid var(--cisa-green-lighter)',
+          color: 'var(--cisa-green)'
+        }}>
+          <div className="flex items-center">
+            <div className="mr-3">
+              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div>
+              <strong>🧠 Learning System Active</strong>
+              <p className="text-sm mt-1">
+                Continuous learning enabled - AI model improves with each document processed
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status Overview - Side by Side Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="bg-blue-50 border border-blue-200 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-blue-900 text-sm uppercase tracking-wide">Pending</h3>
+              <p className="text-3xl font-bold text-blue-600 mt-2">{documents.length}</p>
+            </div>
+            <div className="text-blue-400">
+              <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+              </svg>
+            </div>
+          </div>
         </div>
         
-        <div className="bg-yellow-50 p-4 rounded-lg">
-          <h3 className="font-semibold text-yellow-900">Processing</h3>
-          <p className="text-2xl font-bold text-yellow-600">{processing.length}</p>
+        <div className="bg-yellow-50 border border-yellow-200 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-yellow-900 text-sm uppercase tracking-wide">Processing</h3>
+              <p className="text-3xl font-bold text-yellow-600 mt-2">{processing.length}</p>
+            </div>
+            <div className="text-yellow-400">
+              <svg className="w-8 h-8 animate-spin" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+              </svg>
+            </div>
+          </div>
         </div>
         
-        <div className="bg-green-50 p-4 rounded-lg">
-          <h3 className="font-semibold text-green-900">Completed</h3>
-          <p className="text-2xl font-bold text-green-600">{completed.length}</p>
+        <div className="bg-green-50 border border-green-200 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-green-900 text-sm uppercase tracking-wide">Completed</h3>
+              <p className="text-3xl font-bold text-green-600 mt-2">{completed.length}</p>
+            </div>
+            <div className="text-green-400">
+              <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+            </div>
+          </div>
         </div>
         
-        <div className="bg-red-50 p-4 rounded-lg">
-          <h3 className="font-semibold text-red-900">Failed</h3>
-          <p className="text-2xl font-bold text-red-600">{failed.length}</p>
+        <div className="bg-red-50 border border-red-200 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-red-900 text-sm uppercase tracking-wide">Failed</h3>
+              <p className="text-3xl font-bold text-red-600 mt-2">{failed.length}</p>
+            </div>
+            <div className="text-red-400">
+              <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+          </div>
         </div>
       </div>
 

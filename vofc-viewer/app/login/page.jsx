@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
+import '../../styles/cisa.css';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -16,33 +17,116 @@ export default function Login() {
 
     try {
       if (isSignUp) {
-        // For signup, we'll use username@vofc.gov as email
+        // For signup, we'll use the same custom JWT authentication
         const email = `${username}@vofc.gov`;
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
+        
+        console.log('Attempting signup with:', { email, password });
+        
+        // Use custom JWT authentication for signup too
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password, action: 'signup' }),
         });
-        if (error) throw error;
-        alert('Check your email for the confirmation link!');
+        
+        // Check if response is ok before parsing JSON
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ HTTP error response:', errorText);
+          throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+        }
+        
+        // Check if response has content before parsing JSON
+        const responseText = await response.text();
+        console.log('📝 Raw response:', responseText);
+        
+        if (!responseText || responseText.trim() === '') {
+          throw new Error('Empty response from server');
+        }
+        
+        let result;
+        try {
+          result = JSON.parse(responseText);
+        } catch (jsonError) {
+          console.error('❌ JSON parsing error:', jsonError);
+          console.error('❌ Response text:', responseText);
+          
+          // Check if response is HTML (error page)
+          if (responseText.includes('<html>') || responseText.includes('<!DOCTYPE')) {
+            throw new Error('Server returned HTML error page instead of JSON. This might be a deployment issue.');
+          }
+          
+          throw new Error(`Invalid JSON response: ${jsonError.message}`);
+        }
+        
+        console.log('Signup response:', result);
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Signup failed');
+        }
+        
+        console.log('Signup successful:', result);
+        alert('Account created successfully! You are now logged in.');
+        
+        // Wait a moment for the session to be established
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        console.log('Redirecting to home page...');
+        router.push('/');
       } else {
         // For login, construct email from username
         const email = `${username}@vofc.gov`;
         
         console.log('Attempting login with:', { email, password });
         
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
+        // Use custom JWT authentication
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password }),
         });
         
-        console.log('Login response:', { data, error });
-        
-        if (error) {
-          console.error('Login error:', error);
-          throw error;
+        // Check if response is ok before parsing JSON
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ HTTP error response:', errorText);
+          throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
         }
         
-        console.log('Login successful:', data);
+        // Check if response has content before parsing JSON
+        const responseText = await response.text();
+        console.log('📝 Raw response:', responseText);
+        
+        if (!responseText || responseText.trim() === '') {
+          throw new Error('Empty response from server');
+        }
+        
+        let result;
+        try {
+          result = JSON.parse(responseText);
+        } catch (jsonError) {
+          console.error('❌ JSON parsing error:', jsonError);
+          console.error('❌ Response text:', responseText);
+          
+          // Check if response is HTML (error page)
+          if (responseText.includes('<html>') || responseText.includes('<!DOCTYPE')) {
+            throw new Error('Server returned HTML error page instead of JSON. This might be a deployment issue.');
+          }
+          
+          throw new Error(`Invalid JSON response: ${jsonError.message}`);
+        }
+        
+        console.log('Login response:', result);
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Login failed');
+        }
+        
+        console.log('Login successful:', result);
         
         // Wait a moment for the session to be established
         await new Promise(resolve => setTimeout(resolve, 100));

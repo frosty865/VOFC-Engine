@@ -291,3 +291,74 @@
     }
   }
 }
+# === VOFC Engine - Cursor Assistant Rules ===
+# Purpose: Ensure consistent schema validation, Supabase table relationships, and import correctness.
+
+name: "VOFC Engine Schema & Relationship Rules"
+
+description: >
+  These rules help Cursor understand how to automatically verify database relationships,
+  validate Supabase queries, and maintain consistent schema structure across all modules
+  of the VOFC Engine (Frontend, API, and Supabase backend).
+
+rules:
+  - name: Schema Awareness
+    trigger: ["supabase", "schema.sql", "supabase.types.ts", "database", "db"]
+    actions:
+      - Always load `schema.sql` or `supabase.types.ts` into context when analyzing backend code.
+      - When reviewing API or DB code, cross-check table names and foreign keys against schema.
+      - Warn if a referenced table, field, or relation does not exist in schema.
+      - Suggest missing foreign key constraints in SQL if a logical link (e.g., filename, id) exists across tables.
+
+  - name: Supabase Query Validation
+    trigger: ["supabase.from", "supabase.select", "supabase.insert", "supabase.update"]
+    actions:
+      - Ensure all column names match those defined in schema.sql or supabase.types.ts.
+      - If a query uses join-like logic, verify that a corresponding relationship exists in schema.
+      - Warn when unindexed columns are used in frequent lookups or filters.
+
+  - name: Relationship Mapping
+    trigger: ["relationship", "foreign key", "join", "link"]
+    actions:
+      - Reference the following known relationships:
+        - document_processing.filename ↔ submissions.filename
+        - learning_events.filename ↔ document_processing.filename
+        - learning_stats.event_id ↔ learning_events.id
+        - ofc_sources.ofc_id ↔ options_for_consideration.id
+        - ofc_sources.source_id ↔ sources.reference_number
+      - Suggest appropriate SQL `FOREIGN KEY` constraints or Supabase policies if missing.
+
+  - name: API Consistency
+    trigger: ["/api/documents", "route.js", "handler.js"]
+    actions:
+      - Verify endpoint paths correspond to backend service modules (e.g., /api/documents/submit ↔ submit.js).
+      - Check that all API responses return valid status and JSON structures.
+      - Flag redundant or conflicting routes (e.g., process vs process-batch).
+
+  - name: Frontend-Backend Linking
+    trigger: [".jsx", ".tsx", "DocumentProcessor", "PSASubmission"]
+    actions:
+      - Ensure frontend calls match valid API routes and required parameters.
+      - Cross-check expected return shapes against backend response JSON.
+      - Verify data binding to UI elements (e.g., document status, error messages).
+
+  - name: Data Integrity & Validation
+    trigger: ["validate", "error", "status"]
+    actions:
+      - Ensure consistent `status` enums across system: pending, processing, completed, failed.
+      - Validate consistent use of `filename` or `id` across tables.
+      - Warn when duplicate or non-unique identifiers are used where a unique constraint should exist.
+
+  - name: Heuristic Pipeline Awareness
+    trigger: ["ollama", "learning", "event", "heuristic"]
+    actions:
+      - Cross-check learning_events and learning_stats updates for schema consistency.
+      - Verify that heuristic outputs are inserted as JSONB with expected keys.
+      - Ensure event triggers do not violate RLS or foreign key constraints.
+
+  - name: Developer Guidance
+    actions:
+      - When asked to “check links,” “verify relationships,” or “trace data flow,”
+        automatically load all files in `/api/documents/`, `/lib/`, and `/db/`.
+      - Visualize relationships as text-based graph if possible.
+      - When inconsistencies exist, suggest SQL ALTER statements or migration patches.

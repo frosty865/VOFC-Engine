@@ -1,14 +1,20 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-// Use service role for API submissions to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+import { getServerClient } from '../../../lib/supabase-manager';
 
 export async function POST(request) {
   try {
+    console.log('📄 Document submission API called');
+    
+    // Get Supabase server client
+    const supabaseServer = getServerClient();
+    if (!supabaseServer) {
+      console.error('❌ Supabase server client not available');
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
+
     // Parse form data
     const formData = await request.formData();
     
@@ -22,18 +28,18 @@ export async function POST(request) {
     const document = formData.get('file'); // Frontend sends as 'file'
 
     // Debug logging
-    console.log('Form data received:');
-    console.log('source_title:', source_title);
-    console.log('source_type:', source_type);
-    console.log('source_url:', source_url);
-    console.log('author_org:', author_org);
-    console.log('publication_year:', publication_year);
-    console.log('content_restriction:', content_restriction);
-    console.log('document:', document ? `${document.name} (${document.size} bytes)` : 'null');
+    console.log('📋 Form data received:');
+    console.log('  source_title:', source_title);
+    console.log('  source_type:', source_type);
+    console.log('  source_url:', source_url);
+    console.log('  author_org:', author_org);
+    console.log('  publication_year:', publication_year);
+    console.log('  content_restriction:', content_restriction);
+    console.log('  document:', document ? `${document.name} (${document.size} bytes)` : 'null');
 
     // Validate required fields
     if (!source_title || !document) {
-      console.log('Validation failed: missing required fields');
+      console.log('❌ Validation failed: missing required fields');
       return NextResponse.json(
         { error: 'Missing required fields: source_title and document' },
         { status: 400 }
@@ -48,7 +54,48 @@ export async function POST(request) {
       );
     }
 
-    // Prepare submission data (simplified to match working API)
+    // Save document file to Supabase Storage first
+    let savedFilePath = null;
+    try {
+      console.log('💾 Uploading document to Supabase Storage...');
+      
+      // Create a unique filename
+      const fileExtension = document.name.split('.').pop();
+      const baseName = document.name.replace(/\.[^/.]+$/, '');
+      const uniqueFileName = `${baseName}_${Date.now()}.${fileExtension}`;
+      
+      // Convert file to buffer
+      const buffer = await document.arrayBuffer();
+      
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabaseServer.storage
+        .from('documents')
+        .upload(uniqueFileName, buffer, {
+          contentType: document.type,
+          cacheControl: '3600',
+          upsert: false
+        });
+      
+      if (uploadError) {
+        console.error('❌ Error uploading to Supabase Storage:', uploadError);
+        return NextResponse.json({
+          success: false,
+          error: 'Failed to upload document to storage'
+        }, { status: 500 });
+      }
+      
+      savedFilePath = uploadData.path;
+      console.log('✅ Document uploaded to Supabase Storage:', savedFilePath);
+      
+    } catch (fileError) {
+      console.error('❌ Error saving document to storage:', fileError);
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to save document file'
+      }, { status: 500 });
+    }
+
+    // Prepare submission data with storage path
     const submissionData = {
       type: 'document',
       data: JSON.stringify({
@@ -60,8 +107,9 @@ export async function POST(request) {
         content_restriction: content_restriction || 'public',
         document_name: document.name,
         document_type: document.type,
-        document_size: document.size
-        // Note: Not storing document content for now to avoid size issues
+        document_size: document.size,
+        storage_path: savedFilePath, // Include the Supabase Storage path
+        storage_bucket: 'documents'
       }),
       status: 'pending_review',
       source: 'document_submission',
@@ -69,58 +117,39 @@ export async function POST(request) {
       updated_at: new Date().toISOString()
     };
 
-    // Save document file to data/docs folder for document processor FIRST
-    let savedFilePath = null;
-    try {
-      const fs = require('fs');
-      const path = require('path');
-      
-      const docsDir = path.join(process.cwd(), 'data', 'docs');
-      if (!fs.existsSync(docsDir)) {
-        fs.mkdirSync(docsDir, { recursive: true });
-      }
-      
-      // Create a unique filename
-      const fileExtension = path.extname(document.name);
-      const baseName = path.basename(document.name, fileExtension);
-      const uniqueFileName = `${baseName}_${Date.now()}${fileExtension}`;
-      const docsFile = path.join(docsDir, uniqueFileName);
-      
-      // Save the file buffer to the docs folder
-      const buffer = await document.arrayBuffer();
-      fs.writeFileSync(docsFile, Buffer.from(buffer));
-      
-      savedFilePath = docsFile;
-      console.log('📄 Document saved to docs folder for processing:', docsFile);
-    } catch (fileError) {
-      console.error('❌ Error saving document to docs folder:', fileError);
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to save document file'
-      }, { status: 500 });
-    }
-
     // Insert into database
-    console.log('Attempting to insert submission data:', JSON.stringify(submissionData, null, 2));
+    console.log('💾 Attempting to insert submission data...');
     
-    const { data: submission, error } = await supabase
-      .from('submissions')
-      .insert([submissionData])
-      .select()
-      .single();
+    try {
+      const { data: submission, error } = await supabaseServer
+        .from('submissions')
+        .insert([submissionData])
+        .select()
+        .single();
 
-    if (error) {
-      console.error('Database error:', error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
-      console.error('Submission data:', JSON.stringify(submissionData, null, 2));
-      
-      // File was saved successfully, so return success even if database fails
-      console.log('File saved successfully, returning success despite database error');
+      if (error) {
+        console.error('❌ Database error:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        
+        // Return success even if database fails
+        console.log('✅ File saved successfully, returning success despite database error');
+        return NextResponse.json({
+          success: true,
+          submission_id: 'temp-' + Date.now(),
+          status: 'pending_review',
+          message: 'Document submitted successfully (database error logged)',
+          file_path: savedFilePath
+        }, { status: 201 });
+      }
+
+      console.log('✅ Database insertion successful:', submission);
+    } catch (dbError) {
+      console.error('❌ Database connection error:', dbError);
       return NextResponse.json({
         success: true,
         submission_id: 'temp-' + Date.now(),
         status: 'pending_review',
-        message: 'Document submitted successfully (database error logged)',
+        message: 'Document submitted successfully (database unavailable)',
         file_path: savedFilePath
       }, { status: 201 });
     }
@@ -142,7 +171,8 @@ Extract the following information:
 1. Vulnerabilities: Security weaknesses, risks, or threats mentioned in the document
 2. Options for Consideration (OFCs): Mitigation strategies, recommendations, or actions to address vulnerabilities
 
-Return your analysis as a JSON object with this structure:
+IMPORTANT: Return ONLY a valid JSON object with this exact structure. Do not include any markdown formatting, explanations, or additional text. Just the raw JSON:
+
 {
   "vulnerabilities": [
     {
@@ -196,7 +226,29 @@ Please provide a structured JSON response with vulnerabilities and OFCs based on
         
         if (ollamaContent) {
           try {
-            const parsedResult = JSON.parse(ollamaContent);
+            // Extract JSON from markdown-formatted response
+            let jsonContent = ollamaContent;
+            
+            // Remove markdown code blocks if present
+            if (jsonContent.includes('```json')) {
+              const jsonMatch = jsonContent.match(/```json\s*([\s\S]*?)\s*```/);
+              if (jsonMatch) {
+                jsonContent = jsonMatch[1];
+              }
+            } else if (jsonContent.includes('```')) {
+              const jsonMatch = jsonContent.match(/```\s*([\s\S]*?)\s*```/);
+              if (jsonMatch) {
+                jsonContent = jsonMatch[1];
+              }
+            }
+            
+            // Try to find JSON object in the response
+            const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              jsonContent = jsonMatch[0];
+            }
+            
+            const parsedResult = JSON.parse(jsonContent);
             console.log('✅ Ollama analysis completed successfully');
             
             const ofcCount = parsedResult.options_for_consideration?.length || 0;
@@ -219,7 +271,7 @@ Please provide a structured JSON response with vulnerabilities and OFCs based on
               vulnerability_count: vulnCount
             };
 
-            await supabase
+            await supabaseServer
               .from('submissions')
               .update({
                 data: JSON.stringify(enhancedData),

@@ -1,6 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
+// Use the global Supabase client manager
+import { getClient } from './supabase-manager';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Export the managed client
+export const supabase = getClient();
+export const getSupabaseClient = getClient;

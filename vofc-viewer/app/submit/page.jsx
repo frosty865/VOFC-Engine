@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 import { getCurrentUser, getUserProfile, canSubmitVOFC } from '../lib/auth';
 import { fetchSectors, fetchSubsectors, fetchSubsectorsBySector } from '../lib/fetchVOFC';
 import SessionTimeoutWarning from '../../components/SessionTimeoutWarning';
+import '../../styles/cisa.css';
 
 export default function VOFCSubmission() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -297,26 +298,20 @@ export default function VOFCSubmission() {
         const result = await response.json();
         alert(`Vulnerability with ${options_for_consideration.length} associated OFCs submitted successfully! Submission ID: ${result.id}`);
       } else {
-        // Submit single vulnerability or OFC
+        // Submit single vulnerability (no associated OFCs)
         const submissionData = {
-          type: submissionType,
-          data: submissionType === 'vulnerability' 
-            ? {
-                vulnerability: formData.vulnerability,
-                discipline: formData.discipline,
-                subdiscipline: formData.subdiscipline || null,
-                sources: citation,
-                id: formData.id || null,
-                id: formData.id || null
-              }
-            : {
-                option_text: formData.option_text,
-                discipline: formData.discipline,
-                subdiscipline: formData.subdiscipline || null,
-                sources: citation,
-                id: formData.id || null,
-                id: formData.id || null
-              },
+          type: 'vulnerability',
+          data: {
+            vulnerability: formData.vulnerability,
+            discipline: formData.discipline,
+            subdiscipline: formData.subdiscipline || null,
+            sources: citation,
+            id: formData.id || null,
+            id: formData.id || null,
+            has_associated_ofcs: false,
+            ofc_count: 0,
+            associated_ofcs: []
+          },
           submitterEmail: formData.submitter_email,
           submitted_by: currentUser.id,
           status: 'pending'
@@ -337,7 +332,7 @@ export default function VOFCSubmission() {
 
         const result = await response.json();
         console.log('Submission response:', result);
-        alert(`${submissionType === 'vulnerability' ? 'Vulnerability' : 'Option for Consideration'} submitted successfully! Submission ID: ${result.submission_id}`);
+        alert(`Vulnerability submitted successfully! Submission ID: ${result.submission_id}`);
       }
 
       // Reset form
@@ -374,54 +369,23 @@ export default function VOFCSubmission() {
       <div className="card">
         <div className="card-header">
           <h1 className="card-title">Submit New Vulnerability</h1>
-          <p className="text-secondary">Contribute vulnerabilities and options for consideration</p>
+          <p className="text-secondary">Contribute vulnerabilities with associated options for consideration</p>
         </div>
 
         <div className="card-body">
-          <div className="mb-4">
-            <label className="form-label">Submission Type</label>
-            <div className="flex gap-4">
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="submissionType"
-                  value="vulnerability"
-                  checked={submissionType === 'vulnerability'}
-                  onChange={(e) => setSubmissionType(e.target.value)}
-                  className="mr-2"
-                />
-                Vulnerability
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="submissionType"
-                  value="ofc"
-                  checked={submissionType === 'ofc'}
-                  onChange={(e) => setSubmissionType(e.target.value)}
-                  className="mr-2"
-                />
-                Option for Consideration (OFC)
-              </label>
-            </div>
-          </div>
+          {/* Submission type is now fixed to vulnerability only */}
+          <input type="hidden" name="submissionType" value="vulnerability" />
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="form-group">
-              <label className="form-label">
-                {submissionType === 'vulnerability' ? 'Vulnerability Description' : 'Option Text'} *
-              </label>
+              <label className="form-label">Vulnerability Description *</label>
               <textarea
                 required
-                value={submissionType === 'vulnerability' ? formData.vulnerability : formData.option_text}
-                onChange={(e) => setFormData({...formData, 
-                  [submissionType === 'vulnerability' ? 'vulnerability' : 'option_text']: e.target.value
-                })}
+                value={formData.vulnerability}
+                onChange={(e) => setFormData({...formData, vulnerability: e.target.value})}
                 className="form-textarea"
                 rows="4"
-                placeholder={submissionType === 'vulnerability' 
-                  ? 'Describe the vulnerability...' 
-                  : 'Describe the option for consideration...'}
+                placeholder="Describe the vulnerability..."
               />
             </div>
 

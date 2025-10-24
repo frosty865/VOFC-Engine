@@ -20,23 +20,8 @@ export const getCurrentUser = async () => {
 };
 
 export const getUserProfile = async () => {
-  try {
-    const response = await fetch('/api/auth/verify', {
-      method: 'GET',
-      credentials: 'include'
-    });
-    
-    if (response.ok) {
-      const result = await response.json();
-      if (result.success) {
-        return result.user;
-      }
-    }
-    return null;
-  } catch (error) {
-    console.error('Error getting user profile:', error);
-    return null;
-  }
+  // Use the same function as getCurrentUser since we're using Supabase Auth
+  return await getCurrentUser();
 };
 
 export const canAccessAdmin = async () => {

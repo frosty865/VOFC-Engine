@@ -1,3 +1,4 @@
-packages:
-  - 'vofc-viewer'
-  - 'vofc-viewer/apps/backend'
+# Temporarily disabled to isolate Next.js build
+# packages:
+#   - 'vofc-viewer'
+#   - 'vofc-viewer/apps/backend'

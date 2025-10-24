@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser } from './lib/auth';
 import { fetchVulnerabilities } from './lib/fetchVOFC';
+import '../styles/cisa.css';
 
 export default function VOFCViewer() {
   const router = useRouter();
@@ -256,6 +257,7 @@ function VulnerabilityCard({ vulnerability, currentUser }) {
   const ofcs = vulnerability.ofcs || [];
   const [showAddOFC, setShowAddOFC] = useState(false);
   const [ofcText, setOfcText] = useState('');
+  const [ofcSources, setOfcSources] = useState('');
   const [submitting, setSubmitting] = useState(false);
   
   const handleAddOFC = async () => {
@@ -271,6 +273,7 @@ function VulnerabilityCard({ vulnerability, currentUser }) {
         body: JSON.stringify({
           vulnerability_id: vulnerability.id,
           ofc_text: ofcText.trim(),
+          ofc_sources: ofcSources.trim() || null,
           submitter: currentUser?.email || 'unknown@vofc.gov',
           vulnerability_text: vulnerability.vulnerability,
           discipline: vulnerability.discipline
@@ -281,6 +284,7 @@ function VulnerabilityCard({ vulnerability, currentUser }) {
       if (result.success) {
         alert('OFC request submitted for supervisor review!');
         setOfcText('');
+        setOfcSources('');
         setShowAddOFC(false);
       } else {
         alert(`Failed to submit OFC request: ${result.error}`);
@@ -337,6 +341,18 @@ function VulnerabilityCard({ vulnerability, currentUser }) {
                 rows="3"
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-blue-800 mb-1">
+                Sources (Optional):
+              </label>
+              <textarea
+                value={ofcSources}
+                onChange={(e) => setOfcSources(e.target.value)}
+                placeholder="Enter source information, citations, or references..."
+                className="w-full p-2 border border-blue-300 rounded-md text-sm"
+                rows="2"
+              />
+            </div>
             <div className="flex space-x-2">
               <button
                 onClick={handleAddOFC}
@@ -349,6 +365,7 @@ function VulnerabilityCard({ vulnerability, currentUser }) {
                 onClick={() => {
                   setShowAddOFC(false);
                   setOfcText('');
+                  setOfcSources('');
                 }}
                 className="btn btn-secondary btn-sm"
               >
