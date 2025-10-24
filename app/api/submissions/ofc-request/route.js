@@ -9,7 +9,7 @@ const supabase = createClient(
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { vulnerability_id, ofc_text, submitter, vulnerability_text, discipline } = body;
+    const { vulnerability_id, ofc_text, ofc_sources, submitter, vulnerability_text, discipline } = body;
 
     // Validate required fields
     if (!vulnerability_id || !ofc_text || !submitter) {
@@ -23,6 +23,7 @@ export async function POST(request) {
     const ofcRequest = {
       vulnerability_id,
       ofc_text: ofc_text.trim(),
+      ofc_sources: ofc_sources?.trim() || null,
       submitter,
       vulnerability_text: vulnerability_text || 'Unknown',
       discipline: discipline || 'General',
