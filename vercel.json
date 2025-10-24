@@ -1,6 +1,9 @@
 {
-  "buildCommand": "cd vofc-viewer && npm install && npm run build",
-  "outputDirectory": "vofc-viewer/.next",
-  "framework": "nextjs",
-  "installCommand": "cd vofc-viewer && npm install"
+  "version": 2,
+  "builds": [
+    {
+      "src": "vofc-viewer/vofc-viewer/package.json",
+      "use": "@vercel/next"
+    }
+  ]
 }
