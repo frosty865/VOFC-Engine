@@ -20,8 +20,8 @@ export default function OFCManagement() {
     option_text: '',
     discipline: '',
     source: '',
-    id: '',
-    id: ''
+    sector_id: '',
+    subsector_id: ''
   });
   const router = useRouter();
 
@@ -90,8 +90,8 @@ export default function OFCManagement() {
       option_text: ofc.option_text || '',
       discipline: ofc.discipline || '',
       source: ofc.source || '',
-      id: ofc.id || '',
-      id: ofc.id || ''
+      sector_id: ofc.sector_id || '',
+      subsector_id: ofc.subsector_id || ''
     });
     setShowEditForm(true);
   };
@@ -99,25 +99,35 @@ export default function OFCManagement() {
   const handleUpdateOFC = async (e) => {
     e.preventDefault();
     try {
+      console.log('🔄 Updating OFC with data:', editFormData);
+      
+      const updateData = {
+        option_text: editFormData.option_text,
+        discipline: editFormData.discipline,
+        source: editFormData.source,
+        sector_id: editFormData.sector_id || null,
+        subsector_id: editFormData.subsector_id || null
+      };
+      
+      console.log('📝 Update data:', updateData);
+      
       const { error } = await supabase
         .from('options_for_consideration')
-        .update({
-          option_text: editFormData.option_text,
-          discipline: editFormData.discipline,
-          source: editFormData.source,
-          id: editFormData.id,
-          id: editFormData.id
-        })
+        .update(updateData)
         .eq('id', editFormData.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Supabase error:', error);
+        throw error;
+      }
 
+      console.log('✅ OFC updated successfully');
       alert('OFC updated successfully!');
       setShowEditForm(false);
       setEditingOFC(null);
       loadOFCs();
     } catch (error) {
-      console.error('Error updating OFC:', error);
+      console.error('❌ Error updating OFC:', error);
       alert('Error updating OFC: ' + error.message);
     }
   };
@@ -403,8 +413,8 @@ export default function OFCManagement() {
                         <label className="form-label">Sector ID</label>
                         <input
                           type="text"
-                          value={editFormData.id}
-                          onChange={(e) => setEditFormData({...editFormData, id: e.target.value})}
+                          value={editFormData.sector_id}
+                          onChange={(e) => setEditFormData({...editFormData, sector_id: e.target.value})}
                           className="form-control"
                           placeholder="e.g., 1"
                         />
@@ -414,8 +424,8 @@ export default function OFCManagement() {
                         <label className="form-label">Subsector ID</label>
                         <input
                           type="text"
-                          value={editFormData.id}
-                          onChange={(e) => setEditFormData({...editFormData, id: e.target.value})}
+                          value={editFormData.subsector_id}
+                          onChange={(e) => setEditFormData({...editFormData, subsector_id: e.target.value})}
                           className="form-control"
                           placeholder="e.g., 5"
                         />
