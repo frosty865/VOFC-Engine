@@ -8,6 +8,19 @@ import { supabase } from '../../lib/supabaseClient';
 export default function OFCManagement() {
   console.log('🎯 OFCManagement component is rendering');
   
+  // Simple test to see if component is working
+  if (typeof window !== 'undefined') {
+    console.log('🌐 Component is running in browser environment');
+  }
+  
+  // TEMPORARY: Simple test return to see if component renders
+  return (
+    <div>
+      <h1>OFC Management Test</h1>
+      <p>Component is rendering!</p>
+    </div>
+  );
+  
   const [options_for_consideration, setOfcs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
