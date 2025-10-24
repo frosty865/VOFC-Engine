@@ -22,8 +22,8 @@ export async function GET(request) {
       );
     }
 
-    // Check if user has admin access (admin, spsa, or analyst)
-    if (!['admin', 'spsa', 'analyst'].includes(authResult.user.role)) {
+    // Check if user has admin access (admin, spsa, psa, or analyst)
+    if (!['admin', 'spsa', 'psa', 'analyst'].includes(authResult.user.role)) {
       return NextResponse.json(
         { success: false, error: 'Admin access required' },
         { status: 403 }
@@ -74,8 +74,8 @@ export async function PUT(request) {
       );
     }
 
-    // Check if user has admin access (admin, spsa, or analyst)
-    if (!['admin', 'spsa', 'analyst'].includes(authResult.user.role)) {
+    // Check if user has admin access (admin, spsa, psa, or analyst)
+    if (!['admin', 'spsa', 'psa', 'analyst'].includes(authResult.user.role)) {
       return NextResponse.json(
         { success: false, error: 'Admin access required' },
         { status: 403 }
@@ -159,8 +159,8 @@ export async function DELETE(request) {
       );
     }
 
-    // Check if user has admin access (admin, spsa, or analyst)
-    if (!['admin', 'spsa', 'analyst'].includes(authResult.user.role)) {
+    // Check if user has admin access (admin, spsa, psa, or analyst)
+    if (!['admin', 'spsa', 'psa', 'analyst'].includes(authResult.user.role)) {
       return NextResponse.json(
         { success: false, error: 'Admin access required' },
         { status: 403 }
