@@ -16,6 +16,7 @@ export default function DocumentProcessor() {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [processingWithAI, setProcessingWithAI] = useState(false);
+  const [learningStatus, setLearningStatus] = useState(null);
 
   // Fetch documents from consolidated API
   const fetchDocuments = async () => {
@@ -331,6 +332,29 @@ export default function DocumentProcessor() {
             <div>
               <strong>🤖 AI Processing Active</strong>
               <p className="text-sm mt-1">Using Ollama AI to analyze documents for vulnerabilities and OFCs...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Learning System Status */}
+      {learningStatus && (
+        <div className="mb-6 p-4 rounded-lg" style={{ 
+          backgroundColor: 'var(--cisa-green-lightest)', 
+          border: '1px solid var(--cisa-green-lighter)',
+          color: 'var(--cisa-green)'
+        }}>
+          <div className="flex items-center">
+            <div className="mr-3">
+              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div>
+              <strong>🧠 Learning System Active</strong>
+              <p className="text-sm mt-1">
+                Continuous learning enabled - AI model improves with each document processed
+              </p>
             </div>
           </div>
         </div>

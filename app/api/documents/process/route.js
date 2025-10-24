@@ -65,6 +65,17 @@ export async function POST(request) {
           processed_data: parsedData,
           updated_at: new Date().toISOString()
         });
+
+      // Trigger learning system if AI processing was used
+      if (parsedData.extraction_method === 'ollama') {
+        try {
+          console.log('🧠 Triggering learning system for new AI-processed document...');
+          await triggerLearningSystem(filename, parsedData);
+        } catch (learningError) {
+          console.warn('⚠️ Learning system trigger failed:', learningError.message);
+          // Don't fail the document processing if learning fails
+        }
+      }
       
       return NextResponse.json({
         success: true,
@@ -101,6 +112,65 @@ export async function POST(request) {
       { success: false, error: 'Failed to process document' },
       { status: 500 }
     );
+  }
+}
+
+async function triggerLearningSystem(filename, parsedData) {
+  try {
+    // Create learning event data
+    const learningEvent = {
+      event_type: 'document_processed',
+      filename: filename,
+      vulnerabilities_found: parsedData.vulnerabilities?.length || 0,
+      ofcs_found: parsedData.ofcs?.length || 0,
+      extraction_method: parsedData.extraction_method,
+      confidence: parsedData.confidence,
+      processed_at: new Date().toISOString(),
+      data: {
+        vulnerabilities: parsedData.vulnerabilities || [],
+        ofcs: parsedData.ofcs || [],
+        sectors: parsedData.sectors || []
+      }
+    };
+
+    // Store learning event in database for continuous learning system
+    const supabaseServer = getServerClient();
+    const { error: learningError } = await supabaseServer
+      .from('learning_events')
+      .insert([learningEvent]);
+
+    if (learningError) {
+      console.warn('⚠️ Failed to store learning event:', learningError);
+    } else {
+      console.log('✅ Learning event stored for continuous learning system');
+    }
+
+    // Trigger immediate learning cycle if enough events accumulated
+    const { data: eventCount } = await supabaseServer
+      .from('learning_events')
+      .select('id', { count: 'exact' })
+      .eq('event_type', 'document_processed');
+
+    if (eventCount && eventCount.length >= 5) { // Trigger learning every 5 documents
+      console.log('🔄 Triggering immediate learning cycle...');
+      
+      // Call learning API to run a learning cycle
+      const learningResponse = await fetch('/api/learning/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cycle' })
+      });
+
+      if (learningResponse.ok) {
+        console.log('✅ Learning cycle triggered successfully');
+      } else {
+        console.warn('⚠️ Learning cycle trigger failed');
+      }
+    }
+
+  } catch (error) {
+    console.error('❌ Error in learning system trigger:', error);
+    throw error;
   }
 }
 
