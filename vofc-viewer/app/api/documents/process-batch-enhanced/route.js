@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getServerClient } from '../../../../lib/supabase-manager';
+import { getServerClient } from '../../../lib/supabase-manager';
 import crypto from 'crypto';
 
 // Enhanced batch processing with parallel worker pool
