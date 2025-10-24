@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { getServerClient } from '../../../lib/supabase-manager';
 
 export async function POST(request) {
   try {
@@ -13,59 +12,51 @@ export async function POST(request) {
       );
     }
     
-    // Define paths
-    const docsPath = path.join(process.cwd(), 'data', 'docs');
-    const processingPath = path.join(process.cwd(), 'data', 'processing');
-    const completedPath = path.join(process.cwd(), 'data', 'completed');
-    const failedPath = path.join(process.cwd(), 'data', 'failed');
-    const backendPath = path.join(process.cwd(), 'apps', 'backend');
-    
-    // Create directories if they don't exist
-    [processingPath, completedPath, failedPath].forEach(dir => {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-    });
-    
-    const sourceFile = path.join(docsPath, filename);
-    const processingFile = path.join(processingPath, filename);
-    
-    // Check if source file exists
-    if (!fs.existsSync(sourceFile)) {
+    const supabaseServer = getServerClient();
+    if (!supabaseServer) {
       return NextResponse.json(
-        { success: false, error: 'Source file not found' },
-        { status: 404 }
+        { success: false, error: 'Database connection failed' },
+        { status: 500 }
       );
     }
     
     try {
-      // Move file to processing folder
-      fs.renameSync(sourceFile, processingFile);
-      
-      // Parse document content
-      const documentContent = await parseDocumentContent(processingFile);
-      
-      // Try to use the Python parser if available
-      let parsedData = null;
-      try {
-        parsedData = await runOllamaParser(processingFile);
-      } catch (parserError) {
-        console.log('Python parser not available, using basic parsing:', parserError.message);
-        parsedData = await basicDocumentParse(processingFile);
+      // Get document from Supabase Storage
+      const { data: fileData, error: downloadError } = await supabaseServer.storage
+        .from('documents')
+        .download(filename);
+        
+      if (downloadError) {
+        return NextResponse.json(
+          { success: false, error: 'Document not found in storage' },
+          { status: 404 }
+        );
       }
       
-      // Move to completed folder
-      const completedFile = path.join(completedPath, filename);
-      fs.renameSync(processingFile, completedFile);
+      // Convert blob to text for processing
+      const documentContent = await fileData.text();
       
-      // Save parsed data
-      const metadataFile = path.join(completedPath, `${filename}.metadata.json`);
-      fs.writeFileSync(metadataFile, JSON.stringify({
-        filename,
-        processed_at: new Date().toISOString(),
-        content: documentContent,
-        parsed_data: parsedData
-      }, null, 2));
+      // Update status to processing
+      await supabaseServer
+        .from('document_processing')
+        .upsert({
+          filename,
+          status: 'processing',
+          updated_at: new Date().toISOString()
+        });
+      
+      // Parse document content using basic parsing
+      const parsedData = await basicDocumentParse(documentContent, filename);
+      
+      // Update status to completed and save results
+      await supabaseServer
+        .from('document_processing')
+        .upsert({
+          filename,
+          status: 'completed',
+          processed_data: parsedData,
+          updated_at: new Date().toISOString()
+        });
       
       return NextResponse.json({
         success: true,
@@ -80,11 +71,15 @@ export async function POST(request) {
       });
       
     } catch (processError) {
-      // If processing fails, move to failed folder
-      const failedFile = path.join(failedPath, filename);
-      if (fs.existsSync(processingFile)) {
-        fs.renameSync(processingFile, failedFile);
-      }
+      // Update status to failed
+      await supabaseServer
+        .from('document_processing')
+        .upsert({
+          filename,
+          status: 'failed',
+          error_message: processError.message,
+          updated_at: new Date().toISOString()
+        });
       
       return NextResponse.json(
         { success: false, error: `Processing failed: ${processError.message}` },
@@ -101,101 +96,12 @@ export async function POST(request) {
   }
 }
 
-async function parseDocumentContent(filePath) {
-  try {
-    const fileContent = fs.readFileSync(filePath, 'utf8');
-    return fileContent;
-  } catch (error) {
-    throw new Error(`Failed to read file: ${error.message}`);
-  }
-}
-
-async function runOllamaParser(filePath) {
-  try {
-    const documentContent = fs.readFileSync(filePath, 'utf8');
-    const ollamaBaseUrl = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-    const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
-    
-    // Create system prompt for vulnerability and OFC extraction
-    const systemPrompt = `You are an expert document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
-Your task is to extract vulnerabilities and options for consideration from security documents.
-
-Extract the following information:
-1. Vulnerabilities: Security weaknesses, risks, or threats mentioned in the document
-2. Options for Consideration (OFCs): Mitigation strategies, recommendations, or actions to address vulnerabilities
-
-Return your analysis as a JSON object with this structure:
-{
-  "vulnerabilities": [
-    {
-      "id": "unique_id",
-      "text": "vulnerability description",
-      "discipline": "relevant discipline",
-      "source": "source information"
-    }
-  ],
-  "options_for_consideration": [
-    {
-      "id": "unique_id", 
-      "text": "OFC description",
-      "discipline": "relevant discipline",
-      "source": "source information"
-    }
-  ]
-}`;
-
-        const userPrompt = `Analyze this document and extract vulnerabilities and options for consideration:
-
-Document Content:
-${documentContent}
-
-Please provide a structured JSON response with vulnerabilities and OFCs.`;
-
-    // Call Ollama API
-    const response = await fetch(`${ollamaBaseUrl}/api/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: ollamaModel,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        stream: false
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    const ollamaContent = data.message?.content || data.response;
-    
-    if (!ollamaContent) {
-      throw new Error('No content received from Ollama');
-    }
-
-    // Parse JSON response
-    const result = JSON.parse(ollamaContent);
-    return result;
-
-  } catch (error) {
-    console.error('Ollama parser error:', error);
-    throw new Error(`Ollama parsing failed: ${error.message}`);
-  }
-}
-
-async function basicDocumentParse(filePath) {
-  const basicContent = fs.readFileSync(filePath, 'utf8');
-  
+async function basicDocumentParse(content, filename) {
   // Basic parsing logic
-  const lines = basicContent.split('\n').filter(line => line.trim());
+  const lines = content.split('\n').filter(line => line.trim());
   
   // Extract title (first non-empty line or filename)
-  const title = lines[0] || path.basename(filePath, path.extname(filePath));
+  const title = lines[0] || filename;
   
   // Look for vulnerabilities and OFCs
   const vulnerabilities = [];
@@ -236,6 +142,6 @@ async function basicDocumentParse(filePath) {
     ofcs,
     sectors,
     total_lines: lines.length,
-    word_count: basicContent.split(/\s+/).length
+    word_count: content.split(/\s+/).length
   };
 }

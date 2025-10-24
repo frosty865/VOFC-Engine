@@ -284,26 +284,62 @@ export default function DocumentProcessor() {
         </button>
       </div>
 
-      {/* Status Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-blue-50 p-4 rounded-lg">
-          <h3 className="font-semibold text-blue-900">Pending</h3>
-          <p className="text-2xl font-bold text-blue-600">{documents.length}</p>
+      {/* Status Overview - Side by Side Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="bg-blue-50 border border-blue-200 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-blue-900 text-sm uppercase tracking-wide">Pending</h3>
+              <p className="text-3xl font-bold text-blue-600 mt-2">{documents.length}</p>
+            </div>
+            <div className="text-blue-400">
+              <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+              </svg>
+            </div>
+          </div>
         </div>
         
-        <div className="bg-yellow-50 p-4 rounded-lg">
-          <h3 className="font-semibold text-yellow-900">Processing</h3>
-          <p className="text-2xl font-bold text-yellow-600">{processing.length}</p>
+        <div className="bg-yellow-50 border border-yellow-200 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-yellow-900 text-sm uppercase tracking-wide">Processing</h3>
+              <p className="text-3xl font-bold text-yellow-600 mt-2">{processing.length}</p>
+            </div>
+            <div className="text-yellow-400">
+              <svg className="w-8 h-8 animate-spin" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+              </svg>
+            </div>
+          </div>
         </div>
         
-        <div className="bg-green-50 p-4 rounded-lg">
-          <h3 className="font-semibold text-green-900">Completed</h3>
-          <p className="text-2xl font-bold text-green-600">{completed.length}</p>
+        <div className="bg-green-50 border border-green-200 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-green-900 text-sm uppercase tracking-wide">Completed</h3>
+              <p className="text-3xl font-bold text-green-600 mt-2">{completed.length}</p>
+            </div>
+            <div className="text-green-400">
+              <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+            </div>
+          </div>
         </div>
         
-        <div className="bg-red-50 p-4 rounded-lg">
-          <h3 className="font-semibold text-red-900">Failed</h3>
-          <p className="text-2xl font-bold text-red-600">{failed.length}</p>
+        <div className="bg-red-50 border border-red-200 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-red-900 text-sm uppercase tracking-wide">Failed</h3>
+              <p className="text-3xl font-bold text-red-600 mt-2">{failed.length}</p>
+            </div>
+            <div className="text-red-400">
+              <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+          </div>
         </div>
       </div>
 
