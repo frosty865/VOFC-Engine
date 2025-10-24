@@ -67,12 +67,7 @@ export default function OFCManagement() {
           ofc_sources (
             sources (
               reference_number,
-              authors,
-              title,
-              publication,
-              year,
-              formatted_citation,
-              short_citation
+              source_text
             )
           )
         `)
@@ -261,35 +256,24 @@ export default function OFCManagement() {
 
                 <div className="text-sm mb-3">
                   <strong><i className="fas fa-book mr-1"></i>Sources:</strong>
-                  {ofc.sources ? (
-                    <div className="mt-2 p-2 rounded border-l-2" style={{ 
-                      backgroundColor: 'var(--cisa-gray-light)',
-                      borderColor: 'var(--cisa-blue)',
-                      color: 'var(--cisa-gray-dark)'
-                    }}>
-                      <div className="font-medium text-blue-800">
-                        {ofc.sources.short_citation || ofc.sources.authors || 'Unknown Source'}
-                      </div>
-                      {ofc.sources.authors && (
-                        <div className="text-xs text-gray-600">
-                          Author: {ofc.sources.authors}
+                  {ofc.ofc_sources && ofc.ofc_sources.length > 0 ? (
+                    <div className="mt-2 space-y-2">
+                      {ofc.ofc_sources.map((ofcSource, index) => (
+                        <div key={index} className="p-2 rounded border-l-2" style={{ 
+                          backgroundColor: 'var(--cisa-gray-light)',
+                          borderColor: 'var(--cisa-blue)',
+                          color: 'var(--cisa-gray-dark)'
+                        }}>
+                          <div className="font-medium text-blue-800">
+                            {ofcSource.sources?.reference_number || 'Unknown Source'}
+                          </div>
+                          {ofcSource.sources?.source_text && (
+                            <div className="text-xs text-gray-700 italic mt-1">
+                              {ofcSource.sources.source_text}
+                            </div>
+                          )}
                         </div>
-                      )}
-                      {ofc.sources.publication && (
-                        <div className="text-xs text-gray-600">
-                          Publication: {ofc.sources.publication}
-                        </div>
-                      )}
-                      {ofc.sources.year && (
-                        <div className="text-xs text-gray-600">
-                          Year: {ofc.sources.year}
-                        </div>
-                      )}
-                      {ofc.sources.formatted_citation && (
-                        <div className="text-xs text-gray-700 italic mt-1">
-                          {ofc.sources.formatted_citation}
-                        </div>
-                      )}
+                      ))}
                     </div>
                   ) : (
                     <div className="mt-1 p-2 rounded" style={{ 
