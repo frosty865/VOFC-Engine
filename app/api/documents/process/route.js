@@ -38,14 +38,26 @@ export async function POST(request) {
       let documentContent;
       
       if (isPDF) {
-        console.log('📄 PDF file detected, sending to Ollama for processing...');
-        // For PDFs, send the binary data directly to Ollama
+        console.log('📄 PDF file detected, extracting text for Ollama processing...');
+        // For PDFs, extract text first, then send to Ollama
         const arrayBuffer = await fileData.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
         
-        // Convert to base64 for Ollama processing
-        const base64Content = buffer.toString('base64');
-        documentContent = base64Content; // Ollama will handle PDF parsing
+        // Extract text from PDF using improved method
+        const extractedText = await extractTextFromPDF(buffer);
+        
+        if (!extractedText || extractedText.trim().length < 10) {
+          return NextResponse.json({
+            success: false,
+            error: 'PDF file could not be parsed. No readable text extracted.',
+            filename: filename,
+            file_type: 'PDF',
+            suggestion: 'Try using a different PDF or ensure the PDF contains readable text.'
+          });
+        }
+        
+        console.log(`📄 Successfully extracted ${extractedText.length} characters from PDF`);
+        documentContent = extractedText; // Send extracted text to Ollama
       } else {
         // Regular text file processing
         documentContent = await fileData.text();
@@ -170,6 +182,72 @@ export async function POST(request) {
   }
 }
 
+async function extractTextFromPDF(buffer) {
+  try {
+    const content = buffer.toString('binary');
+    let extractedText = '';
+    
+    // Method 1: Extract text from PDF text objects (BT...ET)
+    const textMatches = content.match(/BT\s*(.*?)\s*ET/gs);
+    if (textMatches && textMatches.length > 0) {
+      for (const match of textMatches) {
+        const textContent = match
+          .replace(/BT|ET/g, '')
+          .replace(/[^\w\s.,;:!?()-]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        
+        if (textContent.length > 3) {
+          extractedText += textContent + ' ';
+        }
+      }
+    }
+    
+    // Method 2: Extract from PDF streams
+    if (!extractedText || extractedText.length < 50) {
+      const streamMatches = content.match(/stream\s*(.*?)\s*endstream/gs);
+      if (streamMatches) {
+        for (const stream of streamMatches) {
+          const streamContent = stream
+            .replace(/stream|endstream/g, '')
+            .replace(/[^\w\s.,;:!?()-]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          
+          if (streamContent.length > 10) {
+            extractedText += streamContent + ' ';
+          }
+        }
+      }
+    }
+    
+    // Method 3: Extract any readable text
+    if (!extractedText || extractedText.length < 50) {
+      const readableText = content
+        .replace(/[^\w\s.,;:!?()-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      if (readableText.length > 50) {
+        extractedText = readableText;
+      }
+    }
+    
+    // Clean up the extracted text
+    if (extractedText) {
+      extractedText = extractedText
+        .replace(/\s+/g, ' ')
+        .replace(/^\s+|\s+$/g, '')
+        .trim();
+    }
+    
+    return extractedText;
+    
+  } catch (error) {
+    console.error('PDF text extraction error:', error);
+    return null;
+  }
+}
 
 async function triggerLearningSystem(filename, parsedData) {
   try {
@@ -270,27 +348,13 @@ IMPORTANT: Return ONLY a valid JSON object with this exact structure. Do not inc
   ]
 }`;
 
-  // Check if content is base64 (PDF file)
-  const isBase64 = /^[A-Za-z0-9+/]*={0,2}$/.test(content) && content.length > 100;
-  
-  let userPrompt;
-  if (isBase64 && filename.toLowerCase().endsWith('.pdf')) {
-    userPrompt = `Analyze this PDF document and extract vulnerabilities and options for consideration:
-
-Document Title: ${filename}
-Document Type: PDF (base64 encoded)
-Document Content: ${content}
-
-Please parse the PDF content and provide a structured JSON response with vulnerabilities and OFCs.`;
-  } else {
-    userPrompt = `Analyze this document and extract vulnerabilities and options for consideration:
+  const userPrompt = `Analyze this document and extract vulnerabilities and options for consideration:
 
 Document Title: ${filename}
 Document Content:
 ${content}
 
 Please provide a structured JSON response with vulnerabilities and OFCs.`;
-  }
 
   // Call Ollama API with timeout
   console.log('⏱️ Starting Ollama API call...');
