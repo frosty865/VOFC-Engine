@@ -27,14 +27,29 @@ export default function OFCManagement() {
 
   useEffect(() => {
     console.log('🚀 OFC Management useEffect triggered');
-    checkAuth();
-    loadOFCs();
+    const initializeComponent = async () => {
+      try {
+        console.log('🔐 Starting authentication check...');
+        await checkAuth();
+        console.log('🔐 Authentication check completed, loading OFCs...');
+        await loadOFCs();
+        console.log('✅ Component initialization completed');
+      } catch (error) {
+        console.error('❌ Component initialization error:', error);
+      }
+    };
+    
+    initializeComponent();
   }, []);
 
   const checkAuth = async () => {
     try {
+      console.log('🔐 Checking authentication...');
       const user = await getCurrentUser();
+      console.log('🔐 User from getCurrentUser:', user);
+      
       if (!user) {
+        console.log('❌ No user found, redirecting to splash');
         router.push('/splash');
         return;
       }
@@ -43,16 +58,16 @@ export default function OFCManagement() {
       console.log('🔐 OFC Management - User role:', user.role);
       console.log('🔐 OFC Management - Full user:', user);
 
-      // Allow admin, spsa, and analyst to manage OFCs (same as main admin page)
-      if (!(user.role === 'admin' || user.role === 'spsa' || user.role === 'analyst')) {
+      // Allow admin, spsa, psa, and analyst to manage OFCs
+      if (!['admin', 'spsa', 'psa', 'analyst'].includes(user.role)) {
         console.log('❌ OFC Management - Access denied for role:', user.role);
         router.push('/');
         return;
       }
-      
+
       console.log('✅ OFC Management - Access granted for role:', user.role);
     } catch (error) {
-      console.error('Auth check failed:', error);
+      console.error('❌ Auth check failed:', error);
       router.push('/splash');
     }
   };
@@ -72,6 +87,7 @@ export default function OFCManagement() {
         credentials: 'include' // Include cookies for authentication
       });
 
+      console.log('📡 Response status:', response.status);
       const result = await response.json();
       console.log('📡 API Response:', { status: response.status, result });
 
@@ -84,6 +100,8 @@ export default function OFCManagement() {
         console.error('❌ API Success False:', result);
         throw new Error(result.error || 'Load failed');
       }
+
+      console.log('✅ API call successful, processing data...');
 
       // Load sources separately for each OFC
       const ofcsWithSources = await Promise.all(
@@ -115,8 +133,28 @@ export default function OFCManagement() {
 
       setOfcs(ofcsWithSources);
     } catch (error) {
-      console.error('Error loading OFCs:', error);
-      alert('Error loading OFCs: ' + error.message);
+      console.error('❌ Error loading OFCs via API:', error);
+      console.log('🔄 Attempting fallback to direct Supabase call...');
+      
+      try {
+        // Fallback: Direct Supabase call
+        const { data: options_for_consideration, error: supabaseError } = await supabase
+          .from('options_for_consideration')
+          .select('*')
+          .order('option_text');
+
+        if (supabaseError) {
+          console.error('❌ Supabase fallback error:', supabaseError);
+          throw supabaseError;
+        }
+
+        console.log('✅ Supabase fallback successful, loaded OFCs:', options_for_consideration?.length || 0);
+        setOfcs(options_for_consideration || []);
+      } catch (fallbackError) {
+        console.error('❌ Both API and Supabase fallback failed:', fallbackError);
+        alert('Error loading OFCs: ' + error.message);
+        setOfcs([]);
+      }
     } finally {
       setLoading(false);
     }
