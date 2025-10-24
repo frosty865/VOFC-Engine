@@ -15,18 +15,25 @@ const JWT_SECRET = new TextEncoder().encode(
 export class AuthService {
   static async verifyToken(token) {
     try {
+      console.log('🔍 AuthService.verifyToken called with token:', token ? token.substring(0, 20) + '...' : 'NO TOKEN');
+      
       if (!token) {
+        console.log('❌ No token provided to AuthService');
         return { success: false, error: 'No token provided' };
       }
 
+      console.log('🔍 Attempting JWT verification...');
       // Verify our custom JWT token
       const { payload } = await jwtVerify(token, JWT_SECRET);
+      console.log('🔍 JWT payload:', payload);
 
       // Check if token is expired (JWT handles this automatically)
       if (!payload || !payload.email) {
+        console.log('❌ Invalid payload or missing email');
         return { success: false, error: 'Invalid token' };
       }
 
+      console.log('✅ Token verification successful for user:', payload.email);
       return { 
         success: true, 
         user: {
@@ -37,7 +44,7 @@ export class AuthService {
         }
       };
     } catch (error) {
-      console.error('Token verification error:', error);
+      console.error('❌ Token verification error:', error);
       return { success: false, error: 'Token verification failed' };
     }
   }
