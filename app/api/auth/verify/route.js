@@ -1,46 +1,58 @@
 import { NextResponse } from 'next/server';
-import { jwtVerify } from 'jose';
+import { createClient } from '@supabase/supabase-js';
 
-// Secret key for JWT verification (must match the one used for signing)
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production'
-);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export async function GET(request) {
   try {
-    const token = request.cookies.get('auth-token')?.value;
-
-    if (!token) {
+    // Get the authorization header
+    const authHeader = request.headers.get('authorization');
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
-        { success: false, error: 'No authentication token' },
+        { success: false, error: 'No authorization token' },
         { status: 401 }
       );
     }
 
-    // Verify and decode the JWT token
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const token = authHeader.substring(7);
 
-    // Check if token is expired (JWT handles this automatically)
-    if (!payload || !payload.email) {
+    // Verify the Supabase Auth token
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+
+    if (error || !user) {
       return NextResponse.json(
-        { success: false, error: 'Invalid token' },
+        { success: false, error: 'Invalid or expired token' },
         { status: 401 }
       );
     }
 
+    // Map user email to role (since we're using Supabase Auth)
+    const roleMap = {
+      'admin@vofc.gov': 'admin',
+      'spsa@vofc.gov': 'spsa', 
+      'psa@vofc.gov': 'psa',
+      'analyst@vofc.gov': 'analyst'
+    };
+
+    const role = roleMap[user.email] || 'user';
+    const name = user.user_metadata?.name || user.email.split('@')[0];
 
     return NextResponse.json({
       success: true,
       user: {
-        id: payload.userId,
-        email: payload.email,
-        role: payload.role,
-        name: payload.name
+        id: user.id,
+        email: user.email,
+        role: role,
+        name: name
       }
     });
 
   } catch (error) {
-    console.error('JWT verification error:', error);
+    console.error('Auth verification error:', error);
     return NextResponse.json(
       { success: false, error: 'Token verification failed' },
       { status: 401 }
