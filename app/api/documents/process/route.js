@@ -45,8 +45,16 @@ export async function POST(request) {
           updated_at: new Date().toISOString()
         });
       
-      // Parse document content using basic parsing
-      const parsedData = await basicDocumentParse(documentContent, filename);
+      // Try Ollama processing first, fallback to basic parsing
+      let parsedData;
+      try {
+        console.log('🤖 Attempting Ollama processing...');
+        parsedData = await processWithOllama(documentContent, filename);
+        console.log('✅ Ollama processing successful');
+      } catch (ollamaError) {
+        console.log('⚠️ Ollama processing failed, using basic parsing:', ollamaError.message);
+        parsedData = await basicDocumentParse(documentContent, filename);
+      }
       
       // Update status to completed and save results
       await supabaseServer
@@ -94,6 +102,112 @@ export async function POST(request) {
       { status: 500 }
     );
   }
+}
+
+async function processWithOllama(content, filename) {
+  const ollamaBaseUrl = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+  const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
+  
+  // Create system prompt for document analysis
+  const systemPrompt = `You are an expert document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
+Your task is to extract vulnerabilities and options for consideration from security documents.
+
+Extract the following information:
+1. Vulnerabilities: Security weaknesses, risks, or threats mentioned in the document
+2. Options for Consideration (OFCs): Mitigation strategies, recommendations, or actions to address vulnerabilities
+
+IMPORTANT: Return ONLY a valid JSON object with this exact structure. Do not include any markdown formatting, explanations, or additional text. Just the raw JSON:
+
+{
+  "vulnerabilities": [
+    {
+      "id": "unique_id",
+      "text": "vulnerability description",
+      "discipline": "relevant discipline",
+      "source": "source information"
+    }
+  ],
+  "options_for_consideration": [
+    {
+      "id": "unique_id", 
+      "text": "OFC description",
+      "discipline": "relevant discipline",
+      "source": "source information"
+    }
+  ]
+}`;
+
+  const userPrompt = `Analyze this document and extract vulnerabilities and options for consideration:
+
+Document Title: ${filename}
+Document Content:
+${content}
+
+Please provide a structured JSON response with vulnerabilities and OFCs.`;
+
+  // Call Ollama API
+  const response = await fetch(`${ollamaBaseUrl}/api/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: ollamaModel,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      stream: false
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const ollamaContent = data.message?.content || data.response;
+  
+  if (!ollamaContent) {
+    throw new Error('No content received from Ollama');
+  }
+
+  // Extract JSON from markdown-formatted response
+  let jsonContent = ollamaContent;
+  
+  // Remove markdown code blocks if present
+  if (jsonContent.includes('```json')) {
+    const jsonMatch = jsonContent.match(/```json\s*([\s\S]*?)\s*```/);
+    if (jsonMatch) {
+      jsonContent = jsonMatch[1];
+    }
+  } else if (jsonContent.includes('```')) {
+    const jsonMatch = jsonContent.match(/```\s*([\s\S]*?)\s*```/);
+    if (jsonMatch) {
+      jsonContent = jsonMatch[1];
+    }
+  }
+  
+  // Try to find JSON object in the response
+  const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    jsonContent = jsonMatch[0];
+  }
+  
+  const parsedResult = JSON.parse(jsonContent);
+  
+  // Convert to expected format
+  return {
+    title: filename.replace(/\.[^/.]+$/, ''),
+    vulnerabilities: parsedResult.vulnerabilities || [],
+    ofcs: parsedResult.options_for_consideration || [],
+    sectors: [],
+    total_lines: content.split('\n').length,
+    word_count: content.split(/\s+/).length,
+    file_type: 'AI-Processed',
+    extraction_method: 'ollama',
+    confidence: 'high'
+  };
 }
 
 async function basicDocumentParse(content, filename) {

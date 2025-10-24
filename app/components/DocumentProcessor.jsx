@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import '../styles/cisa.css';
 
 export default function DocumentProcessor() {
   const [documents, setDocuments] = useState([]);
@@ -14,6 +15,7 @@ export default function DocumentProcessor() {
   const [lastRefresh, setLastRefresh] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [processingWithAI, setProcessingWithAI] = useState(false);
 
   // Fetch documents from consolidated API
   const fetchDocuments = async () => {
@@ -221,14 +223,14 @@ export default function DocumentProcessor() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="max-w-7xl mx-auto p-6" style={{ fontFamily: 'var(--font-family)' }}>
       <div className="mb-8">
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Document Processor</h1>
-            <p className="text-gray-600">
-              Process documents from the docs folder using the universal VOFC parser.
-              Documents are automatically moved to completed/failed folders after processing.
+            <h1 className="text-3xl font-bold" style={{ color: 'var(--cisa-blue)' }}>Document Processor</h1>
+            <p style={{ color: 'var(--cisa-gray)', fontSize: 'var(--font-size-md)' }}>
+              Process documents using AI-powered VOFC analysis with Ollama integration.
+              Documents are automatically analyzed for vulnerabilities and options for consideration.
             </p>
           </div>
           <div className="flex items-center space-x-4">
@@ -260,29 +262,79 @@ export default function DocumentProcessor() {
         <button
           onClick={processAll}
           disabled={loading || documents.length === 0}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          className="btn btn-primary"
+          style={{
+            backgroundColor: 'var(--cisa-blue)',
+            color: 'var(--cisa-white)',
+            padding: 'var(--spacing-sm) var(--spacing-md)',
+            borderRadius: 'var(--border-radius)',
+            border: 'none',
+            cursor: loading || documents.length === 0 ? 'not-allowed' : 'pointer',
+            opacity: loading || documents.length === 0 ? 0.5 : 1,
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: '600'
+          }}
         >
-          Process All ({documents.length})
+          🤖 Process All ({documents.length})
         </button>
         
         {selectedFiles.length > 0 && (
           <button
             onClick={processSelected}
             disabled={loading}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
+            className="btn btn-success"
+            style={{
+              backgroundColor: 'var(--cisa-success)',
+              color: 'var(--cisa-white)',
+              padding: 'var(--spacing-sm) var(--spacing-md)',
+              borderRadius: 'var(--border-radius)',
+              border: 'none',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.5 : 1,
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: '600'
+            }}
           >
-            Process Selected ({selectedFiles.length})
+            ✅ Process Selected ({selectedFiles.length})
           </button>
         )}
         
         <button
           onClick={fetchDocuments}
           disabled={loading}
-          className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 disabled:opacity-50"
+          className="btn btn-secondary"
+          style={{
+            backgroundColor: 'var(--cisa-gray)',
+            color: 'var(--cisa-white)',
+            padding: 'var(--spacing-sm) var(--spacing-md)',
+            borderRadius: 'var(--border-radius)',
+            border: 'none',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            opacity: loading ? 0.5 : 1,
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: '600'
+          }}
         >
-          {loading ? 'Refreshing...' : 'Refresh'}
+          {loading ? '🔄 Refreshing...' : '🔄 Refresh'}
         </button>
       </div>
+
+      {/* AI Processing Status */}
+      {processingWithAI && (
+        <div className="mb-6 p-4 rounded-lg" style={{ 
+          backgroundColor: 'var(--cisa-blue-lightest)', 
+          border: '1px solid var(--cisa-blue-lighter)',
+          color: 'var(--cisa-blue)'
+        }}>
+          <div className="flex items-center">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-3"></div>
+            <div>
+              <strong>🤖 AI Processing Active</strong>
+              <p className="text-sm mt-1">Using Ollama AI to analyze documents for vulnerabilities and OFCs...</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Status Overview - Side by Side Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
