@@ -53,7 +53,48 @@ export async function POST(request) {
       );
     }
 
-    // Prepare submission data (simplified to match working API)
+    // Save document file to Supabase Storage first
+    let savedFilePath = null;
+    try {
+      console.log('💾 Uploading document to Supabase Storage...');
+      
+      // Create a unique filename
+      const fileExtension = document.name.split('.').pop();
+      const baseName = document.name.replace(/\.[^/.]+$/, '');
+      const uniqueFileName = `${baseName}_${Date.now()}.${fileExtension}`;
+      
+      // Convert file to buffer
+      const buffer = await document.arrayBuffer();
+      
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabaseServer.storage
+        .from('documents')
+        .upload(uniqueFileName, buffer, {
+          contentType: document.type,
+          cacheControl: '3600',
+          upsert: false
+        });
+      
+      if (uploadError) {
+        console.error('❌ Error uploading to Supabase Storage:', uploadError);
+        return NextResponse.json({
+          success: false,
+          error: 'Failed to upload document to storage'
+        }, { status: 500 });
+      }
+      
+      savedFilePath = uploadData.path;
+      console.log('✅ Document uploaded to Supabase Storage:', savedFilePath);
+      
+    } catch (fileError) {
+      console.error('❌ Error saving document to storage:', fileError);
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to save document file'
+      }, { status: 500 });
+    }
+
+    // Prepare submission data with storage path
     const submissionData = {
       type: 'document',
       data: JSON.stringify({
@@ -65,45 +106,15 @@ export async function POST(request) {
         content_restriction: content_restriction || 'public',
         document_name: document.name,
         document_type: document.type,
-        document_size: document.size
-        // Note: Not storing document content for now to avoid size issues
+        document_size: document.size,
+        storage_path: savedFilePath, // Include the Supabase Storage path
+        storage_bucket: 'documents'
       }),
       status: 'pending_review',
       source: 'document_submission',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-
-    // Save document file to data/docs folder for document processor FIRST
-    let savedFilePath = null;
-    try {
-      const fs = require('fs');
-      const path = require('path');
-      
-      const docsDir = path.join(process.cwd(), 'data', 'docs');
-      if (!fs.existsSync(docsDir)) {
-        fs.mkdirSync(docsDir, { recursive: true });
-      }
-      
-      // Create a unique filename
-      const fileExtension = path.extname(document.name);
-      const baseName = path.basename(document.name, fileExtension);
-      const uniqueFileName = `${baseName}_${Date.now()}${fileExtension}`;
-      const docsFile = path.join(docsDir, uniqueFileName);
-      
-      // Save the file buffer to the docs folder
-      const buffer = await document.arrayBuffer();
-      fs.writeFileSync(docsFile, Buffer.from(buffer));
-      
-      savedFilePath = docsFile;
-      console.log('📄 Document saved to docs folder for processing:', docsFile);
-    } catch (fileError) {
-      console.error('❌ Error saving document to docs folder:', fileError);
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to save document file'
-      }, { status: 500 });
-    }
 
     // Insert into database
     console.log('💾 Attempting to insert submission data...');
