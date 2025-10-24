@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { fetchVulnerabilities, fetchVOFC } from '../lib/fetchVOFC';
 import { getCurrentUser, getUserProfile, canAccessAdmin } from '../lib/auth';
 import { supabase } from '../lib/supabaseClient';
+import APIHealthCards from '../components/APIHealthCards';
 import '../../styles/cisa.css';
 
 export default function AdminPage() {
@@ -339,6 +340,9 @@ export default function AdminPage() {
             <i className="fas fa-arrow-up"></i>
           </button>
         )}
+
+        {/* API Health Cards */}
+        <APIHealthCards />
       </div>
     </div>
   );
