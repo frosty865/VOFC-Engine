@@ -26,6 +26,7 @@ export default function OFCManagement() {
   const router = useRouter();
 
   useEffect(() => {
+    console.log('🚀 OFC Management useEffect triggered');
     checkAuth();
     loadOFCs();
   }, []);
@@ -58,9 +59,11 @@ export default function OFCManagement() {
 
   const loadOFCs = async () => {
     try {
+      console.log('🔄 loadOFCs called');
       setLoading(true);
       
       // Use API route for loading OFCs
+      console.log('📡 Making API call to /api/admin/ofcs');
       const response = await fetch('/api/admin/ofcs', {
         method: 'GET',
         headers: {
