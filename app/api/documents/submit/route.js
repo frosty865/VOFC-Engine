@@ -1,14 +1,19 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-// Use service role for API submissions to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+import { supabaseServer } from '../../lib/supabase-server';
 
 export async function POST(request) {
   try {
+    console.log('📄 Document submission API called');
+    
+    // Check if Supabase client is available
+    if (!supabaseServer) {
+      console.error('❌ Supabase server client not available');
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
+
     // Parse form data
     const formData = await request.formData();
     
@@ -22,18 +27,18 @@ export async function POST(request) {
     const document = formData.get('file'); // Frontend sends as 'file'
 
     // Debug logging
-    console.log('Form data received:');
-    console.log('source_title:', source_title);
-    console.log('source_type:', source_type);
-    console.log('source_url:', source_url);
-    console.log('author_org:', author_org);
-    console.log('publication_year:', publication_year);
-    console.log('content_restriction:', content_restriction);
-    console.log('document:', document ? `${document.name} (${document.size} bytes)` : 'null');
+    console.log('📋 Form data received:');
+    console.log('  source_title:', source_title);
+    console.log('  source_type:', source_type);
+    console.log('  source_url:', source_url);
+    console.log('  author_org:', author_org);
+    console.log('  publication_year:', publication_year);
+    console.log('  content_restriction:', content_restriction);
+    console.log('  document:', document ? `${document.name} (${document.size} bytes)` : 'null');
 
     // Validate required fields
     if (!source_title || !document) {
-      console.log('Validation failed: missing required fields');
+      console.log('❌ Validation failed: missing required fields');
       return NextResponse.json(
         { error: 'Missing required fields: source_title and document' },
         { status: 400 }
@@ -101,26 +106,38 @@ export async function POST(request) {
     }
 
     // Insert into database
-    console.log('Attempting to insert submission data:', JSON.stringify(submissionData, null, 2));
+    console.log('💾 Attempting to insert submission data...');
     
-    const { data: submission, error } = await supabase
-      .from('submissions')
-      .insert([submissionData])
-      .select()
-      .single();
+    try {
+      const { data: submission, error } = await supabaseServer
+        .from('submissions')
+        .insert([submissionData])
+        .select()
+        .single();
 
-    if (error) {
-      console.error('Database error:', error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
-      console.error('Submission data:', JSON.stringify(submissionData, null, 2));
-      
-      // File was saved successfully, so return success even if database fails
-      console.log('File saved successfully, returning success despite database error');
+      if (error) {
+        console.error('❌ Database error:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        
+        // Return success even if database fails
+        console.log('✅ File saved successfully, returning success despite database error');
+        return NextResponse.json({
+          success: true,
+          submission_id: 'temp-' + Date.now(),
+          status: 'pending_review',
+          message: 'Document submitted successfully (database error logged)',
+          file_path: savedFilePath
+        }, { status: 201 });
+      }
+
+      console.log('✅ Database insertion successful:', submission);
+    } catch (dbError) {
+      console.error('❌ Database connection error:', dbError);
       return NextResponse.json({
         success: true,
         submission_id: 'temp-' + Date.now(),
         status: 'pending_review',
-        message: 'Document submitted successfully (database error logged)',
+        message: 'Document submitted successfully (database unavailable)',
         file_path: savedFilePath
       }, { status: 201 });
     }
@@ -219,7 +236,7 @@ Please provide a structured JSON response with vulnerabilities and OFCs based on
               vulnerability_count: vulnCount
             };
 
-            await supabase
+            await supabaseServer
               .from('submissions')
               .update({
                 data: JSON.stringify(enhancedData),
