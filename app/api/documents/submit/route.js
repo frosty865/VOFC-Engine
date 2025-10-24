@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
-import { supabaseServer } from '../../../lib/supabase-server';
+import { getServerClient } from '../../../lib/supabase-manager';
 
 export async function POST(request) {
   try {
     console.log('📄 Document submission API called');
     
-    // Check if Supabase client is available
+    // Get Supabase server client
+    const supabaseServer = getServerClient();
     if (!supabaseServer) {
       console.error('❌ Supabase server client not available');
       return NextResponse.json(
