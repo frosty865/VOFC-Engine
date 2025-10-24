@@ -109,7 +109,7 @@ export default function SplashPage() {
           {/* Official CISA Logo */}
           <div style={{ marginBottom: '32px' }}>
             <img
-              src="/images/cisa-logo.png"
+              src="/images/cisa-logo.svg"
               alt="CISA Logo"
               style={{ height: '96px', width: 'auto', margin: '0 auto' }}
             />

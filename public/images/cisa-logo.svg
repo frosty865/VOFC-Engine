@@ -1,0 +1,14 @@
+<svg width="200" height="60" viewBox="0 0 200 60" xmlns="http://www.w3.org/2000/svg">
+  <!-- CISA Logo SVG -->
+  <rect width="200" height="60" fill="#1a365d" rx="4"/>
+  
+  <!-- CISA Text -->
+  <text x="100" y="35" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="white">
+    CISA
+  </text>
+  
+  <!-- Subtitle -->
+  <text x="100" y="50" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#a0aec0">
+    Cybersecurity & Infrastructure Security Agency
+  </text>
+</svg>

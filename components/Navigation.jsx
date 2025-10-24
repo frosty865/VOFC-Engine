@@ -120,10 +120,18 @@ export default function Navigation({ simple = false }) {
         }}>
           <Link href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>
             <img
-              src="/images/cisa-logo.png"
+              src="/images/cisa-logo.svg"
               alt="CISA Logo"
               style={{ height: '40px', width: 'auto', marginRight: 'var(--spacing-md)' }}
+              onError={(e) => {
+                // Fallback to text if image fails to load
+                e.target.style.display = 'none';
+                e.target.nextSibling.style.display = 'block';
+              }}
             />
+            <div style={{ display: 'none', height: '40px', lineHeight: '40px', fontSize: '18px', fontWeight: 'bold', color: '#1a365d' }}>
+              CISA
+            </div>
             <div className="logo-text">
               <h1 style={{
                 margin: '0',
