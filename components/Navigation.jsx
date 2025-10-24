@@ -119,18 +119,26 @@ export default function Navigation({ simple = false }) {
           gap: 'var(--spacing-md)'
         }}>
           <Link href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>
-            <img
-              src="/images/cisa-logo.svg"
-              alt="CISA Logo"
-              style={{ height: '40px', width: 'auto', marginRight: 'var(--spacing-md)' }}
-              onError={(e) => {
-                // Fallback to text if image fails to load
-                e.target.style.display = 'none';
-                e.target.nextSibling.style.display = 'block';
-              }}
-            />
-            <div style={{ display: 'none', height: '40px', lineHeight: '40px', fontSize: '18px', fontWeight: 'bold', color: '#1a365d' }}>
-              CISA
+            {/* CISA Shield Logo */}
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              marginRight: 'var(--spacing-md)',
+              height: '40px'
+            }}>
+              <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style={{stopColor:'#ffffff',stopOpacity:1}} />
+                    <stop offset="100%" style={{stopColor:'#f8f9fa',stopOpacity:1}} />
+                  </linearGradient>
+                </defs>
+                <path d="M20 5 L30 2 L35 5 L35 15 L32 25 L20 35 L8 25 L5 15 L5 5 L10 2 Z" 
+                      fill="url(#shieldGradient)" 
+                      stroke="#ffffff" 
+                      strokeWidth="1"/>
+                <text x="20" y="22" fontFamily="Arial, sans-serif" fontSize="8" fontWeight="bold" fill="#1a365d" textAnchor="middle">CISA</text>
+              </svg>
             </div>
             <div className="logo-text">
               <h1 style={{

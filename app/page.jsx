@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser } from './lib/auth';
 import { fetchVulnerabilities } from './lib/fetchVOFC';
+import '../styles/cisa.css';
 
 export default function VOFCViewer() {
   const router = useRouter();

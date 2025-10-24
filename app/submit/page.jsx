@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 import { getCurrentUser, getUserProfile, canSubmitVOFC } from '../lib/auth';
 import { fetchSectors, fetchSubsectors, fetchSubsectorsBySector } from '../lib/fetchVOFC';
 import SessionTimeoutWarning from '../../components/SessionTimeoutWarning';
+import '../styles/cisa.css';
 
 export default function VOFCSubmission() {
   const [currentUser, setCurrentUser] = useState(null);
