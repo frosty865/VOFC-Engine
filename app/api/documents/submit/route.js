@@ -171,7 +171,8 @@ Extract the following information:
 1. Vulnerabilities: Security weaknesses, risks, or threats mentioned in the document
 2. Options for Consideration (OFCs): Mitigation strategies, recommendations, or actions to address vulnerabilities
 
-Return your analysis as a JSON object with this structure:
+IMPORTANT: Return ONLY a valid JSON object with this exact structure. Do not include any markdown formatting, explanations, or additional text. Just the raw JSON:
+
 {
   "vulnerabilities": [
     {
@@ -225,7 +226,29 @@ Please provide a structured JSON response with vulnerabilities and OFCs based on
         
         if (ollamaContent) {
           try {
-            const parsedResult = JSON.parse(ollamaContent);
+            // Extract JSON from markdown-formatted response
+            let jsonContent = ollamaContent;
+            
+            // Remove markdown code blocks if present
+            if (jsonContent.includes('```json')) {
+              const jsonMatch = jsonContent.match(/```json\s*([\s\S]*?)\s*```/);
+              if (jsonMatch) {
+                jsonContent = jsonMatch[1];
+              }
+            } else if (jsonContent.includes('```')) {
+              const jsonMatch = jsonContent.match(/```\s*([\s\S]*?)\s*```/);
+              if (jsonMatch) {
+                jsonContent = jsonMatch[1];
+              }
+            }
+            
+            // Try to find JSON object in the response
+            const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              jsonContent = jsonMatch[0];
+            }
+            
+            const parsedResult = JSON.parse(jsonContent);
             console.log('✅ Ollama analysis completed successfully');
             
             const ofcCount = parsedResult.options_for_consideration?.length || 0;
