@@ -304,10 +304,10 @@ Content: ${content}`;
   }
 
   const data = await response.json();
-  const content = data.message?.content || data.response;
+  const responseContent = data.message?.content || data.response;
   
   // Extract JSON and calculate confidence
-  let jsonContent = content;
+  let jsonContent = responseContent;
   if (jsonContent.includes('```json')) {
     const match = jsonContent.match(/```json\s*([\s\S]*?)\s*```/);
     if (match) jsonContent = match[1];
