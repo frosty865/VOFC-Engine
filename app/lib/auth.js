@@ -1,33 +1,18 @@
 // Simple auth functions for admin pages
 export const getCurrentUser = async () => {
   try {
-    // Use Supabase Auth directly instead of custom JWT
-    const { createClient } = await import('./supabaseClient');
-    const supabase = createClient();
+    const response = await fetch('/api/auth/verify', {
+      method: 'GET',
+      credentials: 'include'
+    });
     
-    const { data: { user }, error } = await supabase.auth.getUser();
-    
-    if (error || !user) {
-      return null;
+    if (response.ok) {
+      const result = await response.json();
+      if (result.success) {
+        return result.user;
+      }
     }
-    
-    // Map user email to role
-    const roleMap = {
-      'admin@vofc.gov': 'admin',
-      'spsa@vofc.gov': 'spsa', 
-      'psa@vofc.gov': 'psa',
-      'analyst@vofc.gov': 'analyst'
-    };
-
-    const role = roleMap[user.email] || 'user';
-    const name = user.user_metadata?.name || user.email.split('@')[0];
-    
-    return {
-      id: user.id,
-      email: user.email,
-      role: role,
-      name: name
-    };
+    return null;
   } catch (error) {
     console.error('Error getting current user:', error);
     return null;
