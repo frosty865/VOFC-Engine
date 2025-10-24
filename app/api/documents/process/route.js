@@ -56,6 +56,22 @@ export async function POST(request) {
           });
         }
         
+        // Check if extracted text looks like actual content (not PDF metadata)
+        const hasReadableContent = /[a-zA-Z]{3,}/.test(extractedText) && 
+                                  !extractedText.includes('endstream') && 
+                                  !extractedText.includes('endobj') &&
+                                  extractedText.length > 50;
+        
+        if (!hasReadableContent) {
+          return NextResponse.json({
+            success: false,
+            error: 'PDF file contains only metadata or unreadable content.',
+            filename: filename,
+            file_type: 'PDF',
+            suggestion: 'The PDF may be image-based or corrupted. Try using a text-based PDF.'
+          });
+        }
+        
         console.log(`📄 Successfully extracted ${extractedText.length} characters from PDF`);
         documentContent = extractedText; // Send extracted text to Ollama
       } else {
@@ -187,7 +203,7 @@ async function extractTextFromPDF(buffer) {
     const content = buffer.toString('binary');
     let extractedText = '';
     
-    // Method 1: Extract text from PDF text objects (BT...ET)
+    // Method 1: Extract text from PDF text objects (BT...ET) - more selective
     const textMatches = content.match(/BT\s*(.*?)\s*ET/gs);
     if (textMatches && textMatches.length > 0) {
       for (const match of textMatches) {
@@ -197,14 +213,20 @@ async function extractTextFromPDF(buffer) {
           .replace(/\s+/g, ' ')
           .trim();
         
-        if (textContent.length > 3) {
+        // Only include text that looks like actual content (not PDF metadata)
+        if (textContent.length > 10 && 
+            !textContent.includes('endstream') && 
+            !textContent.includes('endobj') && 
+            !textContent.includes('obj Length') &&
+            !textContent.includes('stream') &&
+            !/^[0-9\s]+$/.test(textContent)) {
           extractedText += textContent + ' ';
         }
       }
     }
     
-    // Method 2: Extract from PDF streams
-    if (!extractedText || extractedText.length < 50) {
+    // Method 2: Look for actual document content in streams (skip metadata)
+    if (!extractedText || extractedText.length < 100) {
       const streamMatches = content.match(/stream\s*(.*?)\s*endstream/gs);
       if (streamMatches) {
         for (const stream of streamMatches) {
@@ -214,28 +236,49 @@ async function extractTextFromPDF(buffer) {
             .replace(/\s+/g, ' ')
             .trim();
           
-          if (streamContent.length > 10) {
+          // Filter out PDF metadata and keep only readable content
+          if (streamContent.length > 20 && 
+              !streamContent.includes('endstream') && 
+              !streamContent.includes('endobj') && 
+              !streamContent.includes('obj Length') &&
+              !streamContent.includes('stream') &&
+              !/^[0-9\s]+$/.test(streamContent) &&
+              /[a-zA-Z]{3,}/.test(streamContent)) { // Must contain actual words
             extractedText += streamContent + ' ';
           }
         }
       }
     }
     
-    // Method 3: Extract any readable text
-    if (!extractedText || extractedText.length < 50) {
+    // Method 3: Extract readable text, filtering out PDF structure
+    if (!extractedText || extractedText.length < 100) {
       const readableText = content
         .replace(/[^\w\s.,;:!?()-]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
       
-      if (readableText.length > 50) {
-        extractedText = readableText;
+      // Filter out PDF metadata patterns
+      const filteredText = readableText
+        .split(' ')
+        .filter(word => 
+          word.length > 2 && 
+          !word.includes('endstream') && 
+          !word.includes('endobj') && 
+          !word.includes('obj') &&
+          !word.includes('stream') &&
+          !/^[0-9]+$/.test(word)
+        )
+        .join(' ');
+      
+      if (filteredText.length > 100) {
+        extractedText = filteredText;
       }
     }
     
-    // Clean up the extracted text
+    // Final cleanup - remove any remaining PDF artifacts
     if (extractedText) {
       extractedText = extractedText
+        .replace(/\b(endstream|endobj|obj|stream|Length)\b/g, '')
         .replace(/\s+/g, ' ')
         .replace(/^\s+|\s+$/g, '')
         .trim();
