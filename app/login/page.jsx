@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
-import '../styles/cisa.css';
+import '../../styles/cisa.css';
 
 export default function Login() {
   const [username, setUsername] = useState('');
