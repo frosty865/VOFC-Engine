@@ -17,14 +17,41 @@ export default function Login() {
 
     try {
       if (isSignUp) {
-        // For signup, we'll use username@vofc.gov as email
+        // For signup, we'll use the same custom JWT authentication
         const email = `${username}@vofc.gov`;
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
+        
+        console.log('Attempting signup with:', { email, password });
+        
+        // Use custom JWT authentication for signup too
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password, action: 'signup' }),
         });
-        if (error) throw error;
-        alert('Check your email for the confirmation link!');
+        
+        // Check if response is ok before parsing JSON
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        console.log('Signup response:', result);
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Signup failed');
+        }
+        
+        console.log('Signup successful:', result);
+        alert('Account created successfully! You are now logged in.');
+        
+        // Wait a moment for the session to be established
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        console.log('Redirecting to home page...');
+        router.push('/');
       } else {
         // For login, construct email from username
         const email = `${username}@vofc.gov`;
@@ -39,6 +66,11 @@ export default function Login() {
           },
           body: JSON.stringify({ email, password }),
         });
+        
+        // Check if response is ok before parsing JSON
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
         
         const result = await response.json();
         
