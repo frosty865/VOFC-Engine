@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import '../styles/cisa.css';
+import '../../styles/cisa.css';
 
 export default function DocumentProcessor() {
   const [documents, setDocuments] = useState([]);
