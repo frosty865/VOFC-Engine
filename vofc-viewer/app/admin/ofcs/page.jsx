@@ -66,7 +66,7 @@ export default function OFCManagement() {
           *,
           ofc_sources (
             sources (
-              "reference number",
+              reference_number,
               authors,
               title,
               publication,
