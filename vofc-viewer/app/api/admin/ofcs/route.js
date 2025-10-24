@@ -5,16 +5,26 @@ import { AuthService } from '../../../lib/auth-server';
 // Get all OFCs (admin only)
 export async function GET(request) {
   try {
+    // Debug: Log all cookies
+    const allCookies = request.cookies.getAll();
+    console.log('🍪 All cookies received:', allCookies.map(c => ({ name: c.name, value: c.value.substring(0, 20) + '...' })));
+    
     // Verify authentication
     const token = request.cookies.get('auth-token')?.value;
+    console.log('🔑 Auth token received:', token ? token.substring(0, 20) + '...' : 'NO TOKEN');
+    
     if (!token) {
+      console.log('❌ No auth token found');
       return NextResponse.json(
         { success: false, error: 'Authentication required' },
         { status: 401 }
       );
     }
 
+    console.log('🔍 Verifying token...');
     const authResult = await AuthService.verifyToken(token);
+    console.log('🔍 Auth result:', authResult.success ? 'SUCCESS' : 'FAILED', authResult.error || '');
+    
     if (!authResult.success) {
       return NextResponse.json(
         { success: false, error: authResult.error },
@@ -22,8 +32,8 @@ export async function GET(request) {
       );
     }
 
-    // Check if user has admin access (admin, spsa, or analyst)
-    if (!['admin', 'spsa', 'analyst'].includes(authResult.user.role)) {
+    // Check if user has admin access (admin, spsa, psa, or analyst)
+    if (!['admin', 'spsa', 'psa', 'analyst'].includes(authResult.user.role)) {
       return NextResponse.json(
         { success: false, error: 'Admin access required' },
         { status: 403 }
@@ -74,8 +84,8 @@ export async function PUT(request) {
       );
     }
 
-    // Check if user has admin access (admin, spsa, or analyst)
-    if (!['admin', 'spsa', 'analyst'].includes(authResult.user.role)) {
+    // Check if user has admin access (admin, spsa, psa, or analyst)
+    if (!['admin', 'spsa', 'psa', 'analyst'].includes(authResult.user.role)) {
       return NextResponse.json(
         { success: false, error: 'Admin access required' },
         { status: 403 }
@@ -159,8 +169,8 @@ export async function DELETE(request) {
       );
     }
 
-    // Check if user has admin access (admin, spsa, or analyst)
-    if (!['admin', 'spsa', 'analyst'].includes(authResult.user.role)) {
+    // Check if user has admin access (admin, spsa, psa, or analyst)
+    if (!['admin', 'spsa', 'psa', 'analyst'].includes(authResult.user.role)) {
       return NextResponse.json(
         { success: false, error: 'Admin access required' },
         { status: 403 }

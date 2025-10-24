@@ -1,34 +1,50 @@
 // Server-side auth functions for API routes
 import { createClient } from '@supabase/supabase-js';
+import { jwtVerify } from 'jose';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// Secret key for JWT verification (must match the one used for signing)
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production'
+);
+
 export class AuthService {
   static async verifyToken(token) {
     try {
+      console.log('🔍 AuthService.verifyToken called with token:', token ? token.substring(0, 20) + '...' : 'NO TOKEN');
+      
       if (!token) {
+        console.log('❌ No token provided to AuthService');
         return { success: false, error: 'No token provided' };
       }
 
-      // Verify JWT token
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/user`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY
-        }
-      });
+      console.log('🔍 Attempting JWT verification...');
+      // Verify our custom JWT token
+      const { payload } = await jwtVerify(token, JWT_SECRET);
+      console.log('🔍 JWT payload:', payload);
 
-      if (!response.ok) {
+      // Check if token is expired (JWT handles this automatically)
+      if (!payload || !payload.email) {
+        console.log('❌ Invalid payload or missing email');
         return { success: false, error: 'Invalid token' };
       }
 
-      const user = await response.json();
-      return { success: true, user };
+      console.log('✅ Token verification successful for user:', payload.email);
+      return { 
+        success: true, 
+        user: {
+          id: payload.userId,
+          email: payload.email,
+          role: payload.role,
+          name: payload.name
+        }
+      };
     } catch (error) {
-      console.error('Token verification error:', error);
+      console.error('❌ Token verification error:', error);
       return { success: false, error: 'Token verification failed' };
     }
   }
