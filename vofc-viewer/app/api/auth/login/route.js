@@ -78,7 +78,7 @@ export async function POST(request) {
     
     const { data: profile, error: profileError } = await freshServiceSupabase
       .from('user_profiles')
-      .select('role, first_name, last_name, organization, is_active')
+      .select('role, first_name, last_name, organization, is_active, username')
       .eq('user_id', data.user.id)
       .single();
 
