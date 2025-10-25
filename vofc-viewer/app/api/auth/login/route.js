@@ -97,16 +97,39 @@ export async function POST(request) {
       );
     }
 
-    return NextResponse.json({
+    // Set the Supabase session cookies
+    const response = NextResponse.json({
       success: true,
       user: {
         id: data.user.id,
         email: data.user.email,
         role: profile.role,
         name: `${profile.first_name} ${profile.last_name}`,
-        organization: profile.organization
+        organization: profile.organization,
+        username: profile.username
       }
     });
+
+    // Set the access token and refresh token as HTTP-only cookies
+    if (data.session?.access_token) {
+      response.cookies.set('sb-access-token', data.session.access_token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 7 // 7 days
+      });
+    }
+
+    if (data.session?.refresh_token) {
+      response.cookies.set('sb-refresh-token', data.session.refresh_token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30 // 30 days
+      });
+    }
+
+    return response;
 
   } catch (error) {
     console.error('Login error:', error);
