@@ -1,10 +1,26 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { createClient } from '@supabase/supabase-js';
+
+// Use service role for API operations to bypass RLS
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 export async function POST(request) {
   try {
-    const { filename } = await request.json();
+    let requestData;
+    try {
+      requestData = await request.json();
+    } catch (jsonError) {
+      console.error('JSON parsing error:', jsonError);
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
+    
+    const { filename } = requestData;
     
     if (!filename) {
       return NextResponse.json(
@@ -13,59 +29,89 @@ export async function POST(request) {
       );
     }
     
-    // Define paths
-    const docsPath = path.join(process.cwd(), 'data', 'docs');
-    const processingPath = path.join(process.cwd(), 'data', 'processing');
-    const completedPath = path.join(process.cwd(), 'data', 'completed');
-    const failedPath = path.join(process.cwd(), 'data', 'failed');
-    const backendPath = path.join(process.cwd(), 'apps', 'backend');
+    // Define storage paths
+    const sourcePath = `documents/${filename}`;
+    const processingPath = `processing/${filename}`;
+    const completedPath = `parsed/${filename}`;
     
-    // Create directories if they don't exist
-    [processingPath, completedPath, failedPath].forEach(dir => {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-    });
+    // Check if source file exists in storage
+    const { data: sourceFile, error: sourceError } = await supabase.storage
+      .from('vofc_seed')
+      .list('documents', {
+        search: filename
+      });
     
-    const sourceFile = path.join(docsPath, filename);
-    const processingFile = path.join(processingPath, filename);
-    
-    // Check if source file exists
-    if (!fs.existsSync(sourceFile)) {
+    if (sourceError || !sourceFile || sourceFile.length === 0) {
       return NextResponse.json(
-        { success: false, error: 'Source file not found' },
+        { success: false, error: 'Source file not found in storage' },
         { status: 404 }
       );
     }
     
     try {
-      // Move file to processing folder
-      fs.renameSync(sourceFile, processingFile);
+      // Download file from storage for processing
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from('vofc_seed')
+        .download(sourcePath);
       
-      // Parse document content
-      const documentContent = await parseDocumentContent(processingFile);
+      if (downloadError) {
+        throw new Error(`Failed to download file: ${downloadError.message}`);
+      }
+      
+      // Convert blob to buffer for processing
+      const buffer = await fileData.arrayBuffer();
+      
+      // Parse document content from buffer
+      const documentContent = await parseDocumentContent(buffer, filename);
       
       // Try to use the Python parser if available
       let parsedData = null;
       try {
-        parsedData = await runOllamaParser(processingFile);
+        parsedData = await runOllamaParser(buffer, filename);
       } catch (parserError) {
         console.log('Python parser not available, using basic parsing:', parserError.message);
-        parsedData = await basicDocumentParse(processingFile);
+        parsedData = await basicDocumentParse(buffer, filename);
       }
       
-      // Move to completed folder
-      const completedFile = path.join(completedPath, filename);
-      fs.renameSync(processingFile, completedFile);
+      // Upload processed file to completed folder
+      const { error: uploadError } = await supabase.storage
+        .from('vofc_seed')
+        .upload(completedPath, buffer, {
+          cacheControl: '3600',
+          upsert: true
+        });
       
-      // Save parsed data
-      const metadataFile = path.join(completedPath, `${filename}.metadata.json`);
-      fs.writeFileSync(metadataFile, JSON.stringify({
+      if (uploadError) {
+        throw new Error(`Failed to upload processed file: ${uploadError.message}`);
+      }
+      
+      // Save parsed data as metadata
+      const metadataContent = JSON.stringify({
         filename,
         processed_at: new Date().toISOString(),
         content: documentContent,
         parsed_data: parsedData
-      }, null, 2));
+      }, null, 2);
+      
+      const { error: metadataError } = await supabase.storage
+        .from('vofc_seed')
+        .upload(`parsed/${filename}.metadata.json`, metadataContent, {
+          cacheControl: '3600',
+          upsert: true
+        });
+      
+      if (metadataError) {
+        console.warn('Failed to save metadata:', metadataError.message);
+      }
+      
+      // Remove from documents folder (move to processed)
+      const { error: removeError } = await supabase.storage
+        .from('vofc_seed')
+        .remove([sourcePath]);
+      
+      if (removeError) {
+        console.warn('Failed to remove source file:', removeError.message);
+      }
       
       return NextResponse.json({
         success: true,
@@ -80,10 +126,20 @@ export async function POST(request) {
       });
       
     } catch (processError) {
-      // If processing fails, move to failed folder
-      const failedFile = path.join(failedPath, filename);
-      if (fs.existsSync(processingFile)) {
-        fs.renameSync(processingFile, failedFile);
+      // If processing fails, move to failed folder in storage
+      try {
+        const { error: failedUploadError } = await supabase.storage
+          .from('vofc_seed')
+          .upload(`failed/${filename}`, buffer, {
+            cacheControl: '3600',
+            upsert: true
+          });
+        
+        if (failedUploadError) {
+          console.error('Failed to move file to failed folder:', failedUploadError.message);
+        }
+      } catch (failedError) {
+        console.error('Error moving file to failed folder:', failedError.message);
       }
       
       return NextResponse.json(
@@ -101,19 +157,31 @@ export async function POST(request) {
   }
 }
 
-async function parseDocumentContent(filePath) {
+async function parseDocumentContent(buffer, filename) {
   try {
-    const fileContent = fs.readFileSync(filePath, 'utf8');
-    return fileContent;
+    // Convert buffer to text based on file type
+    const fileExtension = filename.split('.').pop().toLowerCase();
+    
+    if (fileExtension === 'pdf') {
+      // For PDF files, we'll need to extract text
+      // This is a simplified version - in production you'd use a PDF parser
+      return 'PDF content extraction not implemented yet';
+    } else if (['txt', 'md', 'json'].includes(fileExtension)) {
+      // For text files, convert buffer to string
+      return Buffer.from(buffer).toString('utf8');
+    } else {
+      // For other file types, try to extract text
+      return Buffer.from(buffer).toString('utf8');
+    }
   } catch (error) {
-    throw new Error(`Failed to read file: ${error.message}`);
+    throw new Error(`Failed to parse document content: ${error.message}`);
   }
 }
 
-async function runOllamaParser(filePath) {
+async function runOllamaParser(buffer, filename) {
   try {
-    const documentContent = fs.readFileSync(filePath, 'utf8');
-    const ollamaBaseUrl = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+    const documentContent = await parseDocumentContent(buffer, filename);
+    const ollamaBaseUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
     const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
     
     // Create system prompt for vulnerability and OFC extraction
@@ -188,14 +256,14 @@ Please provide a structured JSON response with vulnerabilities and OFCs.`;
   }
 }
 
-async function basicDocumentParse(filePath) {
-  const basicContent = fs.readFileSync(filePath, 'utf8');
+async function basicDocumentParse(buffer, filename) {
+  const basicContent = await parseDocumentContent(buffer, filename);
   
   // Basic parsing logic
   const lines = basicContent.split('\n').filter(line => line.trim());
   
   // Extract title (first non-empty line or filename)
-  const title = lines[0] || path.basename(filePath, path.extname(filePath));
+  const title = lines[0] || filename.replace(/\.[^/.]+$/, '');
   
   // Look for vulnerabilities and OFCs
   const vulnerabilities = [];

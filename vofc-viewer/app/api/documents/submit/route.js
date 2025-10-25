@@ -9,8 +9,26 @@ const supabase = createClient(
 
 export async function POST(request) {
   try {
+    // Check content type
+    const contentType = request.headers.get('content-type');
+    if (!contentType || !contentType.includes('multipart/form-data')) {
+      return NextResponse.json(
+        { success: false, error: 'Content-Type must be multipart/form-data' },
+        { status: 400 }
+      );
+    }
+    
     // Parse form data
-    const formData = await request.formData();
+    let formData;
+    try {
+      formData = await request.formData();
+    } catch (formError) {
+      console.error('FormData parsing error:', formError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to parse form data' },
+        { status: 400 }
+      );
+    }
     
     // Extract form fields
     const source_title = formData.get('source_title');
@@ -69,31 +87,37 @@ export async function POST(request) {
       updated_at: new Date().toISOString()
     };
 
-    // Save document file to data/docs folder for document processor FIRST
+    // Save document file to Supabase storage bucket for document processor
     let savedFilePath = null;
     try {
-      const fs = require('fs');
-      const path = require('path');
+      // Create a unique filename
+      const fileExtension = document.name.split('.').pop();
+      const baseName = document.name.replace(/\.[^/.]+$/, '');
+      const uniqueFileName = `${baseName}_${Date.now()}.${fileExtension}`;
       
-      const docsDir = path.join(process.cwd(), 'data', 'docs');
-      if (!fs.existsSync(docsDir)) {
-        fs.mkdirSync(docsDir, { recursive: true });
+      // Convert file to buffer
+      const buffer = await document.arrayBuffer();
+      
+      // Upload to Supabase storage bucket
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('vofc_seed')
+        .upload(`documents/${uniqueFileName}`, buffer, {
+          cacheControl: '3600',
+          upsert: false
+        });
+      
+      if (uploadError) {
+        console.error('❌ Error uploading to Supabase storage:', uploadError);
+        return NextResponse.json({
+          success: false,
+          error: 'Failed to upload document to storage'
+        }, { status: 500 });
       }
       
-      // Create a unique filename
-      const fileExtension = path.extname(document.name);
-      const baseName = path.basename(document.name, fileExtension);
-      const uniqueFileName = `${baseName}_${Date.now()}${fileExtension}`;
-      const docsFile = path.join(docsDir, uniqueFileName);
-      
-      // Save the file buffer to the docs folder
-      const buffer = await document.arrayBuffer();
-      fs.writeFileSync(docsFile, Buffer.from(buffer));
-      
-      savedFilePath = docsFile;
-      console.log('📄 Document saved to docs folder for processing:', docsFile);
+      savedFilePath = uploadData.path;
+      console.log('📄 Document saved to Supabase storage:', uploadData.path);
     } catch (fileError) {
-      console.error('❌ Error saving document to docs folder:', fileError);
+      console.error('❌ Error saving document to storage:', fileError);
       return NextResponse.json({
         success: false,
         error: 'Failed to save document file'
@@ -131,7 +155,7 @@ export async function POST(request) {
     try {
       console.log('🤖 Processing document with Ollama...');
       
-      const ollamaBaseUrl = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+      const ollamaBaseUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
       const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
       
       // Create system prompt for document analysis
