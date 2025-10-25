@@ -1,49 +1,98 @@
 import { NextResponse } from 'next/server';
-import { jwtVerify } from 'jose';
+import { createClient } from '@supabase/supabase-js';
 
-// Secret key for JWT verification (must match the one used for signing)
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production'
-);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error('Missing Supabase environment variables');
+}
 
 export async function GET(request) {
   try {
-    const token = request.cookies.get('auth-token')?.value;
-
-    if (!token) {
+    // Get the authorization header
+    const authHeader = request.headers.get('authorization');
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
-        { success: false, error: 'No authentication token' },
+        { success: false, error: 'No authorization token provided' },
         { status: 401 }
       );
     }
 
-    // Verify and decode the JWT token
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
-    // Check if token is expired (JWT handles this automatically)
-    if (!payload || !payload.email) {
+    // Create service role client for token verification
+    const serviceSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
+    );
+
+    // Verify the JWT token
+    const { data: { user }, error: authError } = await serviceSupabase.auth.getUser(token);
+
+    if (authError || !user) {
       return NextResponse.json(
         { success: false, error: 'Invalid token' },
         { status: 401 }
       );
     }
 
+    // Get user profile using fresh service client (to avoid RLS recursion)
+    const freshServiceSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
+    );
+
+    const { data: profile, error: profileError } = await freshServiceSupabase
+      .from('user_profiles')
+      .select('role, first_name, last_name, organization, is_active, username')
+      .eq('user_id', user.id)
+      .single();
+
+    if (profileError || !profile) {
+      return NextResponse.json(
+        { success: false, error: 'User profile not found' },
+        { status: 401 }
+      );
+    }
+
+    if (!profile.is_active) {
+      return NextResponse.json(
+        { success: false, error: 'Account is inactive' },
+        { status: 401 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
       user: {
-        id: payload.userId,
-        email: payload.email,
-        role: payload.role,
-        name: payload.name
+        id: user.id,
+        email: user.email,
+        role: profile.role,
+        name: `${profile.first_name} ${profile.last_name}`,
+        organization: profile.organization,
+        username: profile.username
       }
     });
 
   } catch (error) {
-    console.error('JWT verification error:', error);
+    console.error('Auth verify error:', error);
     return NextResponse.json(
-      { success: false, error: 'Token verification failed' },
-      { status: 401 }
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
     );
   }
 }
