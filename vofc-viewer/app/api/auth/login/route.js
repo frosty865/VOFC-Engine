@@ -53,10 +53,16 @@ export async function POST(request) {
       );
     }
 
-    // Get user profile from user_profiles table using service role
+    // Get user profile from user_profiles table using service role with fresh config
     const serviceSupabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
     );
     
     const { data: profile, error: profileError } = await serviceSupabase
