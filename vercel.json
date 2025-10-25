@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "vofc-viewer/vofc-viewer/package.json",
+      "src": "vofc-viewer/package.json",
       "use": "@vercel/next"
     }
   ]
