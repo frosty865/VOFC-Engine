@@ -1,8 +1,11 @@
 {
   "version": 2,
   "framework": "nextjs",
+  "buildCommand": "cd vofc-viewer && npm run build",
+  "outputDirectory": "vofc-viewer/.next",
+  "installCommand": "cd vofc-viewer && npm install",
   "functions": {
-    "app/api/**/*.js": {
+    "vofc-viewer/app/api/**/*.js": {
       "maxDuration": 30
     }
   }
