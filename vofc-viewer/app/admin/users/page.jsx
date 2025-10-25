@@ -50,8 +50,8 @@ export default function UserManagement() {
       setCurrentUser(user);
       setUserRole(user.role);
 
-      // Only admin can manage users
-      if (user.role !== 'admin') {
+      // Only admin and spsa can manage users
+      if (!['admin', 'spsa'].includes(user.role)) {
         router.push('/');
         return;
       }
