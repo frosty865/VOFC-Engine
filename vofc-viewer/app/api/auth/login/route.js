@@ -53,8 +53,13 @@ export async function POST(request) {
       );
     }
 
-    // Get user profile from user_profiles table
-    const { data: profile, error: profileError } = await supabase
+    // Get user profile from user_profiles table using service role
+    const serviceSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+    
+    const { data: profile, error: profileError } = await serviceSupabase
       .from('user_profiles')
       .select('role, first_name, last_name, organization, is_active')
       .eq('user_id', data.user.id)

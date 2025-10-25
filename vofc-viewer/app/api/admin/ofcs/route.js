@@ -1,6 +1,16 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '../../../lib/supabaseClient';
+import { createClient } from '@supabase/supabase-js';
 import { AuthService } from '../../../lib/auth-server';
+
+// Create server client with service role key for admin operations
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error('Missing Supabase environment variables');
+}
+
+const supabaseServer = createClient(supabaseUrl, supabaseServiceKey);
 
 // Get all OFCs (admin only)
 export async function GET(request) {
@@ -22,8 +32,8 @@ export async function GET(request) {
       );
     }
 
-    // Check if user has admin access (admin, spsa, or analyst)
-    if (!['admin', 'spsa', 'analyst'].includes(authResult.user.role)) {
+    // Check if user has admin access (admin or spsa only)
+    if (!['admin', 'spsa'].includes(authResult.user.role)) {
       return NextResponse.json(
         { success: false, error: 'Admin access required' },
         { status: 403 }
@@ -31,7 +41,14 @@ export async function GET(request) {
     }
 
     // Get all OFCs
-    const { data: options_for_consideration, error } = await supabase
+    if (!supabaseServer) {
+      return NextResponse.json(
+        { success: false, error: 'Database connection failed' },
+        { status: 500 }
+      );
+    }
+    
+    const { data: options_for_consideration, error } = await supabaseServer
       .from('options_for_consideration')
       .select('*')
       .order('option_text');
@@ -74,8 +91,8 @@ export async function PUT(request) {
       );
     }
 
-    // Check if user has admin access (admin, spsa, or analyst)
-    if (!['admin', 'spsa', 'analyst'].includes(authResult.user.role)) {
+    // Check if user has admin access (admin or spsa only)
+    if (!['admin', 'spsa'].includes(authResult.user.role)) {
       return NextResponse.json(
         { success: false, error: 'Admin access required' },
         { status: 403 }
@@ -98,14 +115,19 @@ export async function PUT(request) {
     }
 
     // Update OFC
-    const { data: ofc, error } = await supabase
+    if (!supabaseServer) {
+      return NextResponse.json(
+        { success: false, error: 'Database connection failed' },
+        { status: 500 }
+      );
+    }
+    
+    const { data: ofc, error } = await supabaseServer
       .from('options_for_consideration')
       .update({
         option_text,
         discipline,
         source,
-        id,
-        id,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
@@ -161,8 +183,8 @@ export async function DELETE(request) {
       );
     }
 
-    // Check if user has admin access (admin, spsa, or analyst)
-    if (!['admin', 'spsa', 'analyst'].includes(authResult.user.role)) {
+    // Check if user has admin access (admin or spsa only)
+    if (!['admin', 'spsa'].includes(authResult.user.role)) {
       return NextResponse.json(
         { success: false, error: 'Admin access required' },
         { status: 403 }
@@ -180,7 +202,14 @@ export async function DELETE(request) {
     }
 
     // Delete OFC
-    const { error } = await supabase
+    if (!supabaseServer) {
+      return NextResponse.json(
+        { success: false, error: 'Database connection failed' },
+        { status: 500 }
+      );
+    }
+    
+    const { error } = await supabaseServer
       .from('options_for_consideration')
       .delete()
       .eq('id', id);

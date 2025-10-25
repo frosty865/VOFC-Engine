@@ -88,7 +88,7 @@ export async function POST(request) {
       console.log('🤖 Running Ollama API for document analysis...');
       console.log(`📊 Processing submission ${submission.id} with Ollama...`);
       
-      const ollamaBaseUrl = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+      const ollamaBaseUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
       const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
       
       // Create system prompt for vulnerability and OFC extraction

@@ -369,16 +369,34 @@ export default function OFCManagement() {
                   </div>
                   <div className="flex space-x-2 ml-4">
                     <button
-                      onClick={() => handleEditOFC(ofc)}
+                      onClick={() => {
+                        console.log('🔧 Edit button clicked for OFC:', ofc.id);
+                        handleEditOFC(ofc);
+                      }}
                       className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                      style={{ 
+                        minWidth: '60px', 
+                        minHeight: '30px',
+                        border: '2px solid blue',
+                        cursor: 'pointer'
+                      }}
                     >
-                      Edit
+                      ✏️ Edit
                     </button>
                     <button
-                      onClick={() => handleDeleteOFC(ofc.id)}
+                      onClick={() => {
+                        console.log('🗑️ Delete button clicked for OFC:', ofc.id);
+                        handleDeleteOFC(ofc.id);
+                      }}
                       className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
+                      style={{ 
+                        minWidth: '60px', 
+                        minHeight: '30px',
+                        border: '2px solid red',
+                        cursor: 'pointer'
+                      }}
                     >
-                      Delete
+                      🗑️ Delete
                     </button>
                   </div>
                 </div>
@@ -390,9 +408,29 @@ export default function OFCManagement() {
 
       {/* Edit Modal */}
       {showEditForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4">
-            <h3 className="text-xl font-semibold mb-4">Edit OFC</h3>
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          style={{ 
+            position: 'fixed', 
+            top: 0, 
+            left: 0, 
+            right: 0, 
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            zIndex: 9999
+          }}
+        >
+          <div 
+            className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4"
+            style={{ 
+              backgroundColor: 'white',
+              borderRadius: '8px',
+              padding: '24px',
+              maxWidth: '600px',
+              margin: '0 auto'
+            }}
+          >
+            <h3 className="text-xl font-semibold mb-4">✏️ Edit OFC (ID: {editingOFC?.id})</h3>
             <form onSubmit={handleUpdateOFC}>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
