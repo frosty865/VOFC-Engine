@@ -1,12 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Missing Supabase environment variables');
-}
+import { AuthService } from '../../../lib/auth-server';
 
 export async function GET(request) {
   try {
@@ -27,77 +20,22 @@ export async function GET(request) {
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
     console.log('🔑 Token received:', token.substring(0, 20) + '...');
 
-    // Create service role client for token verification
-    const serviceSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    );
+    // Use the existing AuthService to verify the token
+    const authResult = await AuthService.verifyToken(token);
 
-    // Verify the JWT token
-    const { data: { user }, error: authError } = await serviceSupabase.auth.getUser(token);
-
-    if (authError || !user) {
-      console.log('❌ Token verification failed:', authError?.message);
+    if (!authResult.success) {
+      console.log('❌ Token verification failed:', authResult.error);
       return NextResponse.json(
-        { success: false, error: 'Invalid token' },
+        { success: false, error: authResult.error },
         { status: 401 }
       );
     }
 
-    console.log('✅ Token verified for user:', user.email);
-
-    // Get user profile using fresh service client (to avoid RLS recursion)
-    const freshServiceSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    );
-
-    const { data: profile, error: profileError } = await freshServiceSupabase
-      .from('user_profiles')
-      .select('role, first_name, last_name, organization, is_active, username')
-      .eq('user_id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      console.log('❌ Profile lookup failed:', profileError?.message);
-      return NextResponse.json(
-        { success: false, error: 'User profile not found' },
-        { status: 401 }
-      );
-    }
-
-    if (!profile.is_active) {
-      console.log('❌ Account is inactive');
-      return NextResponse.json(
-        { success: false, error: 'Account is inactive' },
-        { status: 401 }
-      );
-    }
-
-    console.log('✅ Profile found:', profile.role);
+    console.log('✅ Token verified for user:', authResult.user.email);
 
     return NextResponse.json({
       success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: profile.role,
-        name: `${profile.first_name} ${profile.last_name}`,
-        organization: profile.organization,
-        username: profile.username
-      }
+      user: authResult.user
     });
 
   } catch (error) {
