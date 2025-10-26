@@ -1,12 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Missing Supabase environment variables');
-}
+import { supabaseAdmin } from '@/lib/supabase.js';
 
 export async function POST(request) {
   try {
@@ -31,16 +24,7 @@ export async function POST(request) {
     }
 
     // Create service role client for authentication
-    const serviceSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    );
+    const serviceSupabase = supabaseAdmin;
 
     // Use service role for authentication
     const { data, error } = await serviceSupabase.auth.signInWithPassword({
@@ -63,20 +47,8 @@ export async function POST(request) {
       );
     }
 
-    // Get user profile from user_profiles table using a fresh service role client
-    // (to avoid RLS recursion from the authenticated session)
-    const freshServiceSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    );
-    
-    const { data: profile, error: profileError } = await freshServiceSupabase
+    // Get user profile from user_profiles table using the same service role client
+    const { data: profile, error: profileError } = await serviceSupabase
       .from('user_profiles')
       .select('role, first_name, last_name, organization, is_active, username')
       .eq('user_id', data.user.id)

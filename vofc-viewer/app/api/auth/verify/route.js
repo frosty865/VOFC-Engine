@@ -35,11 +35,8 @@ export async function GET(request) {
       );
     }
 
-    // Create service role client to verify the token
-    const serviceSupabase = supabaseAdmin;
-
-    // Verify the access token
-    const { data: { user }, error: authError } = await serviceSupabase.auth.getUser(accessToken);
+    // Verify the access token using Supabase
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(accessToken);
 
     if (authError || !user) {
       console.log('❌ Token verification failed:', authError?.message);
@@ -52,7 +49,7 @@ export async function GET(request) {
     console.log('✅ Token verified for user:', user.email);
 
     // Get user profile
-    const { data: profile, error: profileError } = await serviceSupabase
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('user_profiles')
       .select('role, first_name, last_name, organization, is_active, username')
       .eq('user_id', user.id)
