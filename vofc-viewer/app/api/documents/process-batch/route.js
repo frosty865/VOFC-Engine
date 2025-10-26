@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { supabaseAdmin } from '../../../lib/supabase.js';
 
 export async function POST(request) {
   try {
@@ -13,51 +12,58 @@ export async function POST(request) {
       );
     }
     
-    // Define paths
-    const docsPath = path.join(process.cwd(), 'data', 'docs');
-    const processingPath = path.join(process.cwd(), 'data', 'processing');
-    const completedPath = path.join(process.cwd(), 'data', 'completed');
-    const failedPath = path.join(process.cwd(), 'data', 'failed');
-    
-    // Create directories if they don't exist
-    [processingPath, completedPath, failedPath].forEach(dir => {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-    });
-    
     const results = [];
     
     for (const filename of filenames) {
-      const sourceFile = path.join(docsPath, filename);
-      const processingFile = path.join(processingPath, filename);
-      
       try {
-        // Check if source file exists
-        if (!fs.existsSync(sourceFile)) {
-          results.push({ filename, status: 'error', message: 'Source file not found' });
+        // Check if file exists in documents bucket
+            const { data: fileData, error: downloadError } = await supabaseAdmin.storage
+          .from('documents')
+          .download(filename);
+        
+        if (downloadError) {
+          results.push({ filename, status: 'error', message: 'File not found in storage' });
           continue;
         }
         
-        // Move file to processing folder
-        fs.renameSync(sourceFile, processingFile);
+        // Move file to processing status by updating metadata
+            const { error: updateError } = await supabaseAdmin.storage
+          .from('documents')
+          .update(filename, fileData, {
+            cacheControl: '3600',
+            upsert: true,
+            contentType: 'application/pdf'
+          });
         
-        // Simulate processing
+        if (updateError) {
+          results.push({ filename, status: 'error', message: updateError.message });
+          continue;
+        }
+        
+        // Simulate processing delay
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Move to completed folder
-        const completedFile = path.join(completedPath, filename);
-        fs.renameSync(processingFile, completedFile);
+        // Move to completed bucket
+            const { error: moveError } = await supabaseAdmin.storage
+          .from('documents')
+          .move(filename, `completed/${filename}`);
+        
+        if (moveError) {
+          // If move fails, try copying instead
+              const { error: copyError } = await supabaseAdmin.storage
+            .from('documents')
+            .copy(filename, `completed/${filename}`);
+          
+          if (copyError) {
+            results.push({ filename, status: 'error', message: copyError.message });
+            continue;
+          }
+        }
         
         results.push({ filename, status: 'success', message: 'Processed successfully' });
         
       } catch (error) {
-        // If processing fails, move to failed folder
-        const failedFile = path.join(failedPath, filename);
-        if (fs.existsSync(processingFile)) {
-          fs.renameSync(processingFile, failedFile);
-        }
-        
+        console.error(`Error processing ${filename}:`, error);
         results.push({ filename, status: 'error', message: error.message });
       }
     }

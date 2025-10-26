@@ -1,12 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Missing Supabase environment variables');
-}
+import { supabaseAdmin } from '../../../lib/supabase.js';
 
 export async function GET(request) {
   try {
@@ -43,16 +36,7 @@ export async function GET(request) {
     }
 
     // Create service role client to verify the token
-    const serviceSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    );
+    const serviceSupabase = supabaseAdmin;
 
     // Verify the access token
     const { data: { user }, error: authError } = await serviceSupabase.auth.getUser(accessToken);
@@ -98,6 +82,7 @@ export async function GET(request) {
         id: user.id,
         email: user.email,
         role: profile.role,
+        full_name: `${profile.first_name} ${profile.last_name}`,
         name: `${profile.first_name} ${profile.last_name}`,
         organization: profile.organization,
         username: profile.username

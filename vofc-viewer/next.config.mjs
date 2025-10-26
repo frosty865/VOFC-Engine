@@ -11,7 +11,14 @@ const nextConfig = {
       bodySizeLimit: '10mb'
     }
   },
-  outputFileTracingRoot: __dirname
+  outputFileTracingRoot: __dirname,
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': __dirname,
+    };
+    return config;
+  }
 }
 
 export default nextConfig

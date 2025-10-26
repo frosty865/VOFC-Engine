@@ -1,17 +1,23 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-// Use service role for API submissions to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+import { supabaseAdmin } from '../../../lib/supabase.js';
 
 export async function POST(request) {
   try {
+    console.log('📄 Document submit API called');
+    
+    // Validate environment variables
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('❌ Missing Supabase environment variables');
+      return NextResponse.json(
+        { success: false, error: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
+    
     // Check content type
     const contentType = request.headers.get('content-type');
     if (!contentType || !contentType.includes('multipart/form-data')) {
+      console.log('❌ Invalid content type:', contentType);
       return NextResponse.json(
         { success: false, error: 'Content-Type must be multipart/form-data' },
         { status: 400 }
@@ -99,7 +105,7 @@ export async function POST(request) {
       const buffer = await document.arrayBuffer();
       
       // Upload to Supabase storage bucket (production)
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
         .from('documents')
         .upload(uniqueFileName, buffer, {
           cacheControl: '3600',
@@ -127,7 +133,7 @@ export async function POST(request) {
     // Insert into database
     console.log('Attempting to insert submission data:', JSON.stringify(submissionData, null, 2));
     
-    const { data: submission, error } = await supabase
+    const { data: submission, error } = await supabaseAdmin
       .from('submissions')
       .insert([submissionData])
       .select()
@@ -243,7 +249,7 @@ Please provide a structured JSON response with vulnerabilities and OFCs based on
               vulnerability_count: vulnCount
             };
 
-            await supabase
+            await supabaseAdmin
               .from('submissions')
               .update({
                 data: JSON.stringify(enhancedData),
