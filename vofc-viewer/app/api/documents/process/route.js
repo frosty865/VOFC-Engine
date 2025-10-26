@@ -60,44 +60,32 @@ export async function POST(request) {
       // Convert blob to buffer for processing
       const buffer = await fileData.arrayBuffer();
       
-      // Parse document content from buffer
-      const documentContent = await parseDocumentContent(buffer, filename);
-      
-      // Try to use the Python parser if available
+      // Send original file directly to Ollama for processing
       let parsedData = null;
       try {
         parsedData = await runOllamaParser(buffer, filename);
       } catch (parserError) {
-        console.log('Python parser not available, using basic parsing:', parserError.message);
+        console.log('Ollama parser failed, using basic parsing:', parserError.message);
         parsedData = await basicDocumentParse(buffer, filename);
       }
       
-      // Upload processed data as JSON to completed bucket
-      const processedJsonContent = JSON.stringify({
-        original_filename: filename,
-        processed_at: new Date().toISOString(),
-        content: documentContent,
-        parsed_data: parsedData
-      }, null, 2);
-      const jsonBuffer = Buffer.from(processedJsonContent, 'utf8');
-      
+      // Upload original file to completed bucket (keep original format)
       const { error: uploadError } = await supabase.storage
         .from(completedBucket)
-        .upload(filename.replace(/\.[^/.]+$/, '.json'), jsonBuffer, {
+        .upload(filename, buffer, {
           cacheControl: '3600',
-          upsert: true,
-          contentType: 'application/json'
+          upsert: true
         });
       
       if (uploadError) {
         throw new Error(`Failed to upload processed file: ${uploadError.message}`);
       }
       
-      // Save parsed data as metadata
+      // Save parsed data as metadata (separate JSON file)
       const metadataContent = JSON.stringify({
         filename,
         processed_at: new Date().toISOString(),
-        content: documentContent,
+        file_type: filename.split('.').pop().toLowerCase(),
         parsed_data: parsedData
       }, null, 2);
       
@@ -106,7 +94,7 @@ export async function POST(request) {
         .upload(`${filename}.metadata.json`, metadataContent, {
           cacheControl: '3600',
           upsert: true,
-          contentType: 'application/octet-stream'
+          contentType: 'application/json'
         });
       
       if (metadataError) {
@@ -190,15 +178,17 @@ async function parseDocumentContent(buffer, filename) {
 
 async function runOllamaParser(buffer, filename) {
   try {
-    const documentContent = await parseDocumentContent(buffer, filename);
     const ollamaBaseUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
     const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
+    
+    // Get file extension to determine how to send to Ollama
+    const fileExtension = filename.split('.').pop().toLowerCase();
     
     // Create system prompt for vulnerability and OFC extraction
     const systemPrompt = `You are an expert document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
 Your task is to extract vulnerabilities and options for consideration from security documents.
 
-For PDF documents, you will receive the binary data and should perform multi-pass text extraction with heuristic analysis to ensure readable, meaningful text is extracted.
+You will receive document files in their original format (PDF, DOC, XLSX, etc.) and should perform multi-pass analysis with heuristic extraction to ensure comprehensive content analysis.
 
 Extract the following information:
 1. Vulnerabilities: Security weaknesses, risks, or threats mentioned in the document
@@ -233,13 +223,13 @@ Return your analysis as a JSON object with this structure:
 
     let requestBody;
     
-    if (documentContent === 'PDF_BINARY_DATA') {
-      // For PDF files, send binary data as base64 to Ollama
+    if (['pdf', 'doc', 'docx', 'xlsx', 'xls', 'ppt', 'pptx'].includes(fileExtension)) {
+      // For binary files, send as base64 to Ollama
       const base64Data = Buffer.from(buffer).toString('base64');
       
       requestBody = {
         model: ollamaModel,
-        prompt: `Analyze this PDF document and extract vulnerabilities and options for consideration. Perform multi-pass text extraction to ensure readable content.`,
+        prompt: `Analyze this ${fileExtension.toUpperCase()} document and extract vulnerabilities and options for consideration. Perform multi-pass analysis to ensure comprehensive content extraction.`,
         images: [base64Data],
         stream: false,
         options: {
@@ -248,7 +238,8 @@ Return your analysis as a JSON object with this structure:
         }
       };
     } else {
-      // For text files, use chat format
+      // For text files, convert to text and use chat format
+      const documentContent = Buffer.from(buffer).toString('utf8');
       const userPrompt = `Analyze this document and extract vulnerabilities and options for consideration:
 
 Document Content:
@@ -267,7 +258,7 @@ Please provide a structured JSON response with vulnerabilities and OFCs.`;
     }
 
     // Call Ollama API with correct endpoint
-    const apiEndpoint = documentContent === 'PDF_BINARY_DATA' ? '/api/generate' : '/api/chat';
+    const apiEndpoint = ['pdf', 'doc', 'docx', 'xlsx', 'xls', 'ppt', 'pptx'].includes(fileExtension) ? '/api/generate' : '/api/chat';
     const response = await fetch(`${ollamaBaseUrl}${apiEndpoint}`, {
       method: 'POST',
       headers: {
