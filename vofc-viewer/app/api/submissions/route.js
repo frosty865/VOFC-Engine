@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { ollamaChatJSON } from '../../../lib/ollama';
 
 // Use service role for API submissions to bypass RLS
 const supabase = createClient(
@@ -83,16 +84,12 @@ export async function POST(request) {
       })
       .eq('id', submission.id);
 
-    // Run Ollama API directly
+    // Run Ollama API using the new utility
     try {
       console.log('🤖 Running Ollama API for document analysis...');
       console.log(`📊 Processing submission ${submission.id} with Ollama...`);
       
-      const ollamaBaseUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
-      const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
-      
-      // Create system prompt for vulnerability and OFC extraction
-      const systemPrompt = `You are an expert document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
+      const prompt = `You are an expert document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
 Your task is to extract vulnerabilities and options for consideration from security documents.
 
 Extract the following information:
@@ -117,44 +114,25 @@ Return your analysis as a JSON object with this structure:
       "source": "source information"
     }
   ]
-}`;
-
-      const userPrompt = `Analyze this document and extract vulnerabilities and options for consideration:
+}
 
 Document Content:
 ${content}
 
 Please provide a structured JSON response with vulnerabilities and OFCs.`;
 
-      // Call Ollama API
-      const response = await fetch(`${ollamaBaseUrl}/api/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: ollamaModel,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          stream: false
-        })
+      // Use the new Ollama utility
+      const parsedResult = await ollamaChatJSON({
+        model: 'mistral:latest',
+        prompt,
+        temperature: 0.1,
+        top_p: 0.9
       });
 
-      if (!response.ok) {
-        throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
+      if (!parsedResult) {
+        throw new Error('Ollama returned null response');
       }
 
-      const ollamaData = await response.json();
-      const ollamaContent = ollamaData.message?.content || ollamaData.response;
-      
-      if (!ollamaContent) {
-        throw new Error('No content received from Ollama');
-      }
-
-      // Parse JSON response
-      const parsedResult = JSON.parse(ollamaContent);
       console.log('✅ Ollama analysis completed successfully');
       
       const ofcCount = parsedResult.options_for_consideration?.length || 0;
