@@ -8,6 +8,7 @@ const supabase = createClient(
 );
 
 export async function POST(request) {
+  console.log('🚀 Document processing endpoint called - LATEST VERSION');
   try {
     let requestData;
     try {
