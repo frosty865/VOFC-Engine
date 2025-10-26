@@ -1,11 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-// Use service role for API operations to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 
 export async function GET() {
   try {
@@ -24,7 +18,7 @@ export async function GET() {
     for (const [folder, bucketName] of Object.entries(bucketConfig)) {
       try {
         console.log(`📁 Checking bucket: ${bucketName} for ${folder}`);
-        const { data: files, error } = await supabase.storage
+        const { data: files, error } = await supabaseAdmin.storage
           .from(bucketName)
           .list('', {
             limit: 100,

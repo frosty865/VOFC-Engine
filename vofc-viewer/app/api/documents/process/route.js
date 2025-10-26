@@ -30,7 +30,7 @@ export async function POST(request) {
     const completedBucket = 'processed-documents';
     
     // Check if source file exists in storage
-    const { data: sourceFile, error: sourceError } = await supabase.storage
+    const { data: sourceFile, error: sourceError } = await supabaseAdmin.storage
       .from(sourceBucket)
       .list('', {
         search: filename
@@ -44,7 +44,7 @@ export async function POST(request) {
     }
     
     // Download the file from storage
-    const { data: fileData, error: downloadError } = await supabase.storage
+    const { data: fileData, error: downloadError } = await supabaseAdmin.storage
       .from(sourceBucket)
       .download(filename);
     
@@ -70,7 +70,7 @@ export async function POST(request) {
     }
     
     // Upload original file to completed bucket (keep original format)
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabaseAdmin.storage
       .from(completedBucket)
       .upload(filename, buffer, {
         cacheControl: '3600',
@@ -106,7 +106,7 @@ export async function POST(request) {
     }
     
     // Remove from source bucket
-    const { error: removeError } = await supabase.storage
+    const { error: removeError } = await supabaseAdmin.storage
       .from(sourceBucket)
       .remove([filename]);
     
