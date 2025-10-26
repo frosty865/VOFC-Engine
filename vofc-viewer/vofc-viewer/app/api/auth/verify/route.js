@@ -98,6 +98,7 @@ export async function GET(request) {
         id: user.id,
         email: user.email,
         role: profile.role,
+        full_name: `${profile.first_name} ${profile.last_name}`,
         name: `${profile.first_name} ${profile.last_name}`,
         organization: profile.organization,
         username: profile.username
