@@ -7,7 +7,7 @@
     const config = {
         height: '400px',
         width: '100%',
-        mode: 'demo', // demo, live, ollama-only
+        mode: 'live', // live, ollama-only
         theme: 'dark' // dark, light
     };
     

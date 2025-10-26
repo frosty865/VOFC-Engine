@@ -10,11 +10,11 @@ function appendLog(msg) {
   fs.appendFileSync(logFile, entry);
 }
 
-// Enhanced dashboard with real VOFC integration
+// Enhanced dashboard with live VOFC integration only
 export async function GET(request) {
   const encoder = new TextEncoder();
   const url = new URL(request.url);
-  const mode = url.searchParams.get('mode') || 'demo'; // demo, live, ollama-only
+  const mode = url.searchParams.get('mode') || 'live'; // live, ollama-only
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -27,14 +27,15 @@ export async function GET(request) {
 
       try {
         send("🟦 Starting VOFC + Ollama Processing Dashboard", "system");
-        send("Initializing monitoring systems...", "system");
+        send("Initializing live monitoring systems...", "system");
 
-        if (mode === 'demo') {
-          await runDemoMode(send);
-        } else if (mode === 'live') {
+        if (mode === 'live') {
           await runLiveMode(send);
         } else if (mode === 'ollama-only') {
           await runOllamaOnlyMode(send);
+        } else {
+          send("⚠️ Invalid mode specified. Using live mode.", "warning");
+          await runLiveMode(send);
         }
 
         send("✅ Dashboard session completed", "system");
@@ -58,76 +59,6 @@ export async function GET(request) {
   });
 }
 
-async function runDemoMode(send) {
-  send("📄 VOFC Document Processing Pipeline", "info");
-  
-  // Stage 1: Document Parsing
-  await new Promise((r) => setTimeout(r, 800));
-  send("🔍 Stage 1: PDF Text Extraction", "stage");
-  await new Promise((r) => setTimeout(r, 600));
-  send("   ✓ Extracted 2,847 characters from document", "success");
-  
-  // Stage 2: Chunking
-  await new Promise((r) => setTimeout(r, 500));
-  send("✂️ Stage 2: Intelligent Text Chunking", "stage");
-  await new Promise((r) => setTimeout(r, 400));
-  send("   ✓ Created 12 chunks with 150-char overlap", "success");
-  send("   ✓ Filtered chunks by security keywords", "success");
-  
-  // Stage 3: Ollama Processing
-  await new Promise((r) => setTimeout(r, 600));
-  send("🧠 Stage 3: Ollama AI Analysis", "stage");
-  send("   🔄 Initializing Mistral model...", "info");
-  
-  // Simulate Ollama activity
-  const ollamaProcess = spawn("ollama", ["list"]);
-  ollamaProcess.stdout.on("data", (data) => {
-    const output = data.toString().trim();
-    if (output.includes("mistral")) {
-      send(`   ✓ Model loaded: ${output.split('\n').find(line => line.includes('mistral'))}`, "success");
-    }
-  });
-  
-  await new Promise((r) => setTimeout(r, 1000));
-  send("   🔄 Processing batch 1/3 (GPU optimized)...", "info");
-  await new Promise((r) => setTimeout(r, 1200));
-  send("   ✓ Batch 1: 4 vulnerabilities, 7 OFCs extracted", "success");
-  
-  await new Promise((r) => setTimeout(r, 800));
-  send("   🔄 Processing batch 2/3...", "info");
-  await new Promise((r) => setTimeout(r, 1100));
-  send("   ✓ Batch 2: 3 vulnerabilities, 5 OFCs extracted", "success");
-  
-  await new Promise((r) => setTimeout(r, 700));
-  send("   🔄 Processing batch 3/3...", "info");
-  await new Promise((r) => setTimeout(r, 900));
-  send("   ✓ Batch 3: 2 vulnerabilities, 4 OFCs extracted", "success");
-  
-  // Stage 4: Data Validation
-  await new Promise((r) => setTimeout(r, 500));
-  send("🔍 Stage 4: Data Validation & Consolidation", "stage");
-  await new Promise((r) => setTimeout(r, 400));
-  send("   ✓ Validated 9 vulnerabilities", "success");
-  send("   ✓ Consolidated 16 options for consideration", "success");
-  send("   ✓ Grouped by discipline categories", "success");
-  
-  // Stage 5: Storage
-  await new Promise((r) => setTimeout(r, 600));
-  send("💾 Stage 5: Supabase Storage", "stage");
-  await new Promise((r) => setTimeout(r, 500));
-  send("   ✓ Uploaded processed JSON to Parsed bucket", "success");
-  send("   ✓ Updated vulnerability database", "success");
-  send("   ✓ Created OFC linkages", "success");
-  
-  // Performance Metrics
-  await new Promise((r) => setTimeout(r, 300));
-  send("📊 Performance Metrics:", "metrics");
-  send("   • Total processing time: 8.2 seconds", "metrics");
-  send("   • GPU utilization: 85%", "metrics");
-  send("   • Tokens processed: 12,400", "metrics");
-  send("   • Processing rate: 1,512 tokens/sec", "metrics");
-  send("   • Memory usage: 2.1GB", "metrics");
-}
 
 async function runLiveMode(send) {
   send("🔴 LIVE MODE: Monitoring actual VOFC processing", "system");
@@ -141,17 +72,57 @@ async function runLiveMode(send) {
       send(`📊 Found ${status.processing} active processing jobs`, "info");
       send("🔄 Monitoring live processing...", "info");
       
-      // Monitor for 30 seconds
-      for (let i = 0; i < 30; i++) {
+      // Monitor for 60 seconds with more detailed updates
+      for (let i = 0; i < 60; i++) {
         await new Promise((r) => setTimeout(r, 1000));
-        send(`⏱️ Live monitoring: ${30-i}s remaining`, "info");
+        
+        // Check processing status every 10 seconds
+        if (i % 10 === 0) {
+          try {
+            const statusResponse = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/documents/status`);
+            const currentStatus = await statusResponse.json();
+            
+            if (currentStatus.processing > 0) {
+              send(`📈 Processing status: ${currentStatus.processing} active jobs`, "info");
+              if (currentStatus.completed > 0) {
+                send(`✅ Completed: ${currentStatus.completed} documents`, "success");
+              }
+              if (currentStatus.failed > 0) {
+                send(`❌ Failed: ${currentStatus.failed} documents`, "error");
+              }
+            } else {
+              send("✅ All processing jobs completed", "success");
+              break;
+            }
+          } catch (statusError) {
+            send(`⚠️ Could not check status: ${statusError.message}`, "warning");
+          }
+        } else {
+          send(`⏱️ Live monitoring: ${60-i}s remaining`, "info");
+        }
       }
     } else {
       send("ℹ️ No active processing jobs found", "info");
       send("💡 Start a document processing job to see live monitoring", "tip");
+      
+      // Check for recent activity
+      try {
+        const recentResponse = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/documents/list`);
+        const recentData = await recentResponse.json();
+        
+        if (recentData.documents && recentData.documents.length > 0) {
+          send(`📋 Found ${recentData.documents.length} documents in queue`, "info");
+          send("🔄 Ready to process documents when submitted", "info");
+        } else {
+          send("📭 No documents in processing queue", "info");
+        }
+      } catch (recentError) {
+        send(`⚠️ Could not check document queue: ${recentError.message}`, "warning");
+      }
     }
   } catch (error) {
     send(`⚠️ Could not connect to live monitoring: ${error.message}`, "warning");
+    send("🔧 Check if the VOFC application is running", "tip");
   }
 }
 

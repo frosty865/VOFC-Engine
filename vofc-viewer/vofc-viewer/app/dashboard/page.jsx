@@ -15,17 +15,17 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Main Dashboard */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Primary Dashboard */}
-          <div className="lg:col-span-2">
-            <OllamaDashboard 
-              height="600px" 
-              mode="demo"
-              showControls={true}
-              className="shadow-2xl"
-            />
-          </div>
+          {/* Main Dashboard */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Primary Dashboard */}
+            <div className="lg:col-span-2">
+              <OllamaDashboard 
+                height="600px" 
+                mode="live"
+                showControls={true}
+                className="shadow-2xl"
+              />
+            </div>
 
           {/* Side Panels */}
           <div className="space-y-6">
@@ -103,15 +103,12 @@ export default function DashboardPage() {
         {/* Instructions */}
         <div className="bg-blue-50 rounded-xl p-6 border border-blue-200">
           <h3 className="text-lg font-semibold text-blue-900 mb-3">How to Use</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-blue-800">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-blue-800">
             <div>
-              <strong>Demo Mode:</strong> Simulates the complete VOFC processing pipeline with realistic timing and metrics.
+              <strong>Live Mode:</strong> Monitors actual document processing jobs in real-time with detailed status updates.
             </div>
             <div>
-              <strong>Live Mode:</strong> Monitors actual document processing jobs in real-time.
-            </div>
-            <div>
-              <strong>Ollama Only:</strong> Direct monitoring of Ollama model status and performance.
+              <strong>Ollama Only:</strong> Direct monitoring of Ollama model status and performance testing.
             </div>
           </div>
         </div>
@@ -125,7 +122,7 @@ export default function DashboardPage() {
               <code className="block bg-gray-800 text-green-400 p-3 rounded text-sm overflow-x-auto">
                 {`import OllamaDashboard from "@/components/OllamaDashboard";
 
-<OllamaDashboard height="400px" mode="demo" />`}
+<OllamaDashboard height="400px" mode="live" />`}
               </code>
             </div>
             <div>
@@ -134,7 +131,7 @@ export default function DashboardPage() {
                 {`<div id="ollama-dashboard" style="background:#0d1117;color:#00ff95;font-family:monospace;padding:10px;border-radius:8px;height:400px;overflow-y:auto;"></div>
 <script>
 const logDiv = document.getElementById("ollama-dashboard");
-const sse = new EventSource("/api/dashboard/stream?mode=demo");
+const sse = new EventSource("/api/dashboard/stream?mode=live");
 sse.onmessage = (e) => {
   logDiv.textContent += e.data + "\\n";
   logDiv.scrollTop = logDiv.scrollHeight;

@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from "react";
 
 export default function OllamaDashboard({ 
   height = "400px", 
-  mode = "demo",
+  mode = "live",
   showControls = true,
   className = ""
 }) {
@@ -101,7 +101,6 @@ export default function OllamaDashboard({
               onChange={(e) => handleModeChange(e.target.value)}
               className="px-2 py-1 bg-gray-800 border border-gray-600 rounded text-sm"
             >
-              <option value="demo">Demo Mode</option>
               <option value="live">Live Mode</option>
               <option value="ollama-only">Ollama Only</option>
             </select>

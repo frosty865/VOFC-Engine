@@ -167,7 +167,6 @@
                 <div class="status-dot" id="statusDot"></div>
                 <span id="statusText">Disconnected</span>
                 <select class="mode-selector" id="modeSelector">
-                    <option value="demo">Demo Mode</option>
                     <option value="live">Live Mode</option>
                     <option value="ollama-only">Ollama Only</option>
                 </select>
@@ -208,8 +207,8 @@
                     this.connect(e.target.value);
                 });
                 
-                // Start with demo mode
-                this.connect('demo');
+                // Start with live mode
+                this.connect('live');
             }
             
             connect(mode) {
