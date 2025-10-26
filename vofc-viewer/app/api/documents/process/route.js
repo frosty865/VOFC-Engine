@@ -81,24 +81,24 @@ export async function POST(request) {
         throw new Error(`Failed to upload processed file: ${uploadError.message}`);
       }
       
-      // Save parsed data as metadata (separate JSON file)
-      const metadataContent = JSON.stringify({
+      // Save parsed data to Parsed bucket
+      const parsedContent = JSON.stringify({
         filename,
         processed_at: new Date().toISOString(),
         file_type: filename.split('.').pop().toLowerCase(),
         parsed_data: parsedData
       }, null, 2);
       
-      const { error: metadataError } = await supabase.storage
-        .from(completedBucket)
-        .upload(`${filename}.metadata.json`, metadataContent, {
+      const { error: parsedError } = await supabase.storage
+        .from('Parsed')
+        .upload(`${filename}.json`, parsedContent, {
           cacheControl: '3600',
           upsert: true,
           contentType: 'application/json'
         });
       
-      if (metadataError) {
-        console.warn('Failed to save metadata:', metadataError.message);
+      if (parsedError) {
+        console.warn('Failed to save parsed data:', parsedError.message);
       }
       
       // Remove from documents bucket (move to processed)
