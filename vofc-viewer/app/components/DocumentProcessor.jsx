@@ -75,6 +75,32 @@ export default function DocumentProcessor() {
     }
   }, [mounted, autoRefresh, processing.length]);
 
+  // Clear completed documents
+  const clearCompletedDocuments = async () => {
+    if (!confirm(`Are you sure you want to clear all ${completed.length} completed documents? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/documents/clear-completed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        await fetchDocuments();
+        alert('Completed documents cleared successfully');
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error clearing completed documents:', error);
+      alert('Error clearing completed documents');
+    }
+  };
+
   // Preview document
   const previewDocument = async (filename) => {
     try {
@@ -445,7 +471,15 @@ export default function DocumentProcessor() {
       {/* Completed Documents */}
       {completed.length > 0 && (
         <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">Completed Documents</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Completed Documents</h2>
+            <button
+              onClick={clearCompletedDocuments}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+            >
+              Clear All ({completed.length})
+            </button>
+          </div>
           <div className="bg-white shadow rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
