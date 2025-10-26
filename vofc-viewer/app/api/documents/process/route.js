@@ -190,11 +190,14 @@ Your task is to extract vulnerabilities and options for consideration from secur
 
 You will receive document files in their original format (PDF, DOC, XLSX, etc.) and should perform multi-pass heuristic analysis to ensure comprehensive content extraction.
 
-IMPORTANT: Some documents may contain ONLY Options for Consideration (OFCs) and no vulnerabilities. This is normal and expected.
+CRITICAL ANALYSIS APPROACH:
+1. First, identify all Options for Consideration (OFCs) - these are recommendations, best practices, controls, and guidance
+2. Then, INFER vulnerabilities by identifying what security gaps exist when these OFCs are NOT implemented
+3. For each OFC found, create a corresponding vulnerability that describes the risk of not having that control
 
 Use these heuristic patterns to identify:
-1. Vulnerabilities: Look for keywords like "vulnerability", "risk", "threat", "weakness", "exploit", "attack", "breach", "compromise", "security issue", "flaw"
-2. Options for Consideration (OFCs): Look for keywords like "recommendation", "mitigation", "action", "consideration", "option", "strategy", "solution", "best practice", "guidance", "advice", "suggestion", "approach", "method", "technique", "procedure", "step", "measure", "control"
+1. Options for Consideration (OFCs): Look for keywords like "recommendation", "mitigation", "action", "consideration", "option", "strategy", "solution", "best practice", "guidance", "advice", "suggestion", "approach", "method", "technique", "procedure", "step", "measure", "control", "implement", "establish", "deploy", "configure"
+2. Vulnerabilities: For each OFC, infer the vulnerability: "Lack of [OFC description] creates risk of [potential impact]"
 
 Apply linguistic heuristics:
 - Section-aware context analysis
@@ -203,6 +206,7 @@ Apply linguistic heuristics:
 - Context clustering for related concepts
 - Look for numbered lists, bullet points, and structured recommendations
 - Identify action items, guidelines, and procedural steps
+- INFER vulnerabilities from missing controls and best practices
 
 Return your analysis as a JSON object with this structure:
 {
@@ -241,12 +245,19 @@ Return your analysis as a JSON object with this structure:
         model: ollamaModel,
         prompt: `Analyze this ${fileExtension.toUpperCase()} document and extract vulnerabilities and options for consideration. 
 
-IMPORTANT: This document may contain ONLY Options for Consideration (OFCs) and no vulnerabilities. Look for:
+CRITICAL ANALYSIS APPROACH:
+1. First, identify all Options for Consideration (OFCs) - recommendations, best practices, controls, and guidance
+2. Then, INFER vulnerabilities by identifying what security gaps exist when these OFCs are NOT implemented
+3. For each OFC found, create a corresponding vulnerability that describes the risk of not having that control
+
+Look for:
 - Recommendations, guidelines, and best practices
 - Action items and procedural steps
 - Mitigation strategies and solutions
 - Security controls and measures
 - Any structured lists or bullet points
+
+For each OFC you find, infer the vulnerability: "Lack of [OFC description] creates risk of [potential impact]"
 
 Perform multi-pass heuristic analysis to ensure comprehensive content extraction.`,
         images: [base64Data],
@@ -264,12 +275,19 @@ Perform multi-pass heuristic analysis to ensure comprehensive content extraction
 Document Content:
 ${documentContent}
 
-IMPORTANT: This document may contain ONLY Options for Consideration (OFCs) and no vulnerabilities. Look for:
+CRITICAL ANALYSIS APPROACH:
+1. First, identify all Options for Consideration (OFCs) - recommendations, best practices, controls, and guidance
+2. Then, INFER vulnerabilities by identifying what security gaps exist when these OFCs are NOT implemented
+3. For each OFC found, create a corresponding vulnerability that describes the risk of not having that control
+
+Look for:
 - Recommendations, guidelines, and best practices
 - Action items and procedural steps
 - Mitigation strategies and solutions
 - Security controls and measures
 - Any structured lists or bullet points
+
+For each OFC you find, infer the vulnerability: "Lack of [OFC description] creates risk of [potential impact]"
 
 Please provide a structured JSON response with vulnerabilities and OFCs.`;
 
