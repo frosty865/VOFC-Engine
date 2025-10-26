@@ -31,7 +31,7 @@ export async function POST(request) {
     
     // Define storage paths using production buckets
     const sourceBucket = 'documents';
-    const completedBucket = 'vofc_seed'; // Use public bucket for processed files
+    const completedBucket = 'processed-documents'; // Use proper production bucket
     
     // Check if source file exists in storage
     const { data: sourceFile, error: sourceError } = await supabase.storage
@@ -72,16 +72,21 @@ export async function POST(request) {
         parsedData = await basicDocumentParse(buffer, filename);
       }
       
-      // Upload processed text content to completed bucket
-      const processedTextContent = typeof parsedData === 'string' ? parsedData : JSON.stringify(parsedData, null, 2);
-      const textBuffer = Buffer.from(processedTextContent, 'utf8');
+      // Upload processed data as JSON to completed bucket
+      const processedJsonContent = JSON.stringify({
+        original_filename: filename,
+        processed_at: new Date().toISOString(),
+        content: documentContent,
+        parsed_data: parsedData
+      }, null, 2);
+      const jsonBuffer = Buffer.from(processedJsonContent, 'utf8');
       
       const { error: uploadError } = await supabase.storage
         .from(completedBucket)
-        .upload(filename.replace(/\.[^/.]+$/, '.txt'), textBuffer, {
+        .upload(filename.replace(/\.[^/.]+$/, '.json'), jsonBuffer, {
           cacheControl: '3600',
           upsert: true,
-          contentType: 'application/octet-stream'
+          contentType: 'application/json'
         });
       
       if (uploadError) {
