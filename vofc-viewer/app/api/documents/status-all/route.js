@@ -14,7 +14,7 @@ export async function GET() {
     const bucketConfig = {
       documents: 'documents',           // Pending documents
       processing: 'documents',          // Processing (same as documents for now)
-      completed: 'processed-documents', // Completed documents
+      completed: 'vofc_seed',          // Completed documents (using public bucket)
       failed: 'Parsed'                  // Failed documents (using Parsed bucket for now)
     };
     
