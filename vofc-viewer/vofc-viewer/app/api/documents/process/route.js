@@ -1,10 +1,28 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { createClient } from '@supabase/supabase-js';
+import { ollamaChatJSON } from '@/lib/ollama';
+
+// Use service role for API operations to bypass RLS
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 export async function POST(request) {
+  console.log('🚀 Document processing endpoint called - SIMPLIFIED VERSION');
   try {
-    const { filename } = await request.json();
+    let requestData;
+    try {
+      requestData = await request.json();
+    } catch (jsonError) {
+      console.error('JSON parsing error:', jsonError);
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
+    
+    const { filename } = requestData;
     
     if (!filename) {
       return NextResponse.json(
@@ -13,119 +31,150 @@ export async function POST(request) {
       );
     }
     
-    // Define paths
-    const docsPath = path.join(process.cwd(), 'data', 'docs');
-    const processingPath = path.join(process.cwd(), 'data', 'processing');
-    const completedPath = path.join(process.cwd(), 'data', 'completed');
-    const failedPath = path.join(process.cwd(), 'data', 'failed');
-    const backendPath = path.join(process.cwd(), 'apps', 'backend');
+    // Define storage paths using production buckets
+    const sourceBucket = 'documents';
+    const completedBucket = 'processed-documents';
     
-    // Create directories if they don't exist
-    [processingPath, completedPath, failedPath].forEach(dir => {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-    });
+    // Check if source file exists in storage
+    const { data: sourceFile, error: sourceError } = await supabase.storage
+      .from(sourceBucket)
+      .list('', {
+        search: filename
+      });
     
-    const sourceFile = path.join(docsPath, filename);
-    const processingFile = path.join(processingPath, filename);
-    
-    // Check if source file exists
-    if (!fs.existsSync(sourceFile)) {
+    if (sourceError || !sourceFile || sourceFile.length === 0) {
       return NextResponse.json(
-        { success: false, error: 'Source file not found' },
+        { success: false, error: 'Source file not found in storage' },
         { status: 404 }
       );
     }
     
-    try {
-      // Move file to processing folder
-      fs.renameSync(sourceFile, processingFile);
-      
-      // Parse document content
-      const documentContent = await parseDocumentContent(processingFile);
-      
-      // Try to use the Python parser if available
-      let parsedData = null;
-      try {
-        parsedData = await runOllamaParser(processingFile);
-      } catch (parserError) {
-        console.log('Python parser not available, using basic parsing:', parserError.message);
-        parsedData = await basicDocumentParse(processingFile);
-      }
-      
-      // Move to completed folder
-      const completedFile = path.join(completedPath, filename);
-      fs.renameSync(processingFile, completedFile);
-      
-      // Save parsed data
-      const metadataFile = path.join(completedPath, `${filename}.metadata.json`);
-      fs.writeFileSync(metadataFile, JSON.stringify({
-        filename,
-        processed_at: new Date().toISOString(),
-        content: documentContent,
-        parsed_data: parsedData
-      }, null, 2));
-      
-      return NextResponse.json({
-        success: true,
-        message: `Document ${filename} processed successfully`,
-        data: {
-          title: parsedData?.title || filename,
-          vulnerabilities: parsedData?.vulnerabilities || [],
-          ofcs: parsedData?.ofcs || [],
-          sectors: parsedData?.sectors || [],
-          content_preview: documentContent.substring(0, 200) + '...'
-        }
-      });
-      
-    } catch (processError) {
-      // If processing fails, move to failed folder
-      const failedFile = path.join(failedPath, filename);
-      if (fs.existsSync(processingFile)) {
-        fs.renameSync(processingFile, failedFile);
-      }
-      
+    // Download the file from storage
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from(sourceBucket)
+      .download(filename);
+    
+    if (downloadError) {
       return NextResponse.json(
-        { success: false, error: `Processing failed: ${processError.message}` },
+        { success: false, error: `Failed to download file: ${downloadError.message}` },
         { status: 500 }
       );
     }
     
+    // Convert to buffer
+    const buffer = Buffer.from(await fileData.arrayBuffer());
+    
+    console.log(`📄 Processing file: ${filename} (${buffer.length} bytes)`);
+    
+    // Process with Ollama using the new utility
+    let parsedData = null;
+    try {
+      parsedData = await runOllamaParser(buffer, filename);
+    } catch (parserError) {
+      console.log('Ollama parser failed, using basic parsing:', parserError.message);
+      parsedData = await basicDocumentParse(buffer, filename);
+    }
+    
+    // Upload original file to completed bucket (keep original format)
+    const { error: uploadError } = await supabase.storage
+      .from(completedBucket)
+      .upload(filename, buffer, {
+        cacheControl: '3600',
+        upsert: true
+      });
+    
+    if (uploadError) {
+      console.error('Failed to upload processed file:', uploadError);
+      return NextResponse.json(
+        { success: false, error: `Failed to upload processed file: ${uploadError.message}` },
+        { status: 500 }
+      );
+    }
+    
+    // Save parsed data to Parsed bucket
+    const parsedContent = JSON.stringify({
+      filename,
+      processed_at: new Date().toISOString(),
+      file_type: filename.split('.').pop().toLowerCase(),
+      parsed_data: parsedData
+    }, null, 2);
+    
+    const { error: parsedError } = await supabase.storage
+      .from('Parsed')
+      .upload(`${filename}.json`, parsedContent, {
+        cacheControl: '3600',
+        upsert: true,
+        contentType: 'application/json'
+      });
+    
+    if (parsedError) {
+      console.warn('Failed to save parsed data:', parsedError.message);
+    }
+    
+    // Remove from source bucket
+    const { error: removeError } = await supabase.storage
+      .from(sourceBucket)
+      .remove([filename]);
+    
+    if (removeError) {
+      console.warn('Failed to remove source file:', removeError.message);
+    }
+    
+    console.log('✅ Document processing completed:', {
+      filename,
+      vulnerabilities: parsedData?.vulnerabilities?.length || 0,
+      ofcs: parsedData?.options_for_consideration?.length || 0
+    });
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Document processed successfully',
+      data: {
+        filename,
+        vulnerabilities: parsedData?.vulnerabilities?.length || 0,
+        options_for_consideration: parsedData?.options_for_consideration?.length || 0,
+        sectors: parsedData?.sectors?.length || 0
+      }
+    });
+    
   } catch (error) {
-    console.error('Error processing document:', error);
+    console.error('Document processing error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to process document' },
+      { success: false, error: `Processing failed: ${error.message}` },
       { status: 500 }
     );
   }
 }
 
-async function parseDocumentContent(filePath) {
+async function runOllamaParser(buffer, filename) {
   try {
-    const fileContent = fs.readFileSync(filePath, 'utf8');
-    return fileContent;
-  } catch (error) {
-    throw new Error(`Failed to read file: ${error.message}`);
-  }
-}
-
-async function runOllamaParser(filePath) {
-  try {
-    const documentContent = fs.readFileSync(filePath, 'utf8');
-    const ollamaBaseUrl = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-    const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
+    const fileExtension = filename.split('.').pop().toLowerCase();
     
-    // Create system prompt for vulnerability and OFC extraction
-    const systemPrompt = `You are an expert document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
-Your task is to extract vulnerabilities and options for consideration from security documents.
+    // Create comprehensive prompt for heuristic analysis
+    const prompt = `You are a heuristic document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
+Your task is to extract vulnerabilities and options for consideration from security documents using linguistic heuristics and pattern recognition.
 
-Extract the following information:
-1. Vulnerabilities: Security weaknesses, risks, or threats mentioned in the document
-2. Options for Consideration (OFCs): Mitigation strategies, recommendations, or actions to address vulnerabilities
+CRITICAL ANALYSIS APPROACH:
+1. First, identify all Options for Consideration (OFCs) - these are recommendations, best practices, controls, and guidance
+2. Then, INFER vulnerabilities by identifying what security gaps exist when these OFCs are NOT implemented
+3. For each OFC found, create a corresponding vulnerability that describes the risk of not having that control
+
+Use these heuristic patterns to identify:
+1. Options for Consideration (OFCs): Look for keywords like "recommendation", "mitigation", "action", "consideration", "option", "strategy", "solution", "best practice", "guidance", "advice", "suggestion", "approach", "method", "technique", "procedure", "step", "measure", "control", "implement", "establish", "deploy", "configure"
+2. Vulnerabilities: For each OFC, infer the vulnerability: "Lack of [OFC description] creates risk of [potential impact]"
+
+Apply linguistic heuristics:
+- Section-aware context analysis
+- Confidence scoring based on keyword density
+- Pattern matching for security terminology
+- Context clustering for related concepts
+- Look for numbered lists, bullet points, and structured recommendations
+- Identify action items, guidelines, and procedural steps
+- INFER vulnerabilities from missing controls and best practices
 
 Return your analysis as a JSON object with this structure:
 {
+  "title": "document title",
   "vulnerabilities": [
     {
       "id": "unique_id",
@@ -141,63 +190,54 @@ Return your analysis as a JSON object with this structure:
       "discipline": "relevant discipline",
       "source": "source information"
     }
+  ],
+  "sectors": [
+    {
+      "name": "sector name",
+      "confidence": 0.8
+    }
   ]
-}`;
+}
 
-        const userPrompt = `Analyze this document and extract vulnerabilities and options for consideration:
+Document to analyze: ${filename} (${fileExtension.toUpperCase()})`;
 
-Document Content:
-${documentContent}
-
-Please provide a structured JSON response with vulnerabilities and OFCs.`;
-
-    // Call Ollama API
-    const response = await fetch(`${ollamaBaseUrl}/api/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: ollamaModel,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        stream: false
-      })
+    // Use the new Ollama utility for consistent API calls
+    const parsedData = await ollamaChatJSON({
+      model: 'mistral:latest',
+      prompt,
+      temperature: 0.1,
+      top_p: 0.9
     });
 
-    if (!response.ok) {
-      throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
+    if (!parsedData) {
+      throw new Error('Ollama returned null response');
     }
 
-    const data = await response.json();
-    const ollamaContent = data.message?.content || data.response;
-    
-    if (!ollamaContent) {
-      throw new Error('No content received from Ollama');
+    // Validate that we got meaningful data
+    if (!parsedData.vulnerabilities && !parsedData.options_for_consideration) {
+      throw new Error('Ollama returned empty or invalid data structure');
     }
 
-    // Parse JSON response
-    const result = JSON.parse(ollamaContent);
-    return result;
+    console.log('✅ Ollama parsing successful:', {
+      vulnerabilities: parsedData.vulnerabilities?.length || 0,
+      ofcs: parsedData.options_for_consideration?.length || 0
+    });
+
+    return parsedData;
 
   } catch (error) {
     console.error('Ollama parser error:', error);
-    throw new Error(`Ollama parsing failed: ${error.message}`);
+    throw error;
   }
 }
 
-async function basicDocumentParse(filePath) {
-  const basicContent = fs.readFileSync(filePath, 'utf8');
+async function basicDocumentParse(buffer, filename) {
+  // Basic parsing logic for fallback
+  const content = buffer.toString('utf8');
+  const lines = content.split('\n').filter(line => line.trim());
   
-  // Basic parsing logic
-  const lines = basicContent.split('\n').filter(line => line.trim());
+  const title = lines[0] || filename.replace(/\.[^/.]+$/, '');
   
-  // Extract title (first non-empty line or filename)
-  const title = lines[0] || path.basename(filePath, path.extname(filePath));
-  
-  // Look for vulnerabilities and OFCs
   const vulnerabilities = [];
   const ofcs = [];
   const sectors = [];
@@ -205,27 +245,19 @@ async function basicDocumentParse(filePath) {
   for (const line of lines) {
     const lowerLine = line.toLowerCase();
     
-    // Look for vulnerability indicators
     if (lowerLine.includes('vulnerability') || lowerLine.includes('risk') || lowerLine.includes('threat')) {
       vulnerabilities.push({
         text: line.trim(),
-        confidence: 0.7
+        discipline: 'General',
+        source: filename
       });
     }
     
-    // Look for OFC indicators
-    if (lowerLine.includes('option') || lowerLine.includes('consideration') || lowerLine.includes('recommendation')) {
+    if (lowerLine.includes('recommendation') || lowerLine.includes('mitigation') || lowerLine.includes('action')) {
       ofcs.push({
         text: line.trim(),
-        confidence: 0.7
-      });
-    }
-    
-    // Look for sector indicators
-    if (lowerLine.includes('sector') || lowerLine.includes('industry') || lowerLine.includes('critical infrastructure')) {
-      sectors.push({
-        name: line.trim(),
-        confidence: 0.6
+        discipline: 'General',
+        source: filename
       });
     }
   }
@@ -233,9 +265,7 @@ async function basicDocumentParse(filePath) {
   return {
     title,
     vulnerabilities,
-    ofcs,
-    sectors,
-    total_lines: lines.length,
-    word_count: basicContent.split(/\s+/).length
+    options_for_consideration: ofcs,
+    sectors
   };
 }
