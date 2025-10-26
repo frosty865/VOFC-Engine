@@ -1,7 +1,7 @@
 // /app/api/documents/process-vofc/route.ts
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
-import { ollamaChatJSON } from '../../../lib/ollama'
+import { ollamaChatJSON } from '../../../lib/ollama.js'
 import pdfParse from 'pdf-parse'
 
 // ---- enhanced prompt helpers ----

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { ollamaChatJSON } from '../../../lib/ollama';
+import { ollamaChatJSON } from '../../../lib/ollama.js';
 
 // Use service role for API operations to bypass RLS
 const supabase = createClient(
