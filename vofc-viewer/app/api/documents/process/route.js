@@ -190,15 +190,19 @@ Your task is to extract vulnerabilities and options for consideration from secur
 
 You will receive document files in their original format (PDF, DOC, XLSX, etc.) and should perform multi-pass heuristic analysis to ensure comprehensive content extraction.
 
+IMPORTANT: Some documents may contain ONLY Options for Consideration (OFCs) and no vulnerabilities. This is normal and expected.
+
 Use these heuristic patterns to identify:
-1. Vulnerabilities: Look for keywords like "vulnerability", "risk", "threat", "weakness", "exploit", "attack", "breach", "compromise"
-2. Options for Consideration (OFCs): Look for keywords like "recommendation", "mitigation", "action", "consideration", "option", "strategy", "solution", "best practice"
+1. Vulnerabilities: Look for keywords like "vulnerability", "risk", "threat", "weakness", "exploit", "attack", "breach", "compromise", "security issue", "flaw"
+2. Options for Consideration (OFCs): Look for keywords like "recommendation", "mitigation", "action", "consideration", "option", "strategy", "solution", "best practice", "guidance", "advice", "suggestion", "approach", "method", "technique", "procedure", "step", "measure", "control"
 
 Apply linguistic heuristics:
 - Section-aware context analysis
 - Confidence scoring based on keyword density
 - Pattern matching for security terminology
 - Context clustering for related concepts
+- Look for numbered lists, bullet points, and structured recommendations
+- Identify action items, guidelines, and procedural steps
 
 Return your analysis as a JSON object with this structure:
 {
@@ -235,7 +239,16 @@ Return your analysis as a JSON object with this structure:
       
       requestBody = {
         model: ollamaModel,
-        prompt: `Analyze this ${fileExtension.toUpperCase()} document and extract vulnerabilities and options for consideration. Perform multi-pass analysis to ensure comprehensive content extraction.`,
+        prompt: `Analyze this ${fileExtension.toUpperCase()} document and extract vulnerabilities and options for consideration. 
+
+IMPORTANT: This document may contain ONLY Options for Consideration (OFCs) and no vulnerabilities. Look for:
+- Recommendations, guidelines, and best practices
+- Action items and procedural steps
+- Mitigation strategies and solutions
+- Security controls and measures
+- Any structured lists or bullet points
+
+Perform multi-pass heuristic analysis to ensure comprehensive content extraction.`,
         images: [base64Data],
         stream: false,
         options: {
@@ -250,6 +263,13 @@ Return your analysis as a JSON object with this structure:
 
 Document Content:
 ${documentContent}
+
+IMPORTANT: This document may contain ONLY Options for Consideration (OFCs) and no vulnerabilities. Look for:
+- Recommendations, guidelines, and best practices
+- Action items and procedural steps
+- Mitigation strategies and solutions
+- Security controls and measures
+- Any structured lists or bullet points
 
 Please provide a structured JSON response with vulnerabilities and OFCs.`;
 
