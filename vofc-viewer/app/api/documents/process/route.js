@@ -81,7 +81,7 @@ export async function POST(request) {
         .upload(filename.replace(/\.[^/.]+$/, '.txt'), textBuffer, {
           cacheControl: '3600',
           upsert: true,
-          contentType: 'text/plain'
+          contentType: 'application/octet-stream'
         });
       
       if (uploadError) {
@@ -101,7 +101,7 @@ export async function POST(request) {
         .upload(`${filename}.metadata.json`, metadataContent, {
           cacheControl: '3600',
           upsert: true,
-          contentType: 'application/json'
+          contentType: 'application/octet-stream'
         });
       
       if (metadataError) {
