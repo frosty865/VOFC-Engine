@@ -9,27 +9,37 @@ const supabase = createClient(
 
 export async function GET() {
   try {
-    const folders = ['documents', 'processing', 'parsed', 'failed'];
+    console.log('🔍 /api/documents/status-all called');
+    // Use production bucket names
+    const bucketConfig = {
+      documents: 'documents',           // Pending documents
+      processing: 'documents',          // Processing (same as documents for now)
+      completed: 'processed-documents', // Completed documents
+      failed: 'Parsed'                  // Failed documents (using Parsed bucket for now)
+    };
+    
     const status = {};
     
-    // Get file counts and details for each folder
-    for (const folder of folders) {
+    // Get file counts and details for each bucket/folder
+    for (const [folder, bucketName] of Object.entries(bucketConfig)) {
       try {
+        console.log(`📁 Checking bucket: ${bucketName} for ${folder}`);
         const { data: files, error } = await supabase.storage
-          .from('vofc_seed')
-          .list(folder, {
+          .from(bucketName)
+          .list('', {
             limit: 100,
             sortBy: { column: 'created_at', order: 'desc' }
           });
         
         if (error) {
-          console.error(`Error listing ${folder}:`, error);
+          console.error(`❌ Error listing ${folder}:`, error);
           status[folder] = {
             count: 0,
             files: [],
             error: error.message
           };
         } else {
+          console.log(`✅ Found ${files.length} files in ${folder}`);
           status[folder] = {
             count: files.length,
             files: files.slice(0, 10).map(file => ({
@@ -41,7 +51,7 @@ export async function GET() {
           };
         }
       } catch (folderError) {
-        console.error(`Error processing ${folder}:`, folderError);
+        console.error(`❌ Error processing ${folder}:`, folderError);
         status[folder] = {
           count: 0,
           files: [],
@@ -50,10 +60,22 @@ export async function GET() {
       }
     }
     
-    return NextResponse.json({
+    const response = {
       success: true,
-      documents: status
+      documents: status.documents?.files || [],
+      processing: status.processing?.files || [],
+      completed: status.parsed?.files || [],
+      failed: status.failed?.files || []
+    };
+    
+    console.log('📊 API Response:', {
+      documents: response.documents.length,
+      processing: response.processing.length,
+      completed: response.completed.length,
+      failed: response.failed.length
     });
+    
+    return NextResponse.json(response);
     
   } catch (error) {
     console.error('Error getting all document status:', error);

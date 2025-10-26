@@ -98,10 +98,10 @@ export async function POST(request) {
       // Convert file to buffer
       const buffer = await document.arrayBuffer();
       
-      // Upload to Supabase storage bucket
+      // Upload to Supabase storage bucket (production)
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('vofc_seed')
-        .upload(`documents/${uniqueFileName}`, buffer, {
+        .from('documents')
+        .upload(uniqueFileName, buffer, {
           cacheControl: '3600',
           upsert: false
         });

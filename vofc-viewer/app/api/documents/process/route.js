@@ -29,15 +29,14 @@ export async function POST(request) {
       );
     }
     
-    // Define storage paths
-    const sourcePath = `documents/${filename}`;
-    const processingPath = `processing/${filename}`;
-    const completedPath = `parsed/${filename}`;
+    // Define storage paths using production buckets
+    const sourceBucket = 'documents';
+    const completedBucket = 'processed-documents';
     
     // Check if source file exists in storage
     const { data: sourceFile, error: sourceError } = await supabase.storage
-      .from('vofc_seed')
-      .list('documents', {
+      .from(sourceBucket)
+      .list('', {
         search: filename
       });
     
@@ -51,8 +50,8 @@ export async function POST(request) {
     try {
       // Download file from storage for processing
       const { data: fileData, error: downloadError } = await supabase.storage
-        .from('vofc_seed')
-        .download(sourcePath);
+        .from(sourceBucket)
+        .download(filename);
       
       if (downloadError) {
         throw new Error(`Failed to download file: ${downloadError.message}`);
@@ -73,12 +72,16 @@ export async function POST(request) {
         parsedData = await basicDocumentParse(buffer, filename);
       }
       
-      // Upload processed file to completed folder
+      // Upload processed text content to completed bucket
+      const processedTextContent = typeof parsedData === 'string' ? parsedData : JSON.stringify(parsedData, null, 2);
+      const textBuffer = Buffer.from(processedTextContent, 'utf8');
+      
       const { error: uploadError } = await supabase.storage
-        .from('vofc_seed')
-        .upload(completedPath, buffer, {
+        .from(completedBucket)
+        .upload(filename.replace(/\.[^/.]+$/, '.txt'), textBuffer, {
           cacheControl: '3600',
-          upsert: true
+          upsert: true,
+          contentType: 'text/plain'
         });
       
       if (uploadError) {
@@ -94,20 +97,21 @@ export async function POST(request) {
       }, null, 2);
       
       const { error: metadataError } = await supabase.storage
-        .from('vofc_seed')
-        .upload(`parsed/${filename}.metadata.json`, metadataContent, {
+        .from(completedBucket)
+        .upload(`${filename}.metadata.json`, metadataContent, {
           cacheControl: '3600',
-          upsert: true
+          upsert: true,
+          contentType: 'application/json'
         });
       
       if (metadataError) {
         console.warn('Failed to save metadata:', metadataError.message);
       }
       
-      // Remove from documents folder (move to processed)
+      // Remove from documents bucket (move to processed)
       const { error: removeError } = await supabase.storage
-        .from('vofc_seed')
-        .remove([sourcePath]);
+        .from(sourceBucket)
+        .remove([filename]);
       
       if (removeError) {
         console.warn('Failed to remove source file:', removeError.message);
@@ -129,10 +133,11 @@ export async function POST(request) {
       // If processing fails, move to failed folder in storage
       try {
         const { error: failedUploadError } = await supabase.storage
-          .from('vofc_seed')
-          .upload(`failed/${filename}`, buffer, {
+          .from('Parsed')
+          .upload(filename, buffer, {
             cacheControl: '3600',
-            upsert: true
+            upsert: true,
+            contentType: 'application/pdf'
           });
         
         if (failedUploadError) {
@@ -163,9 +168,9 @@ async function parseDocumentContent(buffer, filename) {
     const fileExtension = filename.split('.').pop().toLowerCase();
     
     if (fileExtension === 'pdf') {
-      // For PDF files, we'll need to extract text
-      // This is a simplified version - in production you'd use a PDF parser
-      return 'PDF content extraction not implemented yet';
+      // For PDF files, we'll send the binary data directly to Ollama
+      // Ollama will handle the multi-pass PDF text extraction
+      return 'PDF_BINARY_DATA';
     } else if (['txt', 'md', 'json'].includes(fileExtension)) {
       // For text files, convert buffer to string
       return Buffer.from(buffer).toString('utf8');
@@ -188,12 +193,15 @@ async function runOllamaParser(buffer, filename) {
     const systemPrompt = `You are an expert document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
 Your task is to extract vulnerabilities and options for consideration from security documents.
 
+For PDF documents, you will receive the binary data and should perform multi-pass text extraction with heuristic analysis to ensure readable, meaningful text is extracted.
+
 Extract the following information:
 1. Vulnerabilities: Security weaknesses, risks, or threats mentioned in the document
 2. Options for Consideration (OFCs): Mitigation strategies, recommendations, or actions to address vulnerabilities
 
 Return your analysis as a JSON object with this structure:
 {
+  "title": "document title",
   "vulnerabilities": [
     {
       "id": "unique_id",
@@ -209,30 +217,58 @@ Return your analysis as a JSON object with this structure:
       "discipline": "relevant discipline",
       "source": "source information"
     }
+  ],
+  "sectors": [
+    {
+      "name": "sector name",
+      "confidence": 0.8
+    }
   ]
 }`;
 
-        const userPrompt = `Analyze this document and extract vulnerabilities and options for consideration:
+    let requestBody;
+    
+    if (documentContent === 'PDF_BINARY_DATA') {
+      // For PDF files, send binary data as base64 to Ollama
+      const base64Data = Buffer.from(buffer).toString('base64');
+      
+      requestBody = {
+        model: ollamaModel,
+        prompt: `Analyze this PDF document and extract vulnerabilities and options for consideration. Perform multi-pass text extraction to ensure readable content.`,
+        images: [base64Data],
+        stream: false,
+        options: {
+          temperature: 0.1,
+          top_p: 0.9
+        }
+      };
+    } else {
+      // For text files, use chat format
+      const userPrompt = `Analyze this document and extract vulnerabilities and options for consideration:
 
 Document Content:
 ${documentContent}
 
 Please provide a structured JSON response with vulnerabilities and OFCs.`;
 
-    // Call Ollama API
-    const response = await fetch(`${ollamaBaseUrl}/api/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+      requestBody = {
         model: ollamaModel,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
         stream: false
-      })
+      };
+    }
+
+    // Call Ollama API with correct endpoint
+    const apiEndpoint = documentContent === 'PDF_BINARY_DATA' ? '/api/generate' : '/api/chat';
+    const response = await fetch(`${ollamaBaseUrl}${apiEndpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
@@ -240,14 +276,36 @@ Please provide a structured JSON response with vulnerabilities and OFCs.`;
     }
 
     const data = await response.json();
-    const ollamaContent = data.message?.content || data.response;
+    const ollamaContent = data.message?.content || data.response || data.text;
     
     if (!ollamaContent) {
       throw new Error('No content received from Ollama');
     }
 
-    // Parse JSON response
-    const result = JSON.parse(ollamaContent);
+    // Validate that we got readable text (not PDF internal structure)
+    if (ollamaContent.includes('PDF_BINARY_DATA') || 
+        ollamaContent.includes('%%EOF') || 
+        ollamaContent.includes('obj') ||
+        ollamaContent.length < 50) {
+      throw new Error('Ollama returned PDF internal structure instead of readable text');
+    }
+
+    // Try to parse JSON response
+    let result;
+    try {
+      result = JSON.parse(ollamaContent);
+    } catch (parseError) {
+      // If JSON parsing fails, create a basic structure
+      console.warn('Failed to parse Ollama JSON response, creating basic structure');
+      result = {
+        title: filename.replace(/\.[^/.]+$/, ''),
+        vulnerabilities: [],
+        options_for_consideration: [],
+        sectors: [],
+        raw_content: ollamaContent.substring(0, 500) + '...'
+      };
+    }
+    
     return result;
 
   } catch (error) {

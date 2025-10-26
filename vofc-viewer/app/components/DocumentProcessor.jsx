@@ -19,23 +19,34 @@ export default function DocumentProcessor() {
   const fetchDocuments = async () => {
     try {
       setLoading(true);
+      console.log('🔄 Fetching documents from API...');
       
       // Single API call instead of 4 separate calls
       const response = await fetch('/api/documents/status-all');
+      console.log('📡 API Response status:', response.status);
+      
       const data = await response.json();
+      console.log('📊 API Response data:', data);
 
       if (data.success) {
+        console.log('✅ Documents fetched successfully:', {
+          documents: data.documents?.length || 0,
+          processing: data.processing?.length || 0,
+          completed: data.completed?.length || 0,
+          failed: data.failed?.length || 0
+        });
+        
         setDocuments(data.documents || []);
         setProcessing(data.processing || []);
         setCompleted(data.completed || []);
         setFailed(data.failed || []);
         setLastRefresh(Date.now());
       } else {
-        console.error('Error fetching documents:', data.error);
+        console.error('❌ Error fetching documents:', data.error);
       }
       
     } catch (error) {
-      console.error('Error fetching documents:', error);
+      console.error('❌ Error fetching documents:', error);
     } finally {
       setLoading(false);
     }
