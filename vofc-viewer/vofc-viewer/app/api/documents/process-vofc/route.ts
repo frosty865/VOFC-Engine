@@ -429,9 +429,10 @@ async function uploadResult(fileName: string, payload: any) {
   }
   
   // Write to Parsed/<file>.json for human review
+  const jsonContent = JSON.stringify(payload ?? [], null, 2)
   const { error: upErr } = await supabase.storage.from('Parsed').upload(
     fileName.replace(/\.pdf$/i, '.json'),
-    JSON.stringify(payload ?? [], null, 2),
+    Buffer.from(jsonContent, 'utf8'),
     { contentType: 'application/json', upsert: true }
   )
   

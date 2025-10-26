@@ -101,7 +101,7 @@ export async function POST(request) {
     
     const { error: parsedError } = await supabase.storage
       .from('Parsed')
-      .upload(`${filename}.json`, parsedContent, {
+      .upload(`${filename}.json`, Buffer.from(parsedContent, 'utf8'), {
         cacheControl: '3600',
         upsert: true,
         contentType: 'application/json'
