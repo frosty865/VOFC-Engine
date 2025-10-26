@@ -179,20 +179,26 @@ async function parseDocumentContent(buffer, filename) {
 async function runOllamaParser(buffer, filename) {
   try {
     const ollamaBaseUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
-    const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
+    const ollamaModel = process.env.OLLAMA_MODEL || 'mistral:latest';
     
     // Get file extension to determine how to send to Ollama
     const fileExtension = filename.split('.').pop().toLowerCase();
     
-    // Create system prompt for vulnerability and OFC extraction
-    const systemPrompt = `You are an expert document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
-Your task is to extract vulnerabilities and options for consideration from security documents.
+    // Create system prompt for heuristic vulnerability and OFC extraction
+    const systemPrompt = `You are a heuristic document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
+Your task is to extract vulnerabilities and options for consideration from security documents using linguistic heuristics and pattern recognition.
 
-You will receive document files in their original format (PDF, DOC, XLSX, etc.) and should perform multi-pass analysis with heuristic extraction to ensure comprehensive content analysis.
+You will receive document files in their original format (PDF, DOC, XLSX, etc.) and should perform multi-pass heuristic analysis to ensure comprehensive content extraction.
 
-Extract the following information:
-1. Vulnerabilities: Security weaknesses, risks, or threats mentioned in the document
-2. Options for Consideration (OFCs): Mitigation strategies, recommendations, or actions to address vulnerabilities
+Use these heuristic patterns to identify:
+1. Vulnerabilities: Look for keywords like "vulnerability", "risk", "threat", "weakness", "exploit", "attack", "breach", "compromise"
+2. Options for Consideration (OFCs): Look for keywords like "recommendation", "mitigation", "action", "consideration", "option", "strategy", "solution", "best practice"
+
+Apply linguistic heuristics:
+- Section-aware context analysis
+- Confidence scoring based on keyword density
+- Pattern matching for security terminology
+- Context clustering for related concepts
 
 Return your analysis as a JSON object with this structure:
 {
