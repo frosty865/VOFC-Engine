@@ -64,7 +64,7 @@ export async function GET() {
       success: true,
       documents: status.documents?.files || [],
       processing: status.processing?.files || [],
-      completed: status.parsed?.files || [],
+      completed: status.completed?.files || [],
       failed: status.failed?.files || []
     };
     

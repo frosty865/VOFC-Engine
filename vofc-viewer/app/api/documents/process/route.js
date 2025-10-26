@@ -31,7 +31,7 @@ export async function POST(request) {
     
     // Define storage paths using production buckets
     const sourceBucket = 'documents';
-    const completedBucket = 'processed-documents';
+    const completedBucket = 'documents'; // Use same bucket for processed files
     
     // Check if source file exists in storage
     const { data: sourceFile, error: sourceError } = await supabase.storage
