@@ -1,14 +1,4 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
-import { spawn } from "child_process";
-
-const logFile = path.join(process.cwd(), "ollama_dashboard.log");
-
-function appendLog(msg) {
-  const entry = `${new Date().toISOString()} | ${msg}\n`;
-  fs.appendFileSync(logFile, entry);
-}
 
 // Enhanced dashboard with live VOFC integration only
 export async function GET(request) {
@@ -22,7 +12,7 @@ export async function GET(request) {
         const timestamp = new Date().toISOString();
         const logEntry = `[${timestamp}] [${type.toUpperCase()}] ${msg}`;
         controller.enqueue(encoder.encode(`data: ${logEntry}\n\n`));
-        appendLog(logEntry);
+        // Note: File logging disabled in serverless environment
       };
 
       try {
@@ -58,7 +48,6 @@ export async function GET(request) {
     },
   });
 }
-
 
 async function runLiveMode(send) {
   send("🔴 LIVE MODE: Monitoring VOFC processing system", "system");

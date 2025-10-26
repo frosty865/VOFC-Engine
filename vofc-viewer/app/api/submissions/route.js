@@ -1,12 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 import { ollamaChatJSON } from '../../../lib/ollama';
-
-// Use service role for API submissions to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
 
 export async function POST(request) {
   try {
@@ -31,7 +25,7 @@ export async function POST(request) {
       updated_at: new Date().toISOString()
     };
 
-    const { data: submission, error: submissionError } = await supabase
+    const { data: submission, error: submissionError } = await supabaseAdmin
       .from('submissions')
       .insert([submissionData])
       .select()
@@ -76,7 +70,7 @@ export async function POST(request) {
     console.log('📄 Document saved to docs folder for processing:', docsFile);
 
     // Update submission status to processing
-    await supabase
+    await supabaseAdmin
       .from('submissions')
       .update({
         status: 'processing',
@@ -206,7 +200,7 @@ Please provide a structured JSON response with vulnerabilities and OFCs.`;
       if (updateError) {
         console.error('❌ Error updating submission with parsing results:', updateError);
         // Update status to failed
-        await supabase
+        await supabaseAdmin
           .from('submissions')
           .update({
             status: 'processing_failed',
@@ -216,7 +210,7 @@ Please provide a structured JSON response with vulnerabilities and OFCs.`;
       } else {
         console.log('✅ Submission updated with Ollama API results');
         // Update status back to pending_review for manual review
-        await supabase
+        await supabaseAdmin
           .from('submissions')
           .update({
             status: 'pending_review',
@@ -230,7 +224,7 @@ Please provide a structured JSON response with vulnerabilities and OFCs.`;
       console.log('⚠️ Skipping automatic processing due to Ollama error');
       
       // Update status to failed
-      await supabase
+      await supabaseAdmin
         .from('submissions')
         .update({
           status: 'processing_failed',

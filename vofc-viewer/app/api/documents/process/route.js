@@ -1,12 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 import { ollamaChatJSON } from '@/lib/ollama';
-
-// Use service role for API operations to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
 
 export async function POST(request) {
   console.log('🚀 Document processing endpoint called - SIMPLIFIED VERSION');
@@ -99,7 +93,7 @@ export async function POST(request) {
       parsed_data: parsedData
     }, null, 2);
     
-    const { error: parsedError } = await supabase.storage
+      const { error: parsedError } = await supabaseAdmin.storage
       .from('Parsed')
       .upload(`${filename}.json`, Buffer.from(parsedContent, 'utf8'), {
         cacheControl: '3600',
