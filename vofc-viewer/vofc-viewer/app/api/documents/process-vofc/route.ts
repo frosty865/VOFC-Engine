@@ -430,15 +430,51 @@ async function uploadResult(fileName: string, payload: any) {
   
   // Write to Parsed/<file>.json for human review
   const jsonContent = JSON.stringify(payload ?? [], null, 2)
-  const { error: upErr } = await supabase.storage.from('Parsed').upload(
-    fileName.replace(/\.pdf$/i, '.json'),
-    Buffer.from(jsonContent, 'utf8'),
-    { contentType: 'application/json', upsert: true }
-  )
+  const jsonFileName = fileName.replace(/\.pdf$/i, '.json')
   
-  if (upErr) {
-    console.error('Upload error:', upErr)
-    throw upErr
+  try {
+    const { error: upErr } = await supabase.storage.from('Parsed').upload(
+      jsonFileName,
+      Buffer.from(jsonContent, 'utf8'),
+      { contentType: 'application/json', upsert: true }
+    )
+    
+    if (upErr) {
+      console.error('JSON upload error:', upErr)
+      console.log('Attempting to create Parsed bucket if it does not exist...')
+      
+      // Try to create the bucket if it doesn't exist
+      try {
+        await supabase.storage.createBucket('Parsed', {
+          public: false,
+          fileSizeLimit: 50 * 1024 * 1024, // 50MB
+          allowedMimeTypes: ['application/json']
+        })
+        console.log('✅ Parsed bucket created successfully')
+        
+        // Retry upload
+        const { error: retryErr } = await supabase.storage.from('Parsed').upload(
+          jsonFileName,
+          Buffer.from(jsonContent, 'utf8'),
+          { contentType: 'application/json', upsert: true }
+        )
+        
+        if (retryErr) {
+          console.error('❌ Retry upload failed:', retryErr)
+          // Don't throw error - continue with processing
+        } else {
+          console.log('✅ JSON upload successful after bucket creation')
+        }
+      } catch (bucketError) {
+        console.error('❌ Failed to create Parsed bucket:', bucketError)
+        // Continue processing even if JSON upload fails
+      }
+    } else {
+      console.log('✅ JSON results uploaded successfully:', jsonFileName)
+    }
+  } catch (uploadError) {
+    console.error('❌ JSON upload failed completely:', uploadError)
+    // Continue processing - JSON upload failure shouldn't stop the process
   }
   
   console.log(`Processing completed: ${result.count} vulnerabilities extracted in ${result.performance_metrics.processing_time_ms}ms`)
