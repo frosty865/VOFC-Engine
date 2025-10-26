@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '../../../lib/supabaseClient';
+import { getServerClient } from '../../../lib/supabase-manager';
 import { AuthService } from '../../../lib/auth-server';
 
 // Get all OFCs (admin only)
@@ -40,8 +40,17 @@ export async function GET(request) {
       );
     }
 
+    // Get server client
+    const supabaseServer = getServerClient();
+    if (!supabaseServer) {
+      return NextResponse.json(
+        { success: false, error: 'Database connection failed' },
+        { status: 500 }
+      );
+    }
+
     // Get all OFCs
-    const { data: options_for_consideration, error } = await supabase
+    const { data: options_for_consideration, error } = await supabaseServer
       .from('options_for_consideration')
       .select('*')
       .order('option_text');
@@ -107,8 +116,17 @@ export async function PUT(request) {
       );
     }
 
+    // Get server client
+    const supabaseServer = getServerClient();
+    if (!supabaseServer) {
+      return NextResponse.json(
+        { success: false, error: 'Database connection failed' },
+        { status: 500 }
+      );
+    }
+
     // Update OFC
-    const { data: ofc, error } = await supabase
+    const { data: ofc, error } = await supabaseServer
       .from('options_for_consideration')
       .update({
         option_text,
@@ -187,8 +205,17 @@ export async function DELETE(request) {
       );
     }
 
+    // Get server client
+    const supabaseServer = getServerClient();
+    if (!supabaseServer) {
+      return NextResponse.json(
+        { success: false, error: 'Database connection failed' },
+        { status: 500 }
+      );
+    }
+
     // Delete OFC
-    const { error } = await supabase
+    const { error } = await supabaseServer
       .from('options_for_consideration')
       .delete()
       .eq('id', id);

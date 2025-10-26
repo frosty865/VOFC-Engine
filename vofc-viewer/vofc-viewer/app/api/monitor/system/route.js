@@ -94,7 +94,7 @@ async function getDatabaseStatus() {
 
 async function getOllamaStatus() {
   try {
-    const ollamaBaseUrl = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+    const ollamaBaseUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
     const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
     
     // Test Ollama connectivity
@@ -129,7 +129,7 @@ async function getOllamaStatus() {
     return {
       status: 'offline',
       error: error.message,
-      url: process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434'
+      url: process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site'
     };
   }
 }

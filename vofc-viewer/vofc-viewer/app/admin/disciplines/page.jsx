@@ -36,8 +36,8 @@ export default function DisciplineManagement() {
 
       setCurrentUser(user);
 
-      // Allow admin, spsa, and analyst to manage disciplines
-      if (!(user.role === 'admin' || user.role === 'spsa' || user.role === 'analyst')) {
+      // Allow admin and spsa to manage disciplines
+      if (!['admin', 'spsa'].includes(user.role)) {
         router.push('/');
         return;
       }

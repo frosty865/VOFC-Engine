@@ -297,7 +297,7 @@ monitoring.addHealthCheck('database', async () => {
   );
   
   const { data, error } = await supabase
-    .from('vofc_users')
+    .from('user_profiles')
     .select('count')
     .limit(1);
   

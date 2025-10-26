@@ -1,9 +1,15 @@
 // Server-side auth functions for API routes
 import { createClient } from '@supabase/supabase-js';
+import { jwtVerify } from 'jose';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// Secret key for JWT verification (must match the one used for signing)
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production'
 );
 
 export class AuthService {
@@ -13,20 +19,18 @@ export class AuthService {
         return { success: false, error: 'No token provided' };
       }
 
-      // Verify JWT token
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/user`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY
+      // Verify custom JWT token
+      const { payload } = await jwtVerify(token, JWT_SECRET);
+      
+      return { 
+        success: true, 
+        user: {
+          id: payload.userId,
+          email: payload.email,
+          role: payload.role,
+          name: payload.name
         }
-      });
-
-      if (!response.ok) {
-        return { success: false, error: 'Invalid token' };
-      }
-
-      const user = await response.json();
-      return { success: true, user };
+      };
     } catch (error) {
       console.error('Token verification error:', error);
       return { success: false, error: 'Token verification failed' };

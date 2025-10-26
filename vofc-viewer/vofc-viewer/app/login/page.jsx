@@ -25,24 +25,28 @@ export default function Login() {
         if (error) throw error;
         alert('Check your email for the confirmation link!');
       } else {
-        // For login, construct email from username
+        // For login, use our custom JWT authentication API
         const email = `${username}@vofc.gov`;
         
         console.log('Attempting login with:', { email, password });
         
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password }),
         });
         
-        console.log('Login response:', { data, error });
+        const result = await response.json();
         
-        if (error) {
-          console.error('Login error:', error);
-          throw error;
+        console.log('Login response:', result);
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Login failed');
         }
         
-        console.log('Login successful:', data);
+        console.log('Login successful:', result);
         
         // Wait a moment for the session to be established
         await new Promise(resolve => setTimeout(resolve, 100));

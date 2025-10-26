@@ -330,8 +330,14 @@ async function triggerLearningSystem(filename, parsedData) {
 }
 
 async function processWithOllama(content, filename) {
-  const ollamaBaseUrl = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+  const ollamaBaseUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
   const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
+  
+  // Check if Ollama is configured
+  if (!process.env.OLLAMA_URL && !process.env.OLLAMA_API_BASE_URL && !process.env.OLLAMA_BASE_URL) {
+    console.log('⚠️ Ollama not configured, using basic parsing instead');
+    return await basicDocumentParse(content, filename);
+  }
   
   console.log(`🤖 Calling Ollama API: ${ollamaBaseUrl}/api/chat`);
   console.log(`📄 Processing document: ${filename}`);

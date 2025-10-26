@@ -1,49 +1,114 @@
 import { NextResponse } from 'next/server';
-import { jwtVerify } from 'jose';
+import { createClient } from '@supabase/supabase-js';
 
-// Secret key for JWT verification (must match the one used for signing)
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production'
-);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error('Missing Supabase environment variables');
+}
 
 export async function GET(request) {
   try {
-    const token = request.cookies.get('auth-token')?.value;
-
-    if (!token) {
+    console.log('🔍 Auth verify endpoint called');
+    
+    // Get the access token from cookies
+    const cookieHeader = request.headers.get('cookie');
+    console.log('🍪 Cookie header:', cookieHeader ? 'Present' : 'Missing');
+    
+    if (!cookieHeader) {
+      console.log('❌ No cookies found');
       return NextResponse.json(
-        { success: false, error: 'No authentication token' },
+        { success: false, error: 'No session found' },
         { status: 401 }
       );
     }
 
-    // Verify and decode the JWT token
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    // Extract the access token from cookies
+    const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
+      const [key, value] = cookie.trim().split('=');
+      acc[key] = value;
+      return acc;
+    }, {});
 
-    // Check if token is expired (JWT handles this automatically)
-    if (!payload || !payload.email) {
+    const accessToken = cookies['sb-access-token'];
+    console.log('🔑 Access token:', accessToken ? 'Present' : 'Missing');
+
+    if (!accessToken) {
+      console.log('❌ No access token found in cookies');
+      return NextResponse.json(
+        { success: false, error: 'No access token found' },
+        { status: 401 }
+      );
+    }
+
+    // Create service role client to verify the token
+    const serviceSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
+    );
+
+    // Verify the access token
+    const { data: { user }, error: authError } = await serviceSupabase.auth.getUser(accessToken);
+
+    if (authError || !user) {
+      console.log('❌ Token verification failed:', authError?.message);
       return NextResponse.json(
         { success: false, error: 'Invalid token' },
         { status: 401 }
       );
     }
 
+    console.log('✅ Token verified for user:', user.email);
+
+    // Get user profile
+    const { data: profile, error: profileError } = await serviceSupabase
+      .from('user_profiles')
+      .select('role, first_name, last_name, organization, is_active, username')
+      .eq('user_id', user.id)
+      .single();
+
+    if (profileError || !profile) {
+      console.log('❌ Profile lookup failed:', profileError?.message);
+      return NextResponse.json(
+        { success: false, error: 'User profile not found' },
+        { status: 401 }
+      );
+    }
+
+    if (!profile.is_active) {
+      console.log('❌ Account is inactive');
+      return NextResponse.json(
+        { success: false, error: 'Account is inactive' },
+        { status: 401 }
+      );
+    }
+
+    console.log('✅ Profile found:', profile.role);
 
     return NextResponse.json({
       success: true,
       user: {
-        id: payload.userId,
-        email: payload.email,
-        role: payload.role,
-        name: payload.name
+        id: user.id,
+        email: user.email,
+        role: profile.role,
+        name: `${profile.first_name} ${profile.last_name}`,
+        organization: profile.organization,
+        username: profile.username
       }
     });
 
   } catch (error) {
-    console.error('JWT verification error:', error);
+    console.error('❌ Auth verify error:', error);
     return NextResponse.json(
-      { success: false, error: 'Token verification failed' },
-      { status: 401 }
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
     );
   }
 }
