@@ -5,6 +5,24 @@ export async function GET() {
   try {
     console.log('🔍 /api/documents/status-all called');
     
+    // Auto-sync documents from Ollama server first
+    try {
+      console.log('🔄 Auto-syncing documents from Ollama server...');
+      const syncResponse = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/documents/auto-sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (syncResponse.ok) {
+        const syncData = await syncResponse.json();
+        if (syncData.synced > 0) {
+          console.log(`✅ Auto-synced ${syncData.synced} new documents`);
+        }
+      }
+    } catch (syncError) {
+      console.warn('⚠️ Auto-sync failed (non-critical):', syncError.message);
+    }
+    
     // Read from Supabase submissions table instead of local directories
     if (!supabaseAdmin) {
       console.warn('⚠️ Supabase admin client not available - using fallback');
