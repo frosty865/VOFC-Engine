@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+import { supabaseAdminAdmin } from '@/lib/supabaseAdmin-client.js';
 
 export async function POST(request) {
   try {
@@ -32,7 +27,7 @@ export async function POST(request) {
     };
 
     // Insert into database
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('ofc_requests')
       .insert([ofcRequest])
       .select();

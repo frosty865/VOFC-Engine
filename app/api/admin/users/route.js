@@ -1,19 +1,15 @@
 // Handles admin user CRUD. All endpoints require admin authentication.
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../lib/auth-middleware';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdminAdmin } from '@/lib/supabaseAdmin-client.js';
 import bcrypt from 'bcryptjs';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // Get all users (admin only)
 export async function GET(request) {
   const { user, error } = await requireAdmin(request);
   if (error) return error;
   try {
-    const { data: users, error } = await supabase
+    const { data: users, error } = await supabaseAdmin
       .from('vofc_users')
       .select('*')
       .order('created_at', { ascending: false });
@@ -42,7 +38,7 @@ export async function POST(request) {
       );
     }
     const hashedPassword = await bcrypt.hash(password, 12);
-    const { data: user, error } = await supabase
+    const { data: user, error } = await supabaseAdmin
       .from('vofc_users')
       .insert({
         username,
@@ -101,7 +97,7 @@ export async function PUT(request) {
       updateData.password_hash = hashedPassword;
       updateData.force_password_change = false;
     }
-    const { data: user, error } = await supabase
+    const { data: user, error } = await supabaseAdmin
       .from('vofc_users')
       .update(updateData)
       .eq('user_id', user_id)
@@ -155,12 +151,12 @@ export async function DELETE(request) {
       );
     }
     // Delete user sessions
-    await supabase
+    await supabaseAdmin
       .from('user_sessions')
       .delete()
       .eq('user_id', user_id);
     // Delete user
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('vofc_users')
       .delete()
       .eq('user_id', user_id);

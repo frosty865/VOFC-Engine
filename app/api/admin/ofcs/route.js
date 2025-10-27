@@ -1,16 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 import { AuthService } from '../../../lib/auth-server';
-
-// Create server client with service role key for admin operations
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Missing Supabase environment variables');
-}
-
-const supabaseServer = createClient(supabaseUrl, supabaseServiceKey);
 
 // Get all OFCs (admin only)
 export async function GET(request) {
@@ -41,14 +31,14 @@ export async function GET(request) {
     }
 
     // Get all OFCs
-    if (!supabaseServer) {
+    if (!supabaseAdmin) {
       return NextResponse.json(
         { success: false, error: 'Database connection failed' },
         { status: 500 }
       );
     }
     
-    const { data: options_for_consideration, error } = await supabaseServer
+    const { data: options_for_consideration, error } = await supabaseAdmin
       .from('options_for_consideration')
       .select('*')
       .order('option_text');
@@ -115,14 +105,14 @@ export async function PUT(request) {
     }
 
     // Update OFC
-    if (!supabaseServer) {
+    if (!supabaseAdmin) {
       return NextResponse.json(
         { success: false, error: 'Database connection failed' },
         { status: 500 }
       );
     }
     
-    const { data: ofc, error } = await supabaseServer
+    const { data: ofc, error } = await supabaseAdmin
       .from('options_for_consideration')
       .update({
         option_text,
@@ -202,14 +192,14 @@ export async function DELETE(request) {
     }
 
     // Delete OFC
-    if (!supabaseServer) {
+    if (!supabaseAdmin) {
       return NextResponse.json(
         { success: false, error: 'Database connection failed' },
         { status: 500 }
       );
     }
     
-    const { error } = await supabaseServer
+    const { error } = await supabaseAdmin
       .from('options_for_consideration')
       .delete()
       .eq('id', id);
