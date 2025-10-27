@@ -1,87 +1,80 @@
 import { NextResponse } from 'next/server';
-import { getServerClient } from '../../../lib/supabase-manager';
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 
 export async function GET() {
   try {
-    const supabaseServer = getServerClient();
-    if (!supabaseServer) {
-      return NextResponse.json(
-        { success: false, error: 'Database connection failed' },
-        { status: 500 }
-      );
-    }
+    console.log('🔍 /api/documents/status-all called');
+    // Use production bucket names
+    const bucketConfig = {
+      documents: 'documents',           // Pending documents
+      processing: 'documents',          // Processing (same as documents for now)
+      completed: 'processed-documents', // Completed documents
+      failed: 'Parsed'                  // Failed documents (using Parsed bucket for now)
+    };
     
-    // Get documents from storage
-    const { data: storageFiles, error: storageError } = await supabaseServer.storage
-      .from('documents')
-      .list('', { limit: 100 });
+    const status = {};
     
-    if (storageError) {
-      console.error('Error fetching storage files:', storageError);
-    }
-    
-    // Get processing status from database
-    const { data: processingData, error: processingError } = await supabaseServer
-      .from('document_processing')
-      .select('*')
-      .order('updated_at', { ascending: false });
-    
-    if (processingError) {
-      console.error('Error fetching processing data:', processingError);
-    }
-    
-    // Organize files by status
-    const documents = [];
-    const processing = [];
-    const completed = [];
-    const failed = [];
-    
-    // Process storage files
-    if (storageFiles) {
-      for (const file of storageFiles) {
-        const fileInfo = {
-          filename: file.name,
-          name: file.name,
-          size: file.metadata?.size || 0,
-          modified: file.updated_at || new Date().toISOString()
-        };
+    // Get file counts and details for each bucket/folder
+    for (const [folder, bucketName] of Object.entries(bucketConfig)) {
+      try {
+        console.log(`📁 Checking bucket: ${bucketName} for ${folder}`);
+        const { data: files, error } = await supabaseAdmin.storage
+          .from(bucketName)
+          .list('', {
+            limit: 100,
+            sortBy: { column: 'created_at', order: 'desc' }
+          });
         
-        // Check if file has processing status
-        const processingRecord = processingData?.find(p => p.filename === file.name);
-        
-        if (processingRecord) {
-          if (processingRecord.status === 'processing') {
-            processing.push({ ...fileInfo, status: 'processing' });
-          } else if (processingRecord.status === 'completed') {
-            completed.push({ ...fileInfo, status: 'completed' });
-          } else if (processingRecord.status === 'failed') {
-            failed.push({ ...fileInfo, status: 'failed', error: processingRecord.error_message });
-          }
+        if (error) {
+          console.error(`❌ Error listing ${folder}:`, error);
+          status[folder] = {
+            count: 0,
+            files: [],
+            error: error.message
+          };
         } else {
-          // No processing record means it's pending
-          documents.push(fileInfo);
+          console.log(`✅ Found ${files.length} files in ${folder}`);
+          status[folder] = {
+            count: files.length,
+            files: files.slice(0, 10).map(file => ({
+              filename: file.name,
+              name: file.name, // Keep both for compatibility
+              size: file.metadata?.size || 0,
+              modified: file.updated_at || file.created_at
+            }))
+          };
         }
+      } catch (folderError) {
+        console.error(`❌ Error processing ${folder}:`, folderError);
+        status[folder] = {
+          count: 0,
+          files: [],
+          error: folderError.message
+        };
       }
     }
     
-    return NextResponse.json({
+    const response = {
       success: true,
-      documents,
-      processing,
-      completed,
-      failed,
-      summary: {
-        docs: documents.length,
-        processing: processing.length,
-        completed: completed.length,
-        failed: failed.length
-      }
+      documents: status.documents?.files || [],
+      processing: status.processing?.files || [],
+      completed: status.completed?.files || [],
+      failed: status.failed?.files || []
+    };
+    
+    console.log('📊 API Response:', {
+      documents: response.documents.length,
+      processing: response.processing.length,
+      completed: response.completed.length,
+      failed: response.failed.length
     });
     
+    return NextResponse.json(response);
+    
   } catch (error) {
-    console.error('Error getting consolidated document status:', error);
+    console.error('Error getting all document status:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to get document status' },
+      { success: false, error: 'Failed to get all document status' },
       { status: 500 }
     );
   }

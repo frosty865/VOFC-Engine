@@ -1,30 +1,30 @@
 import { NextResponse } from 'next/server';
-import { getServerClient } from '../../../lib/supabase-manager';
+import { createClient } from '@supabase/supabase-js';
 import { AuthService } from '../../../lib/auth-server';
+
+// Create server client with service role key for admin operations
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error('Missing Supabase environment variables');
+}
+
+const supabaseServer = createClient(supabaseUrl, supabaseServiceKey);
 
 // Get all OFCs (admin only)
 export async function GET(request) {
   try {
-    // Debug: Log all cookies
-    const allCookies = request.cookies.getAll();
-    console.log('🍪 All cookies received:', allCookies.map(c => ({ name: c.name, value: c.value.substring(0, 20) + '...' })));
-    
     // Verify authentication
     const token = request.cookies.get('auth-token')?.value;
-    console.log('🔑 Auth token received:', token ? token.substring(0, 20) + '...' : 'NO TOKEN');
-    
     if (!token) {
-      console.log('❌ No auth token found');
       return NextResponse.json(
         { success: false, error: 'Authentication required' },
         { status: 401 }
       );
     }
 
-    console.log('🔍 Verifying token...');
     const authResult = await AuthService.verifyToken(token);
-    console.log('🔍 Auth result:', authResult.success ? 'SUCCESS' : 'FAILED', authResult.error || '');
-    
     if (!authResult.success) {
       return NextResponse.json(
         { success: false, error: authResult.error },
@@ -32,24 +32,22 @@ export async function GET(request) {
       );
     }
 
-    // Check if user has admin access (admin, spsa, psa, or analyst)
-    if (!['admin', 'spsa', 'psa', 'analyst'].includes(authResult.user.role)) {
+    // Check if user has admin access (admin or spsa only)
+    if (!['admin', 'spsa'].includes(authResult.user.role)) {
       return NextResponse.json(
         { success: false, error: 'Admin access required' },
         { status: 403 }
       );
     }
 
-    // Get server client
-    const supabaseServer = getServerClient();
+    // Get all OFCs
     if (!supabaseServer) {
       return NextResponse.json(
         { success: false, error: 'Database connection failed' },
         { status: 500 }
       );
     }
-
-    // Get all OFCs
+    
     const { data: options_for_consideration, error } = await supabaseServer
       .from('options_for_consideration')
       .select('*')
@@ -93,8 +91,8 @@ export async function PUT(request) {
       );
     }
 
-    // Check if user has admin access (admin, spsa, psa, or analyst)
-    if (!['admin', 'spsa', 'psa', 'analyst'].includes(authResult.user.role)) {
+    // Check if user has admin access (admin or spsa only)
+    if (!['admin', 'spsa'].includes(authResult.user.role)) {
       return NextResponse.json(
         { success: false, error: 'Admin access required' },
         { status: 403 }
@@ -116,16 +114,14 @@ export async function PUT(request) {
       );
     }
 
-    // Get server client
-    const supabaseServer = getServerClient();
+    // Update OFC
     if (!supabaseServer) {
       return NextResponse.json(
         { success: false, error: 'Database connection failed' },
         { status: 500 }
       );
     }
-
-    // Update OFC
+    
     const { data: ofc, error } = await supabaseServer
       .from('options_for_consideration')
       .update({
@@ -187,8 +183,8 @@ export async function DELETE(request) {
       );
     }
 
-    // Check if user has admin access (admin, spsa, psa, or analyst)
-    if (!['admin', 'spsa', 'psa', 'analyst'].includes(authResult.user.role)) {
+    // Check if user has admin access (admin or spsa only)
+    if (!['admin', 'spsa'].includes(authResult.user.role)) {
       return NextResponse.json(
         { success: false, error: 'Admin access required' },
         { status: 403 }
@@ -205,16 +201,14 @@ export async function DELETE(request) {
       );
     }
 
-    // Get server client
-    const supabaseServer = getServerClient();
+    // Delete OFC
     if (!supabaseServer) {
       return NextResponse.json(
         { success: false, error: 'Database connection failed' },
         { status: 500 }
       );
     }
-
-    // Delete OFC
+    
     const { error } = await supabaseServer
       .from('options_for_consideration')
       .delete()

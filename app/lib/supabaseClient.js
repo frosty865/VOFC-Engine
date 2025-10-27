@@ -1,6 +1,6 @@
-// Use the global Supabase client manager
-import { getClient } from './supabase-manager';
+// DEPRECATED: Use lib/supabase-client.js instead
+// This file is kept for backward compatibility
+import { supabase, supabaseAdmin } from '../../lib/supabase-client.js'
 
-// Export the managed client
-export const supabase = getClient();
-export const getSupabaseClient = getClient;
+export { supabase, supabaseAdmin }
+export default supabase

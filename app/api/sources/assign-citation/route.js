@@ -21,8 +21,8 @@ export async function POST(request) {
     // Check if source already exists
     const { data: existingSource, error: searchError } = await supabase
       .from('sources')
-      .select('reference_number, source_text')
-      .eq('source_text', sourceText.trim())
+      .select('"reference number", source')
+      .eq('source', sourceText.trim())
       .single();
 
     if (searchError && searchError.code !== 'PGRST116') {
@@ -37,8 +37,8 @@ export async function POST(request) {
     if (existingSource) {
       return NextResponse.json({
         success: true,
-        citationNumber: existingSource.reference_number,
-        citation: `[cite: ${existingSource.reference_number}]`,
+        citationNumber: existingSource['reference number'],
+        citation: `[cite: ${existingSource['reference number']}]`,
         isNew: false
       });
     }
@@ -47,19 +47,19 @@ export async function POST(request) {
     // Get the next reference number
     const { data: maxRef, error: maxError } = await supabase
       .from('sources')
-      .select('reference_number')
-      .order('reference_number', { ascending: false })
+      .select('"reference number"')
+      .order('"reference number"', { ascending: false })
       .limit(1)
       .single();
 
-    const nextRefNumber = maxRef ? maxRef.reference_number + 1 : 1;
+    const nextRefNumber = maxRef ? maxRef['reference number'] + 1 : 1;
 
     // Create new source
     const { data: newSource, error: createError } = await supabase
       .from('sources')
       .insert([{
-        reference_number: nextRefNumber,
-        source_text: sourceText.trim()
+        'reference number': nextRefNumber,
+        source: sourceText.trim()
       }])
       .select()
       .single();
@@ -74,8 +74,8 @@ export async function POST(request) {
 
     return NextResponse.json({
       success: true,
-      citationNumber: newSource.reference_number,
-      citation: `[cite: ${newSource.reference_number}]`,
+      citationNumber: newSource['reference number'],
+      citation: `[cite: ${newSource['reference number']}]`,
       isNew: true
     });
 

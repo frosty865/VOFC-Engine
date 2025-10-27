@@ -1,11 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-// Use service role for API submissions to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+import { supabaseAdmin } from '@/lib/supabase-client.js';
+import { ollamaChatJSON } from '@/lib/ollama.js';
 
 export async function POST(request) {
   try {
@@ -30,7 +25,7 @@ export async function POST(request) {
       updated_at: new Date().toISOString()
     };
 
-    const { data: submission, error: submissionError } = await supabase
+    const { data: submission, error: submissionError } = await supabaseAdmin
       .from('submissions')
       .insert([submissionData])
       .select()
@@ -75,7 +70,7 @@ export async function POST(request) {
     console.log('📄 Document saved to docs folder for processing:', docsFile);
 
     // Update submission status to processing
-    await supabase
+    await supabaseAdmin
       .from('submissions')
       .update({
         status: 'processing',
@@ -83,16 +78,12 @@ export async function POST(request) {
       })
       .eq('id', submission.id);
 
-    // Run Ollama API directly
+    // Run Ollama API using the new utility
     try {
       console.log('🤖 Running Ollama API for document analysis...');
       console.log(`📊 Processing submission ${submission.id} with Ollama...`);
       
-      const ollamaBaseUrl = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-      const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
-      
-      // Create system prompt for vulnerability and OFC extraction
-      const systemPrompt = `You are an expert document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
+      const prompt = `You are an expert document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
 Your task is to extract vulnerabilities and options for consideration from security documents.
 
 Extract the following information:
@@ -117,44 +108,25 @@ Return your analysis as a JSON object with this structure:
       "source": "source information"
     }
   ]
-}`;
-
-      const userPrompt = `Analyze this document and extract vulnerabilities and options for consideration:
+}
 
 Document Content:
 ${content}
 
 Please provide a structured JSON response with vulnerabilities and OFCs.`;
 
-      // Call Ollama API
-      const response = await fetch(`${ollamaBaseUrl}/api/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: ollamaModel,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          stream: false
-        })
+      // Use the new Ollama utility
+      const parsedResult = await ollamaChatJSON({
+        model: 'mistral:latest',
+        prompt,
+        temperature: 0.1,
+        top_p: 0.9
       });
 
-      if (!response.ok) {
-        throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
+      if (!parsedResult) {
+        throw new Error('Ollama returned null response');
       }
 
-      const ollamaData = await response.json();
-      const ollamaContent = ollamaData.message?.content || ollamaData.response;
-      
-      if (!ollamaContent) {
-        throw new Error('No content received from Ollama');
-      }
-
-      // Parse JSON response
-      const parsedResult = JSON.parse(ollamaContent);
       console.log('✅ Ollama analysis completed successfully');
       
       const ofcCount = parsedResult.options_for_consideration?.length || 0;
@@ -228,7 +200,7 @@ Please provide a structured JSON response with vulnerabilities and OFCs.`;
       if (updateError) {
         console.error('❌ Error updating submission with parsing results:', updateError);
         // Update status to failed
-        await supabase
+        await supabaseAdmin
           .from('submissions')
           .update({
             status: 'processing_failed',
@@ -238,7 +210,7 @@ Please provide a structured JSON response with vulnerabilities and OFCs.`;
       } else {
         console.log('✅ Submission updated with Ollama API results');
         // Update status back to pending_review for manual review
-        await supabase
+        await supabaseAdmin
           .from('submissions')
           .update({
             status: 'pending_review',
@@ -252,7 +224,7 @@ Please provide a structured JSON response with vulnerabilities and OFCs.`;
       console.log('⚠️ Skipping automatic processing due to Ollama error');
       
       // Update status to failed
-      await supabase
+      await supabaseAdmin
         .from('submissions')
         .update({
           status: 'processing_failed',

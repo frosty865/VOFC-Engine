@@ -1,13 +1,13 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signIn } from '../lib/auth-supabase';
-import '../../styles/cisa.css';
+import { supabase } from '../lib/supabaseClient';
 
 export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
   const router = useRouter();
 
   const handleSubmit = async (e) => {
@@ -15,103 +15,110 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // Convert username to email format
-      const email = username.includes('@') ? username : `${username}@vofc.gov`;
-      
-      console.log('🔐 Attempting Supabase login with:', { email });
-      
-      const result = await signIn(email, password);
-      
-      if (result.success) {
-        console.log('✅ Supabase login successful:', result.user);
-        router.push('/');
+      if (isSignUp) {
+        // For signup, we'll use username@vofc.gov as email
+        const email = `${username}@vofc.gov`;
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+        if (error) throw error;
+        alert('Check your email for the confirmation link!');
       } else {
-        throw new Error(result.error || 'Login failed');
+        // For login, use our custom JWT authentication API
+        const email = `${username}@vofc.gov`;
+        
+        console.log('Attempting login with:', { email, password });
+        
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password }),
+        });
+        
+        const result = await response.json();
+        
+        console.log('Login response:', result);
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Login failed');
+        }
+        
+        console.log('Login successful:', result);
+        
+        // Wait a moment for the session to be established
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        console.log('Redirecting to home page...');
+        router.push('/');
       }
     } catch (error) {
-      console.error('Auth error:', error);
-      alert(error.message || 'Authentication failed');
+      console.error('Login error:', error);
+      alert('Error: ' + error.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <div className="mx-auto h-12 w-12 flex items-center justify-center">
-            <img 
-              src="/images/cisa-logo.png" 
-              alt="CISA Logo" 
-              className="h-12 w-auto"
-            />
-          </div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            VOFC Engine
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Sign in to your account
-          </p>
-        </div>
-        
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="username" className="sr-only">
-                Username or Email
-              </label>
-              <input
-                id="username"
-                name="username"
-                type="text"
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Username or Email"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              {loading ? 'Signing in...' : 'Sign in'}
-            </button>
+    <div className="min-h-screen flex items-center justify-center" style={{backgroundColor: 'var(--cisa-gray-lighter)'}}>
+      <div className="max-w-md w-full">
+        <div className="card">
+          <div className="card-header">
+            <h1 className="card-title text-center">VOFC Viewer</h1>
+            <p className="text-center text-secondary">Sign in to access the system</p>
           </div>
           
-          <div className="mt-6 p-4 bg-blue-50 rounded-md">
-            <h6 className="text-sm font-medium text-blue-800 mb-2">Test Users:</h6>
-            <ul className="text-xs text-blue-700 space-y-1">
-              <li><strong>admin</strong> - System Administrator (admin)</li>
-              <li><strong>spsa</strong> - Senior PSA Administrator (spsa)</li>
-              <li><strong>psa</strong> - Protective Security Advisor (psa)</li>
-              <li><strong>analyst</strong> - Security Analyst (analyst)</li>
-            </ul>
-            <p className="text-xs text-blue-600 mt-2">
-              <strong>Password for all users:</strong> Admin123!
-            </p>
+          <div className="card-body">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="form-group">
+                <label className="form-label">Username</label>
+                <input
+                  type="text"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="form-input"
+                  placeholder="Enter your username"
+                  autoComplete="username"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label className="form-label">Password</label>
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="form-input"
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                />
+              </div>
+              
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn btn-primary w-full"
+              >
+                {loading ? 'Loading...' : (isSignUp ? 'Sign Up' : 'Sign In')}
+              </button>
+            </form>
+            
+            <div className="text-center mt-4">
+              <button
+                type="button"
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="btn btn-link"
+              >
+                {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+              </button>
+            </div>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

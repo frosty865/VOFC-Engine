@@ -43,7 +43,7 @@ export async function POST() {
           ...process.env,
           SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
           SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
-          OLLAMA_URL: process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434/api/generate',
+          OLLAMA_URL: process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site/api',
           OLLAMA_MODEL: process.env.OLLAMA_MODEL || 'mistral:latest'
         }
       });
