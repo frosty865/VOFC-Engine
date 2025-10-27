@@ -1,60 +1,59 @@
 import { NextResponse } from 'next/server';
-import { readdir, stat } from 'fs/promises';
-import { join } from 'path';
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 
 export async function GET() {
   try {
     console.log('🔍 /api/documents/status-all called');
     
-    // Get local storage paths
-    const incomingDir = process.env.OLLAMA_INCOMING_PATH || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\incoming';
-    const processedDir = process.env.OLLAMA_PROCESSED_PATH || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\processed';
-    const errorDir = process.env.OLLAMA_ERROR_PATH || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\errors';
-    const libraryDir = process.env.OLLAMA_LIBRARY_PATH || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\library';
+    // Read from Supabase submissions table instead of local directories
+    if (!supabaseAdmin) {
+      console.warn('⚠️ Supabase admin client not available - using fallback');
+      return NextResponse.json({
+        success: true,
+        documents: [],
+        processing: [],
+        completed: [],
+        failed: [],
+        library: [],
+        message: 'Supabase not configured - using empty data'
+      });
+    }
+
+    // Get all submissions from the database
+    const { data: submissions, error } = await supabaseAdmin
+      .from('submissions')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ Error fetching submissions:', error);
+      return NextResponse.json(
+        { success: false, error: 'Failed to fetch submissions from database' },
+        { status: 500 }
+      );
+    }
+
+    // Categorize submissions by status
+    const documents = submissions.filter(s => s.status === 'pending_review');
+    const processing = submissions.filter(s => s.status === 'processing');
+    const completed = submissions.filter(s => s.status === 'approved');
+    const failed = submissions.filter(s => s.status === 'rejected');
     
-    const readFiles = async (dir) => {
-      try {
-        const files = await readdir(dir);
-        const fileList = await Promise.all(
-          files.map(async (filename) => {
-            const filepath = join(dir, filename);
-            const stats = await stat(filepath);
-            return {
-              filename,
-              name: filename,
-              size: stats.size,
-              modified: stats.mtime.toISOString(),
-              created: stats.birthtime.toISOString(),
-              type: 'document'
-            };
-          })
-        );
-        return fileList;
-      } catch (error) {
-        console.error(`Error reading ${dir}:`, error.message);
-        return [];
-      }
-    };
-    
-    const [documents, completed, failed, library] = await Promise.all([
-      readFiles(incomingDir),
-      readFiles(processedDir),
-      readFiles(errorDir),
-      readFiles(libraryDir)
-    ]);
-    
+    // Library is all submissions (for historical backup)
+    const library = submissions;
+
     const response = {
       success: true,
       documents,
-      processing: [], // Processing status would require DB tracking
+      processing,
       completed,
       failed,
-      library // Historic file backup
+      library
     };
     
-    console.log('📊 Document counts:', {
+    console.log('📊 Document counts from database:', {
       documents: documents.length,
-      processing: 0,
+      processing: processing.length,
       completed: completed.length,
       failed: failed.length,
       library: library.length
