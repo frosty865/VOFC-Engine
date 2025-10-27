@@ -1,4 +1,0 @@
-@echo off
-set NEXT_PUBLIC_SUPABASE_URL=https://wivohgbuuwxoyfyzntsd.supabase.co
-set NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_QuEn3h16DCAw3Jt_msFIiw_qBYy2Qzl
-python categorize_vulnerabilities.py

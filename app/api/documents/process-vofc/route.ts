@@ -1,6 +1,6 @@
 // /app/api/documents/process-vofc/route.ts
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase-client.js'
+import { supabase, supabaseAdmin } from '@/lib/supabase-client.js'
 import { ollamaChatJSON } from '@/lib/ollama.js'
 const pdfParse = require('pdf-parse')
 
@@ -242,7 +242,7 @@ export async function POST(req: Request) {
     if (!fileName) throw new Error('fileName is required')
 
     // 1) pull pdf from 'documents'
-    const { data, error } = await supabase.storage.from('documents').download(fileName)
+    const { data, error } = await supabaseAdmin.storage.from('documents').download(fileName)
     if (error) throw error
 
     // 2) extract text per page
@@ -433,9 +433,12 @@ async function uploadResult(fileName: string, payload: any) {
   const jsonFileName = fileName.replace(/\.pdf$/i, '.json')
   
   try {
-    const { error: upErr } = await supabase.storage.from('Parsed').upload(
+    // Create a proper Blob with JSON content type
+    const jsonBlob = new Blob([jsonContent], { type: 'application/json' })
+    
+    const { error: upErr } = await supabaseAdmin.storage.from('Parsed').upload(
       jsonFileName,
-      Buffer.from(jsonContent, 'utf8'),
+      jsonBlob,
       { contentType: 'application/json', upsert: true }
     )
     
@@ -445,7 +448,7 @@ async function uploadResult(fileName: string, payload: any) {
       
       // Try to create the bucket if it doesn't exist
       try {
-        await supabase.storage.createBucket('Parsed', {
+        await supabaseAdmin.storage.createBucket('Parsed', {
           public: false,
           fileSizeLimit: 50 * 1024 * 1024, // 50MB
           allowedMimeTypes: ['application/json']
@@ -453,9 +456,9 @@ async function uploadResult(fileName: string, payload: any) {
         console.log('✅ Parsed bucket created successfully')
         
         // Retry upload
-        const { error: retryErr } = await supabase.storage.from('Parsed').upload(
+        const { error: retryErr } = await supabaseAdmin.storage.from('Parsed').upload(
           jsonFileName,
-          Buffer.from(jsonContent, 'utf8'),
+          jsonBlob,
           { contentType: 'application/json', upsert: true }
         )
         

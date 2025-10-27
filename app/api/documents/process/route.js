@@ -93,9 +93,12 @@ export async function POST(request) {
       parsed_data: parsedData
     }, null, 2);
     
-      const { error: parsedError } = await supabaseAdmin.storage
+    // Create a proper Blob with JSON content type
+    const jsonBlob = new Blob([parsedContent], { type: 'application/json' });
+    
+    const { error: parsedError } = await supabaseAdmin.storage
       .from('Parsed')
-      .upload(`${filename}.json`, Buffer.from(parsedContent, 'utf8'), {
+      .upload(`${filename}.json`, jsonBlob, {
         cacheControl: '3600',
         upsert: true,
         contentType: 'application/json'

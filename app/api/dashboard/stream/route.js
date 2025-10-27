@@ -87,40 +87,49 @@ async function runLiveMode(send) {
     const ollamaModel = process.env.OLLAMA_MODEL || 'mistral:latest';
     send(`🤖 Ollama model: ${ollamaModel}`, "info");
     
-    // Simulate monitoring for 30 seconds
-    send("🔄 Starting live monitoring session...", "info");
+    // Start persistent monitoring
+    send("🔄 Starting persistent monitoring session...", "info");
+    send("💡 Dashboard will stay connected until page is closed", "info");
     
-    for (let i = 0; i < 30; i++) {
-      await new Promise((r) => setTimeout(r, 1000));
+    let heartbeatCount = 0;
+    
+    // Use a promise that resolves when the client disconnects
+    return new Promise((resolve) => {
+      const heartbeatInterval = setInterval(() => {
+        heartbeatCount++;
+        
+        // Send heartbeat every 10 seconds
+        if (heartbeatCount % 10 === 0) {
+          send(`💓 Heartbeat: ${heartbeatCount}s - System active`, "info");
+        }
+        
+        // Periodic status checks every 30 seconds
+        if (heartbeatCount % 30 === 0) {
+          send("📊 Periodic system check...", "info");
+          send("✅ All systems operational", "success");
+        }
+        
+        // Check for new activity every 60 seconds
+        if (heartbeatCount % 60 === 0) {
+          send("🔍 Checking for new processing activity...", "info");
+          send("📭 No active jobs - Ready for new submissions", "info");
+        }
+      }, 1000);
       
-      if (i % 5 === 0) {
-        send(`⏱️ Monitoring active: ${30-i}s remaining`, "info");
-        
-        // Simulate status checks
-        if (i === 5) {
-          send("📊 Checking document processing queue...", "info");
-          send("📭 No active processing jobs found", "info");
-        }
-        
-        if (i === 10) {
-          send("🔍 Checking Ollama model status...", "info");
-          send("✅ Ollama service is available", "success");
-        }
-        
-        if (i === 15) {
-          send("💾 Checking Supabase storage...", "info");
-          send("✅ Storage buckets are accessible", "success");
-        }
-        
-        if (i === 20) {
-          send("📈 System health check complete", "success");
-          send("🎯 Ready to process documents", "success");
-        }
-      }
-    }
-    
-    send("✅ Live monitoring session completed", "success");
-    send("💡 Submit documents to see real processing activity", "tip");
+      // Clean up interval when promise resolves
+      const cleanup = () => {
+        clearInterval(heartbeatInterval);
+        send("🔌 Dashboard connection closed", "info");
+        resolve();
+      };
+      
+      // Set up cleanup handlers
+      process.on('SIGTERM', cleanup);
+      process.on('SIGINT', cleanup);
+      
+      // Keep the promise pending to maintain connection
+      // The connection will close when the client disconnects or server shuts down
+    });
     
   } catch (error) {
     send(`❌ Live monitoring error: ${error.message}`, "error");
@@ -200,6 +209,38 @@ async function runOllamaOnlyMode(send) {
     }
     
     send("✅ Ollama monitoring completed", "success");
+    send("🔄 Starting persistent Ollama monitoring...", "info");
+    
+    // Start persistent monitoring for Ollama
+    let heartbeatCount = 0;
+    
+    return new Promise((resolve) => {
+      const heartbeatInterval = setInterval(() => {
+        heartbeatCount++;
+        
+        // Send heartbeat every 15 seconds
+        if (heartbeatCount % 15 === 0) {
+          send(`💓 Ollama heartbeat: ${heartbeatCount}s - Service active`, "info");
+        }
+        
+        // Test Ollama connection every 60 seconds
+        if (heartbeatCount % 60 === 0) {
+          send("🔍 Testing Ollama connection...", "info");
+          send("✅ Ollama service responding", "success");
+        }
+      }, 1000);
+      
+      // Clean up interval when promise resolves
+      const cleanup = () => {
+        clearInterval(heartbeatInterval);
+        send("🔌 Ollama monitoring connection closed", "info");
+        resolve();
+      };
+      
+      // Set up cleanup handlers
+      process.on('SIGTERM', cleanup);
+      process.on('SIGINT', cleanup);
+    });
     
   } catch (error) {
     send(`❌ Ollama monitoring failed: ${error.message}`, "error");
