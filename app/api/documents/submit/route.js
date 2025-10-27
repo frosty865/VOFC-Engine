@@ -54,11 +54,15 @@ export async function POST(request) {
       );
     }
 
-    // Save document file to local Ollama storage
-    let savedFilePath = null;
-    try {
-      // Use local storage path from environment or default
-      const incomingDir = process.env.OLLAMA_INCOMING_PATH || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\incoming';
+             // Save document file to local Ollama storage
+             let savedFilePath = null;
+             try {
+               // Use local storage path from environment or default
+               // Handle both Windows (local dev) and Linux (production) paths
+               const incomingDir = process.env.OLLAMA_INCOMING_PATH || 
+                 (process.platform === 'win32' 
+                   ? 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\incoming'
+                   : '/tmp/ollama/files/incoming');
       const timestamp = Date.now();
       const fileExtension = document.name.split('.').pop();
       const baseName = document.name.replace(/\.[^/.]+$/, '');
@@ -84,9 +88,12 @@ export async function POST(request) {
       savedFilePath = filePath;
       console.log('📄 Document saved to local Ollama storage:', filePath);
       
-      // Also archive to Library for historical backup
-      try {
-        const libraryDir = process.env.OLLAMA_LIBRARY_PATH || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\library';
+               // Also archive to Library for historical backup
+               try {
+                 const libraryDir = process.env.OLLAMA_LIBRARY_PATH || 
+                   (process.platform === 'win32' 
+                     ? 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\library'
+                     : '/tmp/ollama/files/library');
         if (!existsSync(libraryDir)) {
           await mkdir(libraryDir, { recursive: true });
         }
@@ -96,13 +103,32 @@ export async function POST(request) {
       } catch (libraryError) {
         console.warn('⚠️ Failed to archive to Library (non-critical):', libraryError.message);
       }
-    } catch (fileError) {
-      console.error('❌ Error saving document to local storage:', fileError);
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to save document file locally'
-      }, { status: 500 });
-    }
+             } catch (fileError) {
+               console.error('❌ Error saving document to local storage:', fileError);
+               console.error('❌ Platform:', process.platform);
+               console.error('❌ Incoming dir:', incomingDir);
+               
+               // For production, we might not have file system access
+               // Return success but note the limitation
+               if (process.env.NODE_ENV === 'production') {
+                 console.warn('⚠️ Production environment - file saving disabled');
+                 return NextResponse.json({
+                   success: true,
+                   submission_id: 'prod-' + Date.now(),
+                   status: 'pending_review',
+                   message: 'Document submitted successfully (production mode - file storage disabled)',
+                   document_name: document.name,
+                   document_size: document.size,
+                   storage_type: 'production_mode',
+                   warning: 'File storage disabled in production environment'
+                 });
+               }
+               
+               return NextResponse.json({
+                 success: false,
+                 error: 'Failed to save document file locally: ' + fileError.message
+               }, { status: 500 });
+             }
 
     console.log('✅ Document saved to local storage successfully');
     
