@@ -77,27 +77,27 @@ export async function POST(request) {
       );
     }
 
-    // Save document file to local storage first
+    // Save document file to local Ollama storage
     let savedFilePath = null;
     try {
-      // Create upload directory structure
-      const uploadDir = join(process.cwd(), 'uploads', 'documents');
+      // Use local storage path from environment or default
+      const incomingDir = process.env.OLLAMA_INCOMING_PATH || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\incoming';
       const timestamp = Date.now();
       const fileExtension = document.name.split('.').pop();
       const baseName = document.name.replace(/\.[^/.]+$/, '');
       const fileName = `${baseName}_${timestamp}.${fileExtension}`;
-      const filePath = join(uploadDir, fileName);
+      const filePath = join(incomingDir, fileName);
 
-      console.log('📁 Local storage details:');
-      console.log('- Upload directory:', uploadDir);
+      console.log('📁 Local Ollama storage details:');
+      console.log('- Incoming directory:', incomingDir);
       console.log('- File name:', fileName);
       console.log('- File path:', filePath);
       console.log('- File size:', document.size, 'bytes');
 
       // Ensure upload directory exists
-      if (!existsSync(uploadDir)) {
-        await mkdir(uploadDir, { recursive: true });
-        console.log('✅ Created upload directory:', uploadDir);
+      if (!existsSync(incomingDir)) {
+        await mkdir(incomingDir, { recursive: true });
+        console.log('✅ Created upload directory:', incomingDir);
       }
 
       // Convert file to buffer and save locally
@@ -105,7 +105,7 @@ export async function POST(request) {
       await writeFile(filePath, Buffer.from(buffer));
       
       savedFilePath = filePath;
-      console.log('📄 Document saved to local storage:', filePath);
+      console.log('📄 Document saved to local Ollama storage:', filePath);
     } catch (fileError) {
       console.error('❌ Error saving document to local storage:', fileError);
       return NextResponse.json({

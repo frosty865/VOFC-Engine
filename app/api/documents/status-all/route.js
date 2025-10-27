@@ -1,28 +1,59 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-client.js';
+import { readdir, stat } from 'fs/promises';
+import { join } from 'path';
 
 export async function GET() {
   try {
     console.log('🔍 /api/documents/status-all called');
     
-    // Return empty results for now - files are stored on Ollama server filesystem
-    // In production, this would need to query the remote Ollama server's filesystem
-    // or implement a file listing API on the Ollama server
+    // Get local storage paths
+    const incomingDir = process.env.OLLAMA_INCOMING_PATH || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\incoming';
+    const processedDir = process.env.OLLAMA_PROCESSED_PATH || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\processed';
+    const errorDir = process.env.OLLAMA_ERROR_PATH || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\errors';
+    
+    const readFiles = async (dir) => {
+      try {
+        const files = await readdir(dir);
+        const fileList = await Promise.all(
+          files.map(async (filename) => {
+            const filepath = join(dir, filename);
+            const stats = await stat(filepath);
+            return {
+              filename,
+              name: filename,
+              size: stats.size,
+              modified: stats.mtime.toISOString(),
+              created: stats.birthtime.toISOString(),
+              type: 'document'
+            };
+          })
+        );
+        return fileList;
+      } catch (error) {
+        console.error(`Error reading ${dir}:`, error.message);
+        return [];
+      }
+    };
+    
+    const [documents, completed, failed] = await Promise.all([
+      readFiles(incomingDir),
+      readFiles(processedDir),
+      readFiles(errorDir)
+    ]);
     
     const response = {
       success: true,
-      documents: [],
-      processing: [],
-      completed: [],
-      failed: [],
-      message: 'Document files are stored on Ollama server filesystem. Implement file listing API on Ollama server to display documents.'
+      documents,
+      processing: [], // Processing status would require DB tracking
+      completed,
+      failed
     };
     
     console.log('📊 Document counts:', {
-      documents: 0,
+      documents: documents.length,
       processing: 0,
-      completed: 0,
-      failed: 0
+      completed: completed.length,
+      failed: failed.length
     });
     
     return NextResponse.json(response);
@@ -30,7 +61,7 @@ export async function GET() {
   } catch (error) {
     console.error('Error getting all document status:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to get all document status' },
+      { success: false, error: error.message },
       { status: 500 }
     );
   }
