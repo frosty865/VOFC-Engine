@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-client.js';
+import { writeFile, mkdir } from 'fs/promises';
+import { join } from 'path';
+import { existsSync } from 'fs';
 
 export async function POST(request) {
   try {
@@ -8,8 +11,10 @@ export async function POST(request) {
     // Validate environment variables
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
       console.error('❌ Missing Supabase environment variables');
+      console.error('NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'MISSING');
+      console.error('SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SET' : 'MISSING');
       return NextResponse.json(
-        { success: false, error: 'Server configuration error' },
+        { success: false, error: 'Server configuration error - missing Supabase credentials' },
         { status: 500 }
       );
     }
@@ -72,7 +77,44 @@ export async function POST(request) {
       );
     }
 
-    // Prepare submission data (simplified to match working API)
+    // Save document file to local storage first
+    let savedFilePath = null;
+    try {
+      // Create upload directory structure
+      const uploadDir = join(process.cwd(), 'uploads', 'documents');
+      const timestamp = Date.now();
+      const fileExtension = document.name.split('.').pop();
+      const baseName = document.name.replace(/\.[^/.]+$/, '');
+      const fileName = `${baseName}_${timestamp}.${fileExtension}`;
+      const filePath = join(uploadDir, fileName);
+
+      console.log('📁 Local storage details:');
+      console.log('- Upload directory:', uploadDir);
+      console.log('- File name:', fileName);
+      console.log('- File path:', filePath);
+      console.log('- File size:', document.size, 'bytes');
+
+      // Ensure upload directory exists
+      if (!existsSync(uploadDir)) {
+        await mkdir(uploadDir, { recursive: true });
+        console.log('✅ Created upload directory:', uploadDir);
+      }
+
+      // Convert file to buffer and save locally
+      const buffer = await document.arrayBuffer();
+      await writeFile(filePath, Buffer.from(buffer));
+      
+      savedFilePath = filePath;
+      console.log('📄 Document saved to local storage:', filePath);
+    } catch (fileError) {
+      console.error('❌ Error saving document to local storage:', fileError);
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to save document file locally'
+      }, { status: 500 });
+    }
+
+    // Prepare submission data with local file path
     const submissionData = {
       type: 'document',
       data: JSON.stringify({
@@ -84,51 +126,15 @@ export async function POST(request) {
         content_restriction: content_restriction || 'public',
         document_name: document.name,
         document_type: document.type,
-        document_size: document.size
-        // Note: Not storing document content for now to avoid size issues
+        document_size: document.size,
+        local_file_path: savedFilePath, // Store local file path for Ollama processing
+        storage_type: 'local_filesystem'
       }),
       status: 'pending_review',
       source: 'document_submission',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-
-    // Save document file to Supabase storage bucket for document processor
-    let savedFilePath = null;
-    try {
-      // Create a unique filename
-      const fileExtension = document.name.split('.').pop();
-      const baseName = document.name.replace(/\.[^/.]+$/, '');
-      const uniqueFileName = `${baseName}_${Date.now()}.${fileExtension}`;
-      
-      // Convert file to buffer
-      const buffer = await document.arrayBuffer();
-      
-      // Upload to Supabase storage bucket (production)
-      const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
-        .from('documents')
-        .upload(uniqueFileName, buffer, {
-          cacheControl: '3600',
-          upsert: false
-        });
-      
-      if (uploadError) {
-        console.error('❌ Error uploading to Supabase storage:', uploadError);
-        return NextResponse.json({
-          success: false,
-          error: 'Failed to upload document to storage'
-        }, { status: 500 });
-      }
-      
-      savedFilePath = uploadData.path;
-      console.log('📄 Document saved to Supabase storage:', uploadData.path);
-    } catch (fileError) {
-      console.error('❌ Error saving document to storage:', fileError);
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to save document file'
-      }, { status: 500 });
-    }
 
     // Insert into database
     console.log('Attempting to insert submission data:', JSON.stringify(submissionData, null, 2));
@@ -143,6 +149,8 @@ export async function POST(request) {
       console.error('Database error:', error);
       console.error('Error details:', JSON.stringify(error, null, 2));
       console.error('Submission data:', JSON.stringify(submissionData, null, 2));
+      console.error('Table: submissions');
+      console.error('RLS policies may be blocking insertion');
       
       // File was saved successfully, so return success even if database fails
       console.log('File saved successfully, returning success despite database error');
@@ -151,7 +159,8 @@ export async function POST(request) {
         submission_id: 'temp-' + Date.now(),
         status: 'pending_review',
         message: 'Document submitted successfully (database error logged)',
-        file_path: savedFilePath
+        file_path: savedFilePath,
+        warning: 'Database insertion failed - check RLS policies'
       }, { status: 201 });
     }
 
@@ -163,6 +172,10 @@ export async function POST(request) {
       
       const ollamaBaseUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
       const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
+      
+      console.log('Ollama configuration:');
+      console.log('- Base URL:', ollamaBaseUrl);
+      console.log('- Model:', ollamaModel);
       
       // Create system prompt for document analysis
       const systemPrompt = `You are an expert document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
@@ -192,8 +205,7 @@ Return your analysis as a JSON object with this structure:
   ]
 }`;
 
-      // For now, we'll process the document metadata since we don't store file content
-      // In a production system, you'd extract text from the uploaded file
+      // Process the document with local file path reference
       const userPrompt = `Analyze this document and extract vulnerabilities and options for consideration:
 
 Document Title: ${source_title}
@@ -201,8 +213,9 @@ Document Type: ${document.type}
 Document Size: ${document.size} bytes
 Source Organization: ${author_org || 'Unknown'}
 Publication Year: ${publication_year || 'Unknown'}
+Local File Path: ${savedFilePath}
 
-Please provide a structured JSON response with vulnerabilities and OFCs based on the document metadata and title.`;
+Please provide a structured JSON response with vulnerabilities and OFCs based on the document metadata and title. If you have access to the file content at the specified path, use that for more accurate analysis.`;
 
       // Call Ollama API
       const response = await fetch(`${ollamaBaseUrl}/api/chat`, {
@@ -265,9 +278,12 @@ Please provide a structured JSON response with vulnerabilities and OFCs based on
         }
       } else {
         console.error('❌ Ollama API error:', response.status, response.statusText);
+        const errorText = await response.text().catch(() => 'Unable to read error response');
+        console.error('Ollama error response:', errorText);
       }
     } catch (ollamaError) {
       console.error('❌ Ollama processing failed:', ollamaError);
+      console.error('Ollama error details:', JSON.stringify(ollamaError, null, 2));
       console.log('⚠️ Document submitted but processing failed');
     }
     

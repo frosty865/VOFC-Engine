@@ -397,66 +397,6 @@ export default function Navigation({ simple = false }) {
               >
                 ⚙️ Admin Panel
               </Link>
-              {currentUser.role === 'admin' && (
-                <>
-                  <Link
-                    href="/admin/ofcs"
-                    style={{
-                      padding: 'var(--spacing-sm) var(--spacing-md)',
-                      borderRadius: 'var(--border-radius)',
-                      textDecoration: 'none',
-                      color: pathname === '/admin/ofcs' ? 'var(--cisa-white)' : 'rgba(255,255,255,0.8)',
-                      backgroundColor: pathname === '/admin/ofcs' ? 'rgba(255,255,255,0.2)' : 'transparent',
-                      fontWeight: '600',
-                      fontSize: 'var(--font-size-sm)',
-                      transition: 'all 0.3s ease',
-                      border: '2px solid transparent'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (pathname !== '/admin/ofcs') {
-                        e.target.style.backgroundColor = 'rgba(255,255,255,0.1)';
-                        e.target.style.color = 'var(--cisa-white)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (pathname !== '/admin/ofcs') {
-                        e.target.style.backgroundColor = 'transparent';
-                        e.target.style.color = 'rgba(255,255,255,0.8)';
-                      }
-                    }}
-                  >
-                    💡 Manage OFCs
-                  </Link>
-                  <Link
-                    href="/admin/disciplines"
-                    style={{
-                      padding: 'var(--spacing-sm) var(--spacing-md)',
-                      borderRadius: 'var(--border-radius)',
-                      textDecoration: 'none',
-                      color: pathname === '/admin/disciplines' ? 'var(--cisa-white)' : 'rgba(255,255,255,0.8)',
-                      backgroundColor: pathname === '/admin/disciplines' ? 'rgba(255,255,255,0.2)' : 'transparent',
-                      fontWeight: '600',
-                      fontSize: 'var(--font-size-sm)',
-                      transition: 'all 0.3s ease',
-                      border: '2px solid transparent'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (pathname !== '/admin/disciplines') {
-                        e.target.style.backgroundColor = 'rgba(255,255,255,0.1)';
-                        e.target.style.color = 'var(--cisa-white)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (pathname !== '/admin/disciplines') {
-                        e.target.style.backgroundColor = 'transparent';
-                        e.target.style.color = 'rgba(255,255,255,0.8)';
-                      }
-                    }}
-                  >
-                    📚 Disciplines
-                  </Link>
-                </>
-              )}
             </>
           )}
         </nav>
