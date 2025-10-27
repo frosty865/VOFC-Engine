@@ -1,19 +1,14 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdminAdmin } from '@/lib/supabaseAdmin-client.js';
 import { spawn } from 'child_process';
 import path from 'path';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
 
 export async function POST() {
   try {
     console.log('🤖 Starting auto OFC generation...');
     
     // Check if there are vulnerabilities that need OFCs
-    const { data: vulns, error } = await supabase.rpc('get_vulns_missing_ofcs');
+    const { data: vulns, error } = await supabaseAdmin.rpc('get_vulns_missing_ofcs');
     
     if (error) {
       console.error('Error fetching vulnerabilities:', error);

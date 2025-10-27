@@ -1,12 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Missing Supabase environment variables');
-}
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 
 export async function GET(request) {
   try {
@@ -40,20 +33,8 @@ export async function GET(request) {
       );
     }
 
-    // Create service role client to verify the token and fetch data
-    const serviceSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    );
-
     // Verify the access token
-    const { data: { user }, error: authError } = await serviceSupabase.auth.getUser(accessToken);
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(accessToken);
 
     if (authError || !user) {
       console.log('❌ Token verification failed:', authError?.message);
@@ -66,7 +47,7 @@ export async function GET(request) {
     console.log('✅ Token verified for user:', user.email);
 
     // Get all vulnerabilities
-    const { data: vulnerabilities, error: vulnError } = await serviceSupabase
+    const { data: vulnerabilities, error: vulnError } = await supabaseAdmin
       .from('vulnerabilities')
       .select('*')
       .order('created_at', { ascending: false });
@@ -80,7 +61,7 @@ export async function GET(request) {
     }
 
     // Get all vulnerability-OFC links
-    const { data: links, error: linkError } = await serviceSupabase
+    const { data: links, error: linkError } = await supabaseAdmin
       .from('vulnerability_ofc_links')
       .select('*');
 
@@ -93,7 +74,7 @@ export async function GET(request) {
     }
 
     // Get all OFCs
-    const { data: ofcs, error: ofcError } = await serviceSupabase
+    const { data: ofcs, error: ofcError } = await supabaseAdmin
       .from('options_for_consideration')
       .select('*');
 
@@ -106,7 +87,7 @@ export async function GET(request) {
     }
 
     // Get all OFC-Source links
-    const { data: ofcSources, error: ofcSourceError } = await serviceSupabase
+    const { data: ofcSources, error: ofcSourceError } = await supabaseAdmin
       .from('ofc_sources')
       .select('*');
 
@@ -119,7 +100,7 @@ export async function GET(request) {
     }
 
     // Get all sources
-    const { data: sources, error: sourceError } = await serviceSupabase
+    const { data: sources, error: sourceError } = await supabaseAdmin
       .from('sources')
       .select('*');
 

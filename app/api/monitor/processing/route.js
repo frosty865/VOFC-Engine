@@ -1,13 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdminAdmin } from '@/lib/supabaseAdmin-client.js';
 import fs from 'fs';
 import path from 'path';
-
-// Use service role for API submissions to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
 
 export async function GET() {
   try {
@@ -40,7 +34,7 @@ export async function GET() {
 async function getSubmissionStatus() {
   try {
     // Get submissions with processing status
-    const { data: submissions, error } = await supabase
+    const { data: submissions, error } = await supabaseAdmin
       .from('submissions')
       .select('id, type, status, created_at, updated_at, data')
       .order('created_at', { ascending: false })

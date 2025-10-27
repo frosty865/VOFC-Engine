@@ -1,11 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-// Use service role for API submissions to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+import { supabaseAdminAdmin } from '@/lib/supabaseAdmin-client.js';
 
 export async function POST(request) {
   try {
@@ -30,7 +24,7 @@ export async function POST(request) {
       updated_at: new Date().toISOString()
     };
 
-    const { data: submission, error: submissionError } = await supabase
+    const { data: submission, error: submissionError } = await supabaseAdmin
       .from('submissions')
       .insert([submissionData])
       .select()
@@ -185,7 +179,7 @@ Please provide a structured JSON response with vulnerabilities and OFCs.`;
         vulnerability_count: vulnCount
       };
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await supabaseAdmin
         .from('submissions')
         .update({
           data: JSON.stringify(enhancedData),

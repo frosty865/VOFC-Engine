@@ -1,18 +1,12 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-// Use service role for API operations to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 
 export async function POST() {
   try {
     console.log('🧹 Clearing completed documents...');
     
     // Get all files from the processed-documents bucket
-    const { data: files, error: listError } = await supabase.storage
+    const { data: files, error: listError } = await supabaseAdmin.storage
       .from('processed-documents')
       .list('', {
         limit: 1000 // Get all files
@@ -50,7 +44,7 @@ export async function POST() {
     }
     
     // Delete all completed files
-    const { error: deleteError } = await supabase.storage
+    const { error: deleteError } = await supabaseAdmin.storage
       .from('processed-documents')
       .remove(fileNames);
     
@@ -68,7 +62,7 @@ export async function POST() {
       .map(file => file.name);
     
     if (metadataFiles.length > 0) {
-      const { error: metadataDeleteError } = await supabase.storage
+      const { error: metadataDeleteError } = await supabaseAdmin.storage
         .from('processed-documents')
         .remove(metadataFiles);
       
