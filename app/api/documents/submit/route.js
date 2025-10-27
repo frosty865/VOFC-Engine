@@ -110,8 +110,8 @@ export async function POST(request) {
     let submissionId = null;
     try {
       if (supabaseAdmin) {
-        const submissionData = {
-          type: 'document',
+               const submissionData = {
+                 type: 'ofc', // Document submissions are treated as OFC submissions
           data: JSON.stringify({
             source_title,
             source_type: source_type || 'unknown',
