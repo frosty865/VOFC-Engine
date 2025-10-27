@@ -77,11 +77,12 @@ async function runLiveMode(send) {
     }
     
     // Check Ollama configuration
-    const ollamaUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL;
-    if (ollamaUrl) {
+    const ollamaUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
+    if (process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL) {
       send(`✅ Ollama configured: ${ollamaUrl}`, "success");
     } else {
-      send("⚠️ Ollama URL not configured", "warning");
+      send(`⚠️ Ollama using default URL: ${ollamaUrl}`, "warning");
+      send("💡 Set OLLAMA_URL in .env.local for custom configuration", "tip");
     }
     
     const ollamaModel = process.env.OLLAMA_MODEL || 'mistral:latest';
@@ -142,11 +143,12 @@ async function runOllamaOnlyMode(send) {
   
   try {
     // Check Ollama configuration
-    const ollamaUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL;
-    if (!ollamaUrl) {
-      send("⚠️ Ollama URL not configured in environment variables", "warning");
-      send("🔧 Set OLLAMA_URL environment variable to enable Ollama monitoring", "tip");
-      return;
+    const ollamaUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
+    if (!ollamaUrl || ollamaUrl === 'https://ollama.frostech.site') {
+      send(`⚠️ Ollama using default URL: ${ollamaUrl}`, "warning");
+      send("💡 Set OLLAMA_URL in .env.local for custom configuration", "tip");
+    } else {
+      send(`✅ Ollama configured: ${ollamaUrl}`, "success");
     }
     
     send(`🔗 Connecting to Ollama at: ${ollamaUrl}`, "info");
