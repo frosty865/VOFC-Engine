@@ -158,12 +158,6 @@ export default function DisciplineManagement() {
         <div className="card">
           <div className="card-header">
             <h1 className="card-title">Discipline Management</h1>
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="btn btn-primary"
-            >
-              Add Discipline
-            </button>
           </div>
           
           <div className="card-body">

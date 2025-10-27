@@ -218,11 +218,6 @@ export default function OFCManagement() {
                 Showing {filteredOfcs.length} of {ofcs.length} Options for Consideration
               </p>
             </div>
-            <div className="flex gap-3">
-              <a href="/admin" className="btn btn-secondary">
-                ← Back to Admin
-              </a>
-            </div>
           </div>
         </div>
 
