@@ -108,22 +108,6 @@ export async function POST(request) {
                console.error('❌ Platform:', process.platform);
                console.error('❌ Incoming dir:', incomingDir);
                
-               // For production, we might not have file system access
-               // Return success but note the limitation
-               if (process.env.NODE_ENV === 'production') {
-                 console.warn('⚠️ Production environment - file saving disabled');
-                 return NextResponse.json({
-                   success: true,
-                   submission_id: 'prod-' + Date.now(),
-                   status: 'pending_review',
-                   message: 'Document submitted successfully (production mode - file storage disabled)',
-                   document_name: document.name,
-                   document_size: document.size,
-                   storage_type: 'production_mode',
-                   warning: 'File storage disabled in production environment'
-                 });
-               }
-               
                return NextResponse.json({
                  success: false,
                  error: 'Failed to save document file locally: ' + fileError.message
