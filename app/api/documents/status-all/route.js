@@ -10,6 +10,7 @@ export async function GET() {
     const incomingDir = process.env.OLLAMA_INCOMING_PATH || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\incoming';
     const processedDir = process.env.OLLAMA_PROCESSED_PATH || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\processed';
     const errorDir = process.env.OLLAMA_ERROR_PATH || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\errors';
+    const libraryDir = process.env.OLLAMA_LIBRARY_PATH || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\library';
     
     const readFiles = async (dir) => {
       try {
@@ -35,10 +36,11 @@ export async function GET() {
       }
     };
     
-    const [documents, completed, failed] = await Promise.all([
+    const [documents, completed, failed, library] = await Promise.all([
       readFiles(incomingDir),
       readFiles(processedDir),
-      readFiles(errorDir)
+      readFiles(errorDir),
+      readFiles(libraryDir)
     ]);
     
     const response = {
@@ -46,14 +48,16 @@ export async function GET() {
       documents,
       processing: [], // Processing status would require DB tracking
       completed,
-      failed
+      failed,
+      library // Historic file backup
     };
     
     console.log('📊 Document counts:', {
       documents: documents.length,
       processing: 0,
       completed: completed.length,
-      failed: failed.length
+      failed: failed.length,
+      library: library.length
     });
     
     return NextResponse.json(response);

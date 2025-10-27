@@ -106,6 +106,19 @@ export async function POST(request) {
       
       savedFilePath = filePath;
       console.log('📄 Document saved to local Ollama storage:', filePath);
+      
+      // Also archive to Library for historical backup
+      try {
+        const libraryDir = process.env.OLLAMA_LIBRARY_PATH || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\library';
+        if (!existsSync(libraryDir)) {
+          await mkdir(libraryDir, { recursive: true });
+        }
+        const libraryPath = join(libraryDir, fileName);
+        await writeFile(libraryPath, Buffer.from(buffer));
+        console.log('📚 Document archived to Library:', libraryPath);
+      } catch (libraryError) {
+        console.warn('⚠️ Failed to archive to Library (non-critical):', libraryError.message);
+      }
     } catch (fileError) {
       console.error('❌ Error saving document to local storage:', fileError);
       return NextResponse.json({
