@@ -5,6 +5,15 @@ export async function GET(request) {
   try {
     console.log('🔍 Auth verify endpoint called');
     
+    // Check if Supabase admin client is available
+    if (!supabaseAdmin) {
+      console.error('❌ Supabase admin client not initialized');
+      return NextResponse.json(
+        { success: false, error: 'Server configuration error - Supabase not configured' },
+        { status: 500 }
+      );
+    }
+    
     // Get the access token from cookies
     const cookieHeader = request.headers.get('cookie');
     console.log('🍪 Cookie header:', cookieHeader ? 'Present' : 'Missing');
