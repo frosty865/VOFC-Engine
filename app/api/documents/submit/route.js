@@ -152,6 +152,18 @@ export async function POST(request) {
     // Insert into database
     console.log('Attempting to insert submission data:', JSON.stringify(submissionData, null, 2));
     
+    if (!supabaseAdmin) {
+      console.error('❌ Supabase admin client is null');
+      return NextResponse.json({
+        success: true,
+        submission_id: 'temp-' + Date.now(),
+        status: 'pending_review',
+        message: 'Document submitted successfully (database not configured)',
+        file_path: savedFilePath,
+        warning: 'Database not configured - file saved locally only'
+      }, { status: 201 });
+    }
+    
     const { data: submission, error } = await supabaseAdmin
       .from('submissions')
       .insert([submissionData])
@@ -231,6 +243,7 @@ Local File Path: ${savedFilePath}
 Please provide a structured JSON response with vulnerabilities and OFCs based on the document metadata and title. If you have access to the file content at the specified path, use that for more accurate analysis.`;
 
       // Call Ollama API
+      console.log('🤖 Calling Ollama API...');
       const response = await fetch(`${ollamaBaseUrl}/api/chat`, {
         method: 'POST',
         headers: {
@@ -245,6 +258,8 @@ Please provide a structured JSON response with vulnerabilities and OFCs based on
           stream: false
         })
       });
+
+      console.log('📡 Ollama response status:', response.status);
 
       if (response.ok) {
         const data = await response.json();
