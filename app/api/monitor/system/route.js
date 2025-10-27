@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdminAdmin } from '@/lib/supabaseAdmin-client.js';
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
