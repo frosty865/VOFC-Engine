@@ -249,7 +249,7 @@ async function processFile(filename, batchId, supabaseServer) {
 
 // Enhanced Ollama processing with confidence scoring
 async function processWithOllamaEnhanced(content, filename) {
-  const ollamaBaseUrl = process.env.OLLAMA_API_BASE_URL || 'http://localhost:11434';
+  const ollamaBaseUrl = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
   const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
   
   const isBase64 = /^[A-Za-z0-9+/]*={0,2}$/.test(content) && content.length > 100;

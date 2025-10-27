@@ -3,7 +3,7 @@ echo 🧪 Testing Document Processing Pipeline...
 echo.
 
 echo 1️⃣ Testing Ollama connectivity...
-curl -s http://localhost:11434/api/version
+curl -s https://ollama.frostech.site/api/version
 if %errorlevel% equ 0 (
     echo ✅ Ollama server is running
 ) else (

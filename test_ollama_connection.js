@@ -9,7 +9,7 @@ const https = require('https');
 const http = require('http');
 
 // Configuration
-const OLLAMA_BASE_URL = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+const OLLAMA_BASE_URL = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
 
 console.log('🔍 Testing Ollama Server Connection...');
