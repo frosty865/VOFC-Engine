@@ -43,8 +43,10 @@ export default function Navigation({ simple = false }) {
           setCurrentUser(result.user);
         }
       }
+      // Silent failure for 401 - user just isn't logged in yet
     } catch (error) {
-      console.error('Error loading user:', error);
+      // Silently handle errors during auth check
+      // This is normal when user isn't authenticated
     } finally {
       setLoading(false);
     }
