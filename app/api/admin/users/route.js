@@ -1,7 +1,7 @@
 // Handles admin user CRUD. All endpoints require admin authentication.
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../lib/auth-middleware';
-import { supabaseAdminAdmin } from '@/lib/supabaseAdmin-client.js';
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 import bcrypt from 'bcryptjs';
 
 // Get all users (admin only)
