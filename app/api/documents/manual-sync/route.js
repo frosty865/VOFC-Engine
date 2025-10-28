@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-client.js';
 
-export async function POST() {
+export async function POST(request) {
   try {
-    console.log('🔄 Auto-syncing documents from Ollama server...');
+    console.log('🔄 Manual sync: Adding documents from Ollama server...');
     
     if (!supabaseAdmin) {
       return NextResponse.json(
@@ -12,29 +12,17 @@ export async function POST() {
       );
     }
 
-    const ollamaUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
+    // Get document list from request body
+    const { documents } = await request.json();
     
-    // Try to get file list from Ollama server
-    let ollamaFiles = [];
-    try {
-      const response = await fetch(`${ollamaUrl}/api/files/list`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        ollamaFiles = data.files || [];
-        console.log(`📁 Found ${ollamaFiles.length} files on Ollama server`);
-      } else {
-        console.warn('⚠️ Ollama server file listing not available');
-        ollamaFiles = [];
-      }
-    } catch (error) {
-      console.warn('⚠️ Could not connect to Ollama server:', error.message);
-      // Return empty array - no fallback documents
-      ollamaFiles = [];
+    if (!documents || !Array.isArray(documents)) {
+      return NextResponse.json(
+        { success: false, error: 'Documents array is required in request body' },
+        { status: 400 }
+      );
     }
+
+    console.log(`📁 Processing ${documents.length} documents from Ollama server`);
 
     // Get existing submissions to avoid duplicates
     const { data: existingSubmissions, error: fetchError } = await supabaseAdmin
@@ -64,7 +52,7 @@ export async function POST() {
     });
 
     // Filter out files that are already tracked
-    const newFiles = ollamaFiles.filter(file => 
+    const newFiles = documents.filter(file => 
       !existingFilenames.has(file.filename)
     );
 
@@ -73,7 +61,7 @@ export async function POST() {
         success: true,
         message: 'All documents already synced',
         synced: 0,
-        total: ollamaFiles.length
+        total: documents.length
       });
     }
 
@@ -81,19 +69,19 @@ export async function POST() {
     const submissionRecords = newFiles.map(file => ({
       type: 'ofc',
       data: JSON.stringify({
-        source_title: file.filename.replace(/\.[^/.]+$/, ''), // Remove extension
-        source_type: 'unknown',
-        source_url: null,
-        author_org: null,
-        publication_year: null,
-        content_restriction: 'public',
+        source_title: file.title || file.filename.replace(/\.[^/.]+$/, ''), // Remove extension
+        source_type: file.source_type || 'unknown',
+        source_url: file.source_url || null,
+        author_org: file.author_org || null,
+        publication_year: file.publication_year || null,
+        content_restriction: file.content_restriction || 'public',
         document_name: file.filename,
-        document_type: getMimeType(file.filename),
+        document_type: file.type || getMimeType(file.filename),
         document_size: file.size || 0,
         local_file_path: file.path,
         storage_type: 'ollama_server',
         ollama_server_path: file.path,
-        auto_synced: true
+        manual_sync: true
       }),
       status: 'pending_review',
       source: 'ollama_server_sync',
@@ -115,18 +103,18 @@ export async function POST() {
       );
     }
 
-    console.log(`✅ Auto-synced ${insertedData.length} new documents`);
+    console.log(`✅ Manual sync completed: ${insertedData.length} new documents`);
     
     return NextResponse.json({
       success: true,
-      message: `Auto-synced ${insertedData.length} new documents from Ollama server`,
+      message: `Manual sync completed: ${insertedData.length} new documents`,
       synced: insertedData.length,
-      total: ollamaFiles.length,
+      total: documents.length,
       documents: insertedData
     });
 
   } catch (error) {
-    console.error('❌ Auto-sync error:', error);
+    console.error('❌ Manual sync error:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
