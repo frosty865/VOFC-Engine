@@ -12,7 +12,7 @@ export async function POST() {
       );
     }
 
-    const ollamaUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
+    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:5000';
     
     // Try to connect to your actual Ollama server
     let ollamaFiles = [];
