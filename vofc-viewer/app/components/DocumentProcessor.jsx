@@ -376,6 +376,9 @@ export default function DocumentProcessor() {
                       Modified
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Submitted By
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -399,6 +402,12 @@ export default function DocumentProcessor() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatDate(doc.modified)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {doc.submitted_by || 'System'}
+                        {doc.submitted_by_email && doc.submitted_by_email !== doc.submitted_by && (
+                          <div className="text-xs text-gray-400">{doc.submitted_by_email}</div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex space-x-2">

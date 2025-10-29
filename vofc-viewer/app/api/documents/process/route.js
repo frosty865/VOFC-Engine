@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-client.js';
 import { ollamaChatJSON } from '@/lib/ollama.js';
+import { resolveOllamaBase } from '@/lib/ollama.js';
 
 export async function POST(request) {
-  console.log('🚀 Document processing endpoint called - SIMPLIFIED VERSION');
+  console.log('🚀 Document processing endpoint called - using Ollama server');
   try {
     let requestData;
     try {
@@ -16,7 +16,7 @@ export async function POST(request) {
       );
     }
     
-    const { filename } = requestData;
+    const { filename, path } = requestData;
     
     if (!filename) {
       return NextResponse.json(
@@ -25,38 +25,35 @@ export async function POST(request) {
       );
     }
     
-    // Define storage paths using production buckets
-    const sourceBucket = 'documents';
-    const completedBucket = 'processed-documents';
+    const ollamaUrl = resolveOllamaBase();
     
-    // Check if source file exists in storage
-    const { data: sourceFile, error: sourceError } = await supabaseAdmin.storage
-      .from(sourceBucket)
-      .list('', {
-        search: filename
+    // Download the file from Ollama server
+    const filePath = path || filename;
+    const fileResponse = await fetch(`${ollamaUrl}/api/files/get/${encodeURIComponent(filePath)}`, {
+      method: 'GET',
+    });
+    
+    if (!fileResponse.ok) {
+      // Try with just filename if path-based request failed
+      const fallbackResponse = await fetch(`${ollamaUrl}/api/files/get/${encodeURIComponent(filename)}`, {
+        method: 'GET',
       });
-    
-    if (sourceError || !sourceFile || sourceFile.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'Source file not found in storage' },
-        { status: 404 }
-      );
+      
+      if (!fallbackResponse.ok) {
+        return NextResponse.json(
+          { success: false, error: `File not found on Ollama server: ${filename}` },
+          { status: 404 }
+        );
+      }
+      
+      // Convert fallback response to buffer
+      const arrayBuffer = await fallbackResponse.arrayBuffer();
+      var buffer = Buffer.from(arrayBuffer);
+    } else {
+      // Convert response to buffer
+      const arrayBuffer = await fileResponse.arrayBuffer();
+      var buffer = Buffer.from(arrayBuffer);
     }
-    
-    // Download the file from storage
-    const { data: fileData, error: downloadError } = await supabaseAdmin.storage
-      .from(sourceBucket)
-      .download(filename);
-    
-    if (downloadError) {
-      return NextResponse.json(
-        { success: false, error: `Failed to download file: ${downloadError.message}` },
-        { status: 500 }
-      );
-    }
-    
-    // Convert to buffer
-    const buffer = Buffer.from(await fileData.arrayBuffer());
     
     console.log(`📄 Processing file: ${filename} (${buffer.length} bytes)`);
     
@@ -69,53 +66,8 @@ export async function POST(request) {
       parsedData = await basicDocumentParse(buffer, filename);
     }
     
-    // Upload original file to completed bucket (keep original format)
-    const { error: uploadError } = await supabaseAdmin.storage
-      .from(completedBucket)
-      .upload(filename, buffer, {
-        cacheControl: '3600',
-        upsert: true
-      });
-    
-    if (uploadError) {
-      console.error('Failed to upload processed file:', uploadError);
-      return NextResponse.json(
-        { success: false, error: `Failed to upload processed file: ${uploadError.message}` },
-        { status: 500 }
-      );
-    }
-    
-    // Save parsed data to Parsed bucket
-    const parsedContent = JSON.stringify({
-      filename,
-      processed_at: new Date().toISOString(),
-      file_type: filename.split('.').pop().toLowerCase(),
-      parsed_data: parsedData
-    }, null, 2);
-    
-    // Create a proper Blob with JSON content type
-    const jsonBlob = new Blob([parsedContent], { type: 'application/json' });
-    
-    const { error: parsedError } = await supabaseAdmin.storage
-      .from('Parsed')
-      .upload(`${filename}.json`, jsonBlob, {
-        cacheControl: '3600',
-        upsert: true,
-        contentType: 'application/json'
-      });
-    
-    if (parsedError) {
-      console.warn('Failed to save parsed data:', parsedError.message);
-    }
-    
-    // Remove from source bucket
-    const { error: removeError } = await supabaseAdmin.storage
-      .from(sourceBucket)
-      .remove([filename]);
-    
-    if (removeError) {
-      console.warn('Failed to remove source file:', removeError.message);
-    }
+    // Note: Files remain on Ollama server - no need to move/delete
+    // Processing results are returned to client, can be saved to database if needed
     
     console.log('✅ Document processing completed:', {
       filename,

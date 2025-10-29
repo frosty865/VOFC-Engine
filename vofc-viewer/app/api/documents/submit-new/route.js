@@ -42,14 +42,8 @@ export async function POST(req) {
     await writeFile(filePath, buffer);
     console.log('📄 File saved to incoming:', filePath);
 
-    // Also archive to library for historical backup
-    try {
-      const libraryPath = join(libraryDir, file.name);
-      await writeFile(libraryPath, buffer);
-      console.log('📚 File archived to library:', libraryPath);
-    } catch (libraryError) {
-      console.warn('⚠️ Failed to archive to library (non-critical):', libraryError.message);
-    }
+    // Note: File will be moved to library after successful processing
+    console.log('📝 File will be moved to library after successful processing');
 
     // Optional: trigger local parsing immediately
     const ollamaUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';

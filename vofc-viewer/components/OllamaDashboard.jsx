@@ -8,14 +8,46 @@ export default function OllamaDashboard({
   className = ""
 }) {
   const [logs, setLogs] = useState([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isConnected, setIsConnected] = useState(false); // Start as disconnected, will reflect actual state
+  const [isLoading, setIsLoading] = useState(true);
   const logRef = useRef(null);
   const eventSourceRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
+  const reconnectAttemptsRef = useRef(0);
+  const connectionCheckIntervalRef = useRef(null);
+
+  // Function to check and update connection state based on EventSource readyState
+  const updateConnectionState = () => {
+    if (eventSourceRef.current) {
+      const state = eventSourceRef.current.readyState;
+      // EventSource.CONNECTING = 0, EventSource.OPEN = 1, EventSource.CLOSED = 2
+      if (state === EventSource.OPEN) {
+        setIsConnected(true);
+        setIsLoading(false);
+      } else if (state === EventSource.CONNECTING) {
+        setIsConnected(false);
+        setIsLoading(true);
+      } else if (state === EventSource.CLOSED) {
+        setIsConnected(false);
+        setIsLoading(false);
+      }
+    } else {
+      setIsConnected(false);
+      setIsLoading(false);
+    }
+  };
 
   const connectToStream = (streamMode = mode) => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
+    }
+    
+    // Clear any pending reconnect interplay intervals
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+    }
+    if (connectionCheckIntervalRef.current) {
+      clearInterval(connectionCheckIntervalRef.current);
     }
 
     setIsLoading(true);
@@ -25,14 +57,27 @@ export default function OllamaDashboard({
     const eventSource = new EventSource(`/api/dashboard/stream?mode=${streamMode}`);
     eventSourceRef.current = eventSource;
 
+    // Continuously monitor connection state
+    connectionCheckIntervalRef.current = setInterval(() => {
+      updateConnectionState();
+    }, 500); // Check every 500ms for accurate state reflection
+
     eventSource.onopen = () => {
       setIsConnected(true);
       setIsLoading(false);
+      reconnectAttemptsRef.current = 0;
+      
+      setLogs((prev) => [...prev, '[SYSTEM] ✅ Connected to dashboard stream']);
     };
 
     eventSource.onmessage = (e) => {
       const logEntry = e.data;
       setLogs((prev) => [...prev, logEntry]);
+      // State is updated by interval, but also verify on message receipt
+      if (eventSource.readyState === EventSource.OPEN) {
+        setIsConnected(true);
+        setIsLoading(false);
+      }
       
       // Auto-scroll to bottom
       if (logRef.current) {
@@ -43,11 +88,31 @@ export default function OllamaDashboard({
     };
 
     eventSource.onerror = (error) => {
-      console.error('EventSource error:', error);
-      setIsConnected(false);
-      setIsLoading(false);
-      eventSource.close();
+      // Immediately update state based on readyState
+      updateConnectionState();
+      
+      reconnectAttemptsRef.current += 1;
+      
+      if (eventSource.readyState === EventSource.CONNECTING) {
+        setLogs((prev) => [...prev, `[SYSTEM] 🔄 Reconnecting to dashboard stream... (attempt ${reconnectAttemptsRef.current})`]);
+      } else if (eventSource.readyState === EventSource.CLOSED) {
+        setLogs((prev) => [...prev, `[SYSTEM] ❌ Connection closed`]);
+        setIsConnected(false);
+        setIsLoading(false);
+        
+        // Auto-reconnect after a delay
+        reconnectTimeoutRef.current = setTimeout(() => {
+          if (reconnectAttemptsRef.current < 10) {
+            connectToStream(streamMode);
+          } else {
+            setLogs((prev) => [...prev, `[SYSTEM] ⚠️ Max reconnection attempts reached`]);
+          }
+        }, 3000);
+      }
     };
+
+    // Initial state check
+    updateConnectionState();
 
     return eventSource;
   };
@@ -59,6 +124,14 @@ export default function OllamaDashboard({
       if (eventSource) {
         eventSource.close();
       }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (connectionCheckIntervalRef.current) {
+        clearInterval(connectionCheckIntervalRef.current);
+      }
+      setIsConnected(false);
+      setIsLoading(false);
     };
   }, [mode]);
 

@@ -8,6 +8,22 @@ export async function POST(request) {
   try {
     console.log('📄 Document submit API called (local storage mode)');
     
+    // Get user from authorization header
+    let userId = null;
+    try {
+      const authHeader = request.headers.get('authorization');
+      if (authHeader) {
+        const accessToken = authHeader.replace('Bearer ', '');
+        const { data: { user }, error } = await supabaseAdmin.auth.getUser(accessToken);
+        if (!error && user) {
+          userId = user.id;
+          console.log('✅ User authenticated:', user.email);
+        }
+      }
+    } catch (authError) {
+      console.warn('⚠️ Could not authenticate user:', authError.message);
+    }
+    
     // Check content type
     const contentType = request.headers.get('content-type');
     if (!contentType || !contentType.includes('multipart/form-data')) {
@@ -86,23 +102,8 @@ export async function POST(request) {
       await writeFile(filePath, Buffer.from(buffer));
       
       savedFilePath = filePath;
-      console.log('📄 Document saved to local Ollama storage:', filePath);
-      
-               // Also archive to Library for historical backup
-               try {
-                 const libraryDir = process.env.OLLAMA_LIBRARY_PATH || 
-                   (process.platform === 'win32' 
-                     ? 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\library'
-                     : '/tmp/ollama/files/library');
-        if (!existsSync(libraryDir)) {
-          await mkdir(libraryDir, { recursive: true });
-        }
-        const libraryPath = join(libraryDir, fileName);
-        await writeFile(libraryPath, Buffer.from(buffer));
-        console.log('📚 Document archived to Library:', libraryPath);
-      } catch (libraryError) {
-        console.warn('⚠️ Failed to archive to Library (non-critical):', libraryError.message);
-      }
+      console.log('📄 Document saved to incoming folder:', filePath);
+      console.log('📝 Document will be moved to library after successful processing');
              } catch (fileError) {
                console.error('❌ Error saving document to local storage:', fileError);
                console.error('❌ Platform:', process.platform);
@@ -122,6 +123,7 @@ export async function POST(request) {
       if (supabaseAdmin) {
                const submissionData = {
                  type: 'ofc', // Document submissions are treated as OFC submissions
+          user_id: userId,
           data: JSON.stringify({
             source_title,
             source_type: source_type || 'unknown',

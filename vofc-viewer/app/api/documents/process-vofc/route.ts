@@ -1,7 +1,7 @@
 // /app/api/documents/process-vofc/route.ts
 import { NextResponse } from 'next/server'
 import { supabase, supabaseAdmin } from '@/lib/supabase-client.js'
-import { ollamaChatJSON } from '@/lib/ollama.js'
+import { ollamaChatJSON, resolveOllamaBase } from '@/lib/ollama.js'
 const pdfParse = require('pdf-parse')
 
 // ---- enhanced prompt helpers ----
@@ -237,17 +237,63 @@ function splitIntoChunks(textByPages: string[]): {page:number; text:string}[] {
   })
 }
 
+// Helper function to move file using Ollama server API
+async function moveFile(filename: string, source: string, target: string) {
+  const ollamaUrl = resolveOllamaBase()
+  const response = await fetch(`${ollamaUrl}/api/files/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, source, target })
+  })
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to move file: ${error}`)
+  }
+  return await response.json()
+}
+
+// Helper function to write processed JSON to processed folder
+async function writeProcessedFile(filename: string, content: any) {
+  const ollamaUrl = resolveOllamaBase()
+  const jsonFilename = filename.replace(/\.pdf$/i, '.json')
+  const response = await fetch(`${ollamaUrl}/api/files/write`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+      filename: jsonFilename, 
+      content, 
+      folder: 'processed' 
+    })
+  })
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to write processed file: ${error}`)
+  }
+  return await response.json()
+}
+
 export async function POST(req: Request) {
+  let fileName: string = ''
   try {
-    const { fileName } = await req.json() as { fileName: string }
+    const body = await req.json() as { fileName: string }
+    fileName = body.fileName
     if (!fileName) throw new Error('fileName is required')
 
-    // 1) pull pdf from 'documents'
-    const { data, error } = await supabaseAdmin.storage.from('documents').download(fileName)
-    if (error) throw error
+    const ollamaUrl = resolveOllamaBase()
+    
+    // 1) Get PDF from incoming folder on Ollama server
+    console.log(`📥 Fetching ${fileName} from incoming folder...`)
+    const fileResponse = await fetch(`${ollamaUrl}/api/files/get/${encodeURIComponent(fileName)}`, {
+      method: 'GET',
+    })
+    
+    if (!fileResponse.ok) {
+      throw new Error(`File not found in incoming folder: ${fileName}`)
+    }
 
-    // 2) extract text per page
-    const buf = Buffer.from(await data.arrayBuffer())
+    // 2) Extract text per page
+    const arrayBuffer = await fileResponse.arrayBuffer()
+    const buf = Buffer.from(arrayBuffer)
     const parsed = await pdfParse(buf)
     // pdf-parse usually returns a single string; split on form-feed when present
     const pages = parsed.text.split('\f')
@@ -328,10 +374,41 @@ export async function POST(req: Request) {
     
     const consolidated = Object.values(grouped).map(consolidateVOFCItem)
 
-    return await uploadResult(fileName, consolidated)
+    // Success: Move original to library and save processed JSON to processed folder
+    try {
+      // Move original file from incoming to library
+      await moveFile(fileName, 'incoming', 'library')
+      console.log(`✅ Moved ${fileName} from incoming to library`)
+      
+      // Write processed JSON to processed folder
+      await writeProcessedFile(fileName, consolidated)
+      console.log(`✅ Saved processed JSON to processed folder`)
+      
+      return await uploadResult(fileName, consolidated)
+    } catch (moveError: any) {
+      console.error('❌ Failed to move file or write processed output:', moveError)
+      // Still return results even if file movement fails
+      return await uploadResult(fileName, consolidated)
+    }
+    
   } catch (e: any) {
-    console.error('process-vofc error:', e)
-    return NextResponse.json({ status: 'error', message: e.message }, { status: 500 })
+    console.error('❌ process-vofc error:', e)
+    
+    // On failure: Move document to errors folder
+    if (fileName) {
+      try {
+        await moveFile(fileName, 'incoming', 'errors')
+        console.log(`⚠️ Moved ${fileName} to errors folder for reprocessing`)
+      } catch (moveError: any) {
+        console.error('❌ Failed to move file to errors folder:', moveError)
+      }
+    }
+    
+    return NextResponse.json({ 
+      status: 'error', 
+      message: e.message,
+      file_moved_to_errors: fileName ? true : false
+    }, { status: 500 })
   }
 }
 
