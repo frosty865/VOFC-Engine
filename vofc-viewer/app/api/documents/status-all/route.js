@@ -35,10 +35,11 @@ export async function GET() {
     if (supabaseAdmin) {
       try {
         // Get all submissions related to documents
+        // Include both 'ofc' type and any with document_name in data
         const { data: subs, error } = await supabaseAdmin
           .from('submissions')
           .select('*, user_id')
-          .eq('type', 'ofc')
+          .or('type.eq.ofc,source.eq.document_submission')
           .order('created_at', { ascending: false });
         
         if (!error && subs) {
@@ -86,8 +87,11 @@ export async function GET() {
       }
     });
     
+    // Create a set of filenames from Ollama to avoid duplicates
+    const ollamaFilenames = new Set(ollamaFiles.map(f => f.filename || f.name || '').filter(Boolean));
+    
     // Merge Ollama files with submission data
-    const documents = ollamaFiles.map(file => {
+    const documentsFromOllama = ollamaFiles.map(file => {
       const filename = file.filename || file.name || '';
       const submission = submissionMap[filename];
       
@@ -104,13 +108,41 @@ export async function GET() {
         submitted_by_email: submission?.submitted_by_email || null,
         submitted_at: submission?.submitted_at || null,
         data: submission?.data || JSON.stringify({
-
           document_name: filename,
           storage_type: 'ollama_server',
           ollama_server_path: file.path
         })
       };
     });
+    
+    // Also include submissions that don't have corresponding Ollama files yet
+    const documentsFromSubmissions = Object.values(submissionMap)
+      .filter(sub => {
+        const subData = typeof sub.data === 'string' ? JSON.parse(sub.data) : sub.data;
+        const docName = subData?.document_name || subData?.filename || sub.filename;
+        return docName && !ollamaFilenames.has(docName) && sub.status === 'pending_review';
+      })
+      .map(sub => {
+        const subData = typeof sub.data === 'string' ? JSON.parse(sub.data) : sub.data;
+        const filename = subData?.document_name || subData?.filename || sub.filename;
+        return {
+          id: sub.id,
+          filename: filename,
+          status: sub.status || 'pending_review',
+          source: 'submission',
+          size: Number(subData?.document_size) || 0,
+          modified: sub.updated_at || sub.created_at || new Date().toISOString(),
+          path: subData?.local_file_path || null,
+          created_at: sub.created_at || new Date().toISOString(),
+          submitted_by: sub.submitted_by || 'System',
+          submitted_by_email: sub.submitted_by_email || null,
+          submitted_at: sub.submitted_at || sub.created_at || null,
+          data: typeof sub.data === 'string' ? sub.data : JSON.stringify(sub.data)
+        };
+      });
+    
+    // Combine both sources
+    const documents = [...documentsFromOllama, ...documentsFromSubmissions];
 
     const response = {
       success: true,
