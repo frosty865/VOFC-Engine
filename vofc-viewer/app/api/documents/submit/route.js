@@ -164,25 +164,32 @@ export async function POST(request) {
       console.log('⚠️ File saved locally but database tracking failed');
     }
     
-    // Optional: Process document with Ollama (if enabled)
-    const autoProcess = process.env.AUTO_PROCESS_ON_UPLOAD === 'true';
-    if (autoProcess) {
+    // Auto-process document after upload (default behavior)
+    const autoProcess = process.env.AUTO_PROCESS_ON_UPLOAD !== 'false'; // Default to true
+    if (autoProcess && savedFilePath) {
       try {
-        console.log('🤖 Auto-processing document with Ollama...');
-        const ollamaUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
-        const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
+        console.log('🤖 Auto-processing document with VOFC parser...');
         
-        await fetch(`${ollamaUrl}/api/generate`, {
+        // Trigger processing asynchronously (don't wait for it)
+        // Use relative URL for server-side calls
+        const baseUrl = process.env.VERCEL_URL 
+          ? `https://${process.env.VERCEL_URL}`
+          : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
+        
+        fetch(`${baseUrl}/api/documents/process-vofc`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: ollamaModel,
-            prompt: `Parse and extract vulnerabilities and OFCs from ${document.name}`
+            fileName: fileName,
+            submissionId: submissionId || undefined
           })
+        }).catch(err => {
+          console.warn('⚠️ Auto-processing request failed (non-critical):', err.message);
         });
-        console.log('✅ Auto-processing completed');
+        
+        console.log('✅ Auto-processing triggered (running in background)');
       } catch (err) {
-        console.warn('⚠️ Auto-processing failed (non-critical):', err.message);
+        console.warn('⚠️ Auto-processing setup failed (non-critical):', err.message);
       }
     }
     

@@ -181,7 +181,34 @@ export default function DocumentProcessor() {
     }
   };
 
-  // Process all documents
+  // Process all pending documents
+  const processAllPending = async () => {
+    if (!confirm('Process all pending unparsed documents? This may take several minutes.')) return;
+
+    try {
+      setLoading(true);
+      const response = await fetch('/api/documents/process-pending', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        alert(`Processing complete!\n\nProcessed: ${result.processed}\nFailed: ${result.failed}\n\nDocuments will appear in Submission Review after processing.`);
+        await fetchDocuments();
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error processing pending documents:', error);
+      alert('Error processing pending documents');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Process all documents (legacy)
   const processAll = async () => {
     if (!confirm('Process all documents in the docs folder?')) return;
 
@@ -298,11 +325,18 @@ export default function DocumentProcessor() {
       {/* Action Buttons */}
       <div className="mb-6 flex flex-wrap gap-4">
         <button
+          onClick={processAllPending}
+          disabled={loading || documents.length === 0}
+          className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50"
+        >
+          Process All Pending ({documents.length})
+        </button>
+        <button
           onClick={processAll}
           disabled={loading || documents.length === 0}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
         >
-          Process All ({documents.length})
+          Process All (Legacy)
         </button>
         
         {selectedFiles.length > 0 && (
