@@ -274,9 +274,11 @@ async function writeProcessedFile(filename: string, content: any) {
 
 export async function POST(req: Request) {
   let fileName: string = ''
+  let submissionId: string | undefined = undefined
   try {
-    const body = await req.json() as { fileName: string }
+    const body = await req.json() as { fileName: string; submissionId?: string }
     fileName = body.fileName
+    submissionId = body.submissionId
     if (!fileName) throw new Error('fileName is required')
 
     const ollamaUrl = resolveOllamaBase()
@@ -312,7 +314,7 @@ export async function POST(req: Request) {
         maxTokens: GPU_CONFIG.maxTokensPerBatch,
         timeout: GPU_CONFIG.batchTimeout
       })
-      return await uploadResult(fileName, result)
+      return await uploadResult(fileName, result, submissionId)
     }
 
     // 3) chunk and call Ollama with optimized batching
@@ -384,11 +386,11 @@ export async function POST(req: Request) {
       await writeProcessedFile(fileName, consolidated)
       console.log(`✅ Saved processed JSON to processed folder`)
       
-      return await uploadResult(fileName, consolidated)
+      return await uploadResult(fileName, consolidated, submissionId)
     } catch (moveError: any) {
       console.error('❌ Failed to move file or write processed output:', moveError)
       // Still return results even if file movement fails
-      return await uploadResult(fileName, consolidated)
+      return await uploadResult(fileName, consolidated, submissionId)
     }
     
   } catch (e: any) {
@@ -488,7 +490,7 @@ function consolidateVOFCItem(item: any): any {
   }
 }
 
-async function uploadResult(fileName: string, payload: any) {
+async function uploadResult(fileName: string, payload: any, submissionId?: string) {
   const startTime = Date.now()
   
   // Enhanced result with performance metrics
@@ -510,6 +512,115 @@ async function uploadResult(fileName: string, payload: any) {
       categories_used: [...new Set(payload?.map((item: any) => item.category) || [])],
       avg_vulnerability_length: payload?.length ? 
         payload.reduce((sum: number, item: any) => sum + (item.vulnerability?.length || 0), 0) / payload.length : 0
+    }
+  }
+  
+  // Update submission record with extracted vulnerabilities if submissionId is provided
+  if (submissionId && supabaseAdmin && Array.isArray(payload) && payload.length > 0) {
+    try {
+      // Find the submission by document_name or filename
+      const { data: existingSub } = await supabaseAdmin
+        .from('submissions')
+        .select('*')
+        .eq('id', submissionId)
+        .single();
+      
+      if (existingSub) {
+        // Parse existing data
+        const existingData = typeof existingSub.data === 'string' 
+          ? JSON.parse(existingSub.data) 
+          : existingSub.data || {};
+        
+        // Format vulnerabilities for SubmissionReview component
+        // SubmissionReview expects: data.enhanced_extraction array with content items
+        const enhancedExtraction = payload.map(item => ({
+          category: item.category,
+          content: [
+            {
+              type: 'vulnerability',
+              text: item.vulnerability,
+              discipline: item.category
+            },
+            ...(item.options_for_consideration || []).map((ofc: any) => ({
+              type: 'ofc',
+              text: ofc.option_text || ofc.text,
+              discipline: item.category
+            }))
+          ]
+        }));
+        
+        // Update submission data
+        const updatedData = {
+          ...existingData,
+          parsed_at: new Date().toISOString(),
+          enhanced_extraction: enhancedExtraction,
+          vulnerabilities_count: payload.length,
+          options_for_consideration_count: payload.reduce((sum: number, item: any) => 
+            sum + (item.options_for_consideration?.length || 0), 0)
+        };
+        
+        // Update submission record
+        const { error: updateError } = await supabaseAdmin
+          .from('submissions')
+          .update({
+            data: JSON.stringify(updatedData),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', submissionId);
+        
+        if (updateError) {
+          console.error('❌ Failed to update submission with vulnerabilities:', updateError);
+        } else {
+          console.log(`✅ Updated submission ${submissionId} with ${payload.length} vulnerabilities`);
+        }
+      } else {
+        // Try to find by filename
+        const { data: subsByFilename } = await supabaseAdmin
+          .from('submissions')
+          .select('*')
+          .contains('data', JSON.stringify({ document_name: fileName }));
+        
+        if (subsByFilename && subsByFilename.length > 0) {
+          const sub = subsByFilename[0];
+          const existingData = typeof sub.data === 'string' ? JSON.parse(sub.data) : sub.data || {};
+          
+          const enhancedExtraction = payload.map(item => ({
+            category: item.category,
+            content: [
+              {
+                type: 'vulnerability',
+                text: item.vulnerability,
+                discipline: item.category
+              },
+              ...(item.options_for_consideration || []).map((ofc: any) => ({
+                type: 'ofc',
+                text: ofc.option_text || ofc.text,
+                discipline: item.category
+              }))
+            ]
+          }));
+          
+          const updatedData = {
+            ...existingData,
+            parsed_at: new Date().toISOString(),
+            enhanced_extraction: enhancedExtraction,
+            vulnerabilities_count: payload.length
+          };
+          
+          await supabaseAdmin
+            .from('submissions')
+            .update({
+              data: JSON.stringify(updatedData),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', sub.id);
+          
+          console.log(`✅ Updated submission ${sub.id} with vulnerabilities by filename match`);
+        }
+      }
+    } catch (dbUpdateError) {
+      console.error('❌ Error updating submission with vulnerabilities:', dbUpdateError);
+      // Don't fail the whole process if DB update fails
     }
   }
   

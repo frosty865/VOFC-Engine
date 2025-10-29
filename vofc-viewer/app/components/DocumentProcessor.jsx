@@ -125,24 +125,27 @@ export default function DocumentProcessor() {
   };
 
   // Process single document
-  const processDocument = async (filename) => {
+  const processDocument = async (filename, docId) => {
     try {
-      const response = await fetch('/api/documents/process', {
+      // Use process-vofc endpoint which saves to submissions
+      const response = await fetch('/api/documents/process-vofc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename })
+        body: JSON.stringify({ 
+          fileName: filename,
+          submissionId: docId || undefined
+        })
       });
 
       const result = await response.json();
       
-      if (result.success) {
+      if (result.status === 'ok' || result.success) {
         await fetchDocuments();
         // Show processing results
-        if (result.data) {
-          alert(`Document processed successfully!\n\nTitle: ${result.data.title}\nVulnerabilities found: ${result.data.vulnerabilities.length}\nOFCs found: ${result.data.ofcs.length}\nSectors: ${result.data.sectors.length}`);
-        }
+        const count = result.count || 0;
+        alert(`Document processed successfully!\n\nVulnerabilities extracted: ${count}\n\nVulnerabilities have been saved to the submission and will appear in Submission Review.`);
       } else {
-        alert(`Error: ${result.error}`);
+        alert(`Error: ${result.error || result.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error processing document:', error);
@@ -418,7 +421,7 @@ export default function DocumentProcessor() {
                             Preview
                           </button>
                           <button
-                            onClick={() => processDocument(doc.filename)}
+                            onClick={() => processDocument(doc.filename, doc.id)}
                             className="text-blue-600 hover:text-blue-900"
                           >
                             Process
