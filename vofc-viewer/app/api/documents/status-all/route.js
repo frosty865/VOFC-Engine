@@ -7,17 +7,9 @@ export async function GET() {
     
     const ollamaUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || 'https://ollama.frostech.site';
     
-    // Fetch files from all folders on Ollama server
+    // Try to fetch files from custom Flask server first, then fallback to standard Ollama
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
-    
-    const filesResponse = await fetch(`${ollamaUrl}/api/files/list-all`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
     
     let filesByFolder = {
       incoming: [],
@@ -26,39 +18,49 @@ export async function GET() {
       errors: []
     };
     
-    if (filesResponse.ok) {
-      const ollamaData = await filesResponse.json();
-      const allFiles = ollamaData.files || [];
-      
-      // Group files by folder
-      allFiles.forEach(file => {
-        const folder = file.folder || 'incoming';
-        if (filesByFolder[folder]) {
-          filesByFolder[folder].push(file);
-        }
+    // Try custom Flask server first
+    try {
+      const filesResponse = await fetch(`${ollamaUrl}/api/files/list-all`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal
       });
       
-      console.log(`📁 Found files on Ollama server:`, {
-        incoming: filesByFolder.incoming.length,
-        processed: filesByFolder.processed.length,
-        library: filesByFolder.library.length,
-        errors: filesByFolder.errors.length
-      });
-    } else {
-      // Fallback to single folder listing
-      try {
-        const fallbackResponse = await fetch(`${ollamaUrl}/api/files/list`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal
+      if (filesResponse.ok) {
+        const ollamaData = await filesResponse.json();
+        const allFiles = ollamaData.files || [];
+        
+        // Group files by folder
+        allFiles.forEach(file => {
+          const folder = file.folder || 'incoming';
+          if (filesByFolder[folder]) {
+            filesByFolder[folder].push(file);
+          }
         });
-        if (fallbackResponse.ok) {
-          const fallbackData = await fallbackResponse.json();
-          filesByFolder.incoming = fallbackData.files || [];
-        }
-      } catch (e) {
-        console.warn('⚠️ Could not fetch files from Ollama server:', filesResponse.status);
+        
+        console.log(`📁 Found files on custom Ollama server:`, {
+          incoming: filesByFolder.incoming.length,
+          processed: filesByFolder.processed.length,
+          library: filesByFolder.library.length,
+          errors: filesByFolder.errors.length
+        });
+      } else {
+        throw new Error(`Custom server returned ${filesResponse.status}`);
       }
+    } catch (customError) {
+      console.log('⚠️ Custom Flask server not available, using Supabase-only mode');
+      
+      // Clear timeout and create new controller for Supabase-only mode
+      clearTimeout(timeoutId);
+      
+      // In Supabase-only mode, we'll rely entirely on submission records
+      // and simulate folder structure based on submission status
+      filesByFolder = {
+        incoming: [],
+        processed: [],
+        library: [],
+        errors: []
+      };
     }
     
     // Combine all files for submission matching
@@ -131,81 +133,122 @@ export async function GET() {
     // Create a set of filenames from Ollama to avoid duplicates
     const ollamaFilenames = new Set(ollamaFiles.map(f => f.filename || f.name || '').filter(Boolean));
     
-    // Categorize files by folder
-    const documentsFromIncoming = filesByFolder.incoming.map(file => {
-      const filename = file.filename || file.name || '';
-      const submission = submissionMap[filename];
-      
-      return {
-        id: submission?.id || `ollama-${filename}`,
-        filename: filename,
-        status: 'pending_review',
-        source: submission ? 'submission' : 'ollama_server',
-        size: Number(file.size) || 0,
-        modified: file.modified || file.created || submission?.created_at || new Date().toISOString(),
-        path: file.path,
-        created_at: submission?.created_at || file.created || file.modified || new Date().toISOString(),
-        submitted_by: submission?.submitted_by || 'System',
-        submitted_by_email: submission?.submitted_by_email || null,
-        submitted_at: submission?.submitted_at || null,
-        data: submission?.data || JSON.stringify({
-          document_name: filename,
-          storage_type: 'ollama_server',
-          ollama_server_path: file.path,
-          folder: 'incoming'
-        })
-      };
-    });
+    // Categorize files by folder (if custom server available) or by submission status
+    let documentsFromIncoming = [];
+    let completedFromLibrary = [];
+    let failedFromErrors = [];
     
-    const completedFromLibrary = filesByFolder.library.map(file => {
-      const filename = file.filename || file.name || '';
-      const submission = submissionMap[filename];
+    if (filesByFolder.incoming.length > 0 || filesByFolder.library.length > 0 || filesByFolder.errors.length > 0) {
+      // Custom server available - use folder-based categorization
+      documentsFromIncoming = filesByFolder.incoming.map(file => {
+        const filename = file.filename || file.name || '';
+        const submission = submissionMap[filename];
+        
+        return {
+          id: submission?.id || `ollama-${filename}`,
+          filename: filename,
+          status: 'pending_review',
+          source: submission ? 'submission' : 'ollama_server',
+          size: Number(file.size) || 0,
+          modified: file.modified || file.created || submission?.created_at || new Date().toISOString(),
+          path: file.path,
+          created_at: submission?.created_at || file.created || file.modified || new Date().toISOString(),
+          submitted_by: submission?.submitted_by || 'System',
+          submitted_by_email: submission?.submitted_by_email || null,
+          submitted_at: submission?.submitted_at || null,
+          data: submission?.data || JSON.stringify({
+            document_name: filename,
+            storage_type: 'ollama_server',
+            ollama_server_path: file.path,
+            folder: 'incoming'
+          })
+        };
+      });
       
-      return {
-        id: submission?.id || `library-${filename}`,
-        filename: filename,
-        status: 'approved',
-        source: submission ? 'submission' : 'ollama_server',
-        size: Number(file.size) || 0,
-        modified: file.modified || file.created || submission?.updated_at || submission?.created_at || new Date().toISOString(),
-        path: file.path,
-        created_at: submission?.created_at || file.created || file.modified || new Date().toISOString(),
-        submitted_by: submission?.submitted_by || 'System',
-        submitted_by_email: submission?.submitted_by_email || null,
-        submitted_at: submission?.submitted_at || null,
-        data: submission?.data || JSON.stringify({
-          document_name: filename,
-          storage_type: 'ollama_server',
-          ollama_server_path: file.path,
-          folder: 'library'
-        })
-      };
-    });
-    
-    const failedFromErrors = filesByFolder.errors.map(file => {
-      const filename = file.filename || file.name || '';
-      const submission = submissionMap[filename];
+      completedFromLibrary = filesByFolder.library.map(file => {
+        const filename = file.filename || file.name || '';
+        const submission = submissionMap[filename];
+        
+        return {
+          id: submission?.id || `library-${filename}`,
+          filename: filename,
+          status: 'approved',
+          source: submission ? 'submission' : 'ollama_server',
+          size: Number(file.size) || 0,
+          modified: file.modified || file.created || submission?.updated_at || submission?.created_at || new Date().toISOString(),
+          path: file.path,
+          created_at: submission?.created_at || file.created || file.modified || new Date().toISOString(),
+          submitted_by: submission?.submitted_by || 'System',
+          submitted_by_email: submission?.submitted_by_email || null,
+          submitted_at: submission?.submitted_at || null,
+          data: submission?.data || JSON.stringify({
+            document_name: filename,
+            storage_type: 'ollama_server',
+            ollama_server_path: file.path,
+            folder: 'library'
+          })
+        };
+      });
       
-      return {
-        id: submission?.id || `error-${filename}`,
-        filename: filename,
-        status: 'rejected',
-        source: submission ? 'submission' : 'ollama_server',
-        size: Number(file.size) || 0,
-        modified: file.modified || file.created || submission?.updated_at || submission?.created_at || new Date().toISOString(),
-        path: file.path,
-        created_at: submission?.created_at || file.created || file.modified || new Date().toISOString(),
-        submitted_by: submission?.submitted_by || 'System',
-        submitted_by_email: submission?.submitted_by_email || null,
-        submitted_at: submission?.submitted_at || null,
-        data: submission?.data || JSON.stringify({
-          document_name: filename,
-          storage_type: 'ollama_server',
-          ollama_server_path: file.path,
-          folder: 'errors'
-        })
-      };
-    });
+      failedFromErrors = filesByFolder.errors.map(file => {
+        const filename = file.filename || file.name || '';
+        const submission = submissionMap[filename];
+        
+        return {
+          id: submission?.id || `error-${filename}`,
+          filename: filename,
+          status: 'rejected',
+          source: submission ? 'submission' : 'ollama_server',
+          size: Number(file.size) || 0,
+          modified: file.modified || file.created || submission?.updated_at || submission?.created_at || new Date().toISOString(),
+          path: file.path,
+          created_at: submission?.created_at || file.created || file.modified || new Date().toISOString(),
+          submitted_by: submission?.submitted_by || 'System',
+          submitted_by_email: submission?.submitted_by_email || null,
+          submitted_at: submission?.submitted_at || null,
+          data: submission?.data || JSON.stringify({
+            document_name: filename,
+            storage_type: 'ollama_server',
+            ollama_server_path: file.path,
+            folder: 'errors'
+          })
+        };
+      });
+    } else {
+      // Supabase-only mode - categorize by submission status
+      console.log('📊 Using Supabase-only mode for document categorization');
+      
+      submissions.forEach(sub => {
+        const subData = typeof sub.data === 'string' ? JSON.parse(sub.data) : sub.data;
+        const filename = subData?.document_name || subData?.filename || sub.filename;
+        
+        if (!filename) return;
+        
+        const docInfo = {
+          id: sub.id,
+          filename: filename,
+          status: sub.status,
+          source: 'submission',
+          size: Number(subData?.document_size) || 0,
+          modified: sub.updated_at || sub.created_at || new Date().toISOString(),
+          path: subData?.local_file_path || null,
+          created_at: sub.created_at || new Date().toISOString(),
+          submitted_by: submissionMap[filename]?.submitted_by || 'System',
+          submitted_by_email: submissionMap[filename]?.submitted_by_email || null,
+          submitted_at: submissionMap[filename]?.submitted_at || sub.created_at || null,
+          data: typeof sub.data === 'string' ? sub.data : JSON.stringify(sub.data)
+        };
+        
+        // Categorize by status
+        if (sub.status === 'pending_review' || sub.status === 'processing') {
+          documentsFromIncoming.push(docInfo);
+        } else if (sub.status === 'approved' || sub.status === 'completed') {
+          completedFromLibrary.push(docInfo);
+        } else if (sub.status === 'rejected' || sub.status === 'failed') {
+          failedFromErrors.push(docInfo);
+        }
+      });
+    }
     
     // Also include submissions that don't have corresponding Ollama files yet
     const documentsFromSubmissions = Object.values(submissionMap)

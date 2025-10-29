@@ -104,6 +104,26 @@ export async function POST(request) {
       savedFilePath = filePath;
       console.log('📄 Document saved to incoming folder:', filePath);
       console.log('📝 Document will be moved to library after successful processing');
+      
+      // Also save to Supabase storage as backup/fallback
+      if (supabaseAdmin) {
+        try {
+          const { error: uploadError } = await supabaseAdmin.storage
+            .from('submissions')
+            .upload(fileName, buffer, {
+              contentType: document.type,
+              upsert: true
+            });
+          
+          if (uploadError) {
+            console.warn('⚠️ Failed to upload to Supabase storage:', uploadError.message);
+          } else {
+            console.log('✅ Document also saved to Supabase storage as backup');
+          }
+        } catch (supabaseError) {
+          console.warn('⚠️ Supabase storage upload failed (non-critical):', supabaseError.message);
+        }
+      }
              } catch (fileError) {
                console.error('❌ Error saving document to local storage:', fileError);
                console.error('❌ Platform:', process.platform);
