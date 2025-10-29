@@ -7,11 +7,11 @@ export async function GET() {
     
     const ollamaUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || 'https://ollama.frostech.site';
     
-    // Fetch files from Ollama server
+    // Fetch files from all folders on Ollama server
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
     
-    const filesResponse = await fetch(`${ollamaUrl}/api/files/list`, {
+    const filesResponse = await fetch(`${ollamaUrl}/api/files/list-all`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal
@@ -19,14 +19,55 @@ export async function GET() {
     
     clearTimeout(timeoutId);
     
-    let ollamaFiles = [];
+    let filesByFolder = {
+      incoming: [],
+      processed: [],
+      library: [],
+      errors: []
+    };
+    
     if (filesResponse.ok) {
       const ollamaData = await filesResponse.json();
-      ollamaFiles = ollamaData.files || [];
-      console.log(`📁 Found ${ollamaFiles.length} files on Ollama server`);
+      const allFiles = ollamaData.files || [];
+      
+      // Group files by folder
+      allFiles.forEach(file => {
+        const folder = file.folder || 'incoming';
+        if (filesByFolder[folder]) {
+          filesByFolder[folder].push(file);
+        }
+      });
+      
+      console.log(`📁 Found files on Ollama server:`, {
+        incoming: filesByFolder.incoming.length,
+        processed: filesByFolder.processed.length,
+        library: filesByFolder.library.length,
+        errors: filesByFolder.errors.length
+      });
     } else {
-      console.warn('⚠️ Could not fetch files from Ollama server:', filesResponse.status);
+      // Fallback to single folder listing
+      try {
+        const fallbackResponse = await fetch(`${ollamaUrl}/api/files/list`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal
+        });
+        if (fallbackResponse.ok) {
+          const fallbackData = await fallbackResponse.json();
+          filesByFolder.incoming = fallbackData.files || [];
+        }
+      } catch (e) {
+        console.warn('⚠️ Could not fetch files from Ollama server:', filesResponse.status);
+      }
     }
+    
+    // Combine all files for submission matching
+    const ollamaFiles = [
+      ...filesByFolder.incoming,
+      ...filesByFolder.processed,
+      ...filesByFolder.library,
+      ...filesByFolder.errors
+    ];
     
     // Fetch submissions from Supabase to get user information
     let submissions = [];
@@ -90,15 +131,15 @@ export async function GET() {
     // Create a set of filenames from Ollama to avoid duplicates
     const ollamaFilenames = new Set(ollamaFiles.map(f => f.filename || f.name || '').filter(Boolean));
     
-    // Merge Ollama files with submission data
-    const documentsFromOllama = ollamaFiles.map(file => {
+    // Categorize files by folder
+    const documentsFromIncoming = filesByFolder.incoming.map(file => {
       const filename = file.filename || file.name || '';
       const submission = submissionMap[filename];
       
       return {
         id: submission?.id || `ollama-${filename}`,
         filename: filename,
-        status: submission?.status || 'pending_review',
+        status: 'pending_review',
         source: submission ? 'submission' : 'ollama_server',
         size: Number(file.size) || 0,
         modified: file.modified || file.created || submission?.created_at || new Date().toISOString(),
@@ -110,7 +151,58 @@ export async function GET() {
         data: submission?.data || JSON.stringify({
           document_name: filename,
           storage_type: 'ollama_server',
-          ollama_server_path: file.path
+          ollama_server_path: file.path,
+          folder: 'incoming'
+        })
+      };
+    });
+    
+    const completedFromLibrary = filesByFolder.library.map(file => {
+      const filename = file.filename || file.name || '';
+      const submission = submissionMap[filename];
+      
+      return {
+        id: submission?.id || `library-${filename}`,
+        filename: filename,
+        status: 'approved',
+        source: submission ? 'submission' : 'ollama_server',
+        size: Number(file.size) || 0,
+        modified: file.modified || file.created || submission?.updated_at || submission?.created_at || new Date().toISOString(),
+        path: file.path,
+        created_at: submission?.created_at || file.created || file.modified || new Date().toISOString(),
+        submitted_by: submission?.submitted_by || 'System',
+        submitted_by_email: submission?.submitted_by_email || null,
+        submitted_at: submission?.submitted_at || null,
+        data: submission?.data || JSON.stringify({
+          document_name: filename,
+          storage_type: 'ollama_server',
+          ollama_server_path: file.path,
+          folder: 'library'
+        })
+      };
+    });
+    
+    const failedFromErrors = filesByFolder.errors.map(file => {
+      const filename = file.filename || file.name || '';
+      const submission = submissionMap[filename];
+      
+      return {
+        id: submission?.id || `error-${filename}`,
+        filename: filename,
+        status: 'rejected',
+        source: submission ? 'submission' : 'ollama_server',
+        size: Number(file.size) || 0,
+        modified: file.modified || file.created || submission?.updated_at || submission?.created_at || new Date().toISOString(),
+        path: file.path,
+        created_at: submission?.created_at || file.created || file.modified || new Date().toISOString(),
+        submitted_by: submission?.submitted_by || 'System',
+        submitted_by_email: submission?.submitted_by_email || null,
+        submitted_at: submission?.submitted_at || null,
+        data: submission?.data || JSON.stringify({
+          document_name: filename,
+          storage_type: 'ollama_server',
+          ollama_server_path: file.path,
+          folder: 'errors'
         })
       };
     });
@@ -141,21 +233,50 @@ export async function GET() {
         };
       });
     
-    // Combine both sources
-    const documents = [...documentsFromOllama, ...documentsFromSubmissions];
+    // Combine all sources - documents from incoming and submissions without files
+    const pendingDocuments = [
+      ...documentsFromIncoming,
+      ...documentsFromSubmissions.filter(subDoc => {
+        // Don't include if already in incoming
+        const filename = subDoc.filename;
+        return !documentsFromIncoming.some(inc => inc.filename === filename);
+      })
+    ];
+    
+    // Get processing status from submissions
+    const processingDocs = submissions
+      .filter(sub => sub.status === 'processing')
+      .map(sub => {
+        const subData = typeof sub.data === 'string' ? JSON.parse(sub.data) : sub.data;
+        const filename = subData?.document_name || subData?.filename || sub.filename;
+        return {
+          id: sub.id,
+          filename: filename,
+          status: 'processing',
+          source: 'submission',
+          size: Number(subData?.document_size) || 0,
+          modified: sub.updated_at || sub.created_at,
+          created_at: sub.created_at,
+          submitted_by: submissionMap[filename]?.submitted_by || 'System',
+          submitted_by_email: submissionMap[filename]?.submitted_by_email || null
+        };
+      });
 
     const response = {
       success: true,
-      documents,
-      processing: [],
-      completed: [],
-      failed: [],
-      library: documents
+      documents: pendingDocuments,
+      processing: processingDocs,
+      completed: completedFromLibrary,
+      failed: failedFromErrors,
+      library: [...pendingDocuments, ...completedFromLibrary, ...failedFromErrors]
     };
     
     console.log('📊 Document counts:', {
-      documents: documents.length,
-      with_user_info: documents.filter(d => d.submitted_by !== 'System').length
+      pending: pendingDocuments.length,
+      processing: processingDocs.length,
+      completed: completedFromLibrary.length,
+      failed: failedFromErrors.length,
+      with_user_info: pendingDocuments.filter(d => d.submitted_by !== 'System').length
     });
     
     return NextResponse.json(response);

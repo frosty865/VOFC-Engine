@@ -78,6 +78,36 @@ def list_files():
     except Exception as e:
         return jsonify({"files": [], "error": str(e)}), 500
 
+@app.route('/api/files/list-all', methods=['GET'])
+def list_all_files():
+    """List files from all folders: incoming, processed, library, errors."""
+    try:
+        all_files = []
+        
+        # Get files from each folder
+        folders = {
+            'incoming': UPLOAD_DIR,
+            'processed': PROCESSED_DIR,
+            'library': LIBRARY_DIR,
+            'errors': ERRORS_DIR
+        }
+        
+        for folder_name, folder_path in folders.items():
+            if os.path.exists(folder_path):
+                for filename in os.listdir(folder_path):
+                    filepath = os.path.join(folder_path, filename)
+                    if os.path.isfile(filepath):
+                        file_info = get_file_info(filepath)
+                        file_info['folder'] = folder_name
+                        all_files.append(file_info)
+        
+        return jsonify({
+            "files": all_files,
+            "folders": {name: path for name, path in folders.items()}
+        })
+    except Exception as e:
+        return jsonify({"files": [], "error": str(e)}), 500
+
 @app.route('/api/files/download/<filename>', methods=['GET'])
 def download_file(filename):
     """Download a file from the upload directory."""
