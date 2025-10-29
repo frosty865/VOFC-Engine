@@ -1,15 +1,10 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 
 export async function GET() {
   try {
     // Fetch all OFC requests
-    const { data: ofcRequests, error } = await supabase
+    const { data: ofcRequests, error } = await supabaseAdmin
       .from('ofc_requests')
       .select('*')
       .order('created_at', { ascending: false });

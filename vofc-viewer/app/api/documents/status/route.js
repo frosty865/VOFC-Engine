@@ -1,36 +1,62 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 
 export async function GET() {
   try {
-    // Define the processing folder path
-    const processingPath = path.join(process.cwd(), 'data', 'processing');
+    // Check processing folder in storage
+    const { data: processingFiles, error: processingError } = await supabaseAdmin.storage
+      .from('vofc_seed')
+      .list('processing', {
+        limit: 100
+      });
     
-    // Check if processing folder exists
-    if (!fs.existsSync(processingPath)) {
-      return NextResponse.json({
-        success: true,
-        statuses: []
+    // Check parsed folder in storage
+    const { data: parsedFiles, error: parsedError } = await supabaseAdmin.storage
+      .from('vofc_seed')
+      .list('parsed', {
+        limit: 100
+      });
+    
+    // Check failed folder in storage
+    const { data: failedFiles, error: failedError } = await supabaseAdmin.storage
+      .from('vofc_seed')
+      .list('failed', {
+        limit: 100
+      });
+    
+    const statuses = [];
+    
+    // Add processing files
+    if (processingFiles && !processingError) {
+      processingFiles.forEach(file => {
+        statuses.push({
+          filename: file.name,
+          status: 'processing',
+          timestamp: file.updated_at || file.created_at
+        });
       });
     }
     
-    // Read directory contents
-    const files = fs.readdirSync(processingPath);
-    const statuses = [];
-    
-    for (const file of files) {
-      const filePath = path.join(processingPath, file);
-      const stats = fs.statSync(filePath);
-      
-      // Only include files (not directories)
-      if (stats.isFile()) {
+    // Add parsed files
+    if (parsedFiles && !parsedError) {
+      parsedFiles.forEach(file => {
         statuses.push({
-          filename: file,
-          status: 'processing',
-          timestamp: stats.mtime.toISOString()
+          filename: file.name,
+          status: 'parsed',
+          timestamp: file.updated_at || file.created_at
         });
-      }
+      });
+    }
+    
+    // Add failed files
+    if (failedFiles && !failedError) {
+      failedFiles.forEach(file => {
+        statuses.push({
+          filename: file.name,
+          status: 'failed',
+          timestamp: file.updated_at || file.created_at
+        });
+      });
     }
     
     return NextResponse.json({

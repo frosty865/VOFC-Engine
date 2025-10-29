@@ -43,8 +43,10 @@ export default function Navigation({ simple = false }) {
           setCurrentUser(result.user);
         }
       }
+      // Silent failure for 401 - user just isn't logged in yet
     } catch (error) {
-      console.error('Error loading user:', error);
+      // Silently handle errors during auth check
+      // This is normal when user isn't authenticated
     } finally {
       setLoading(false);
     }
@@ -119,42 +121,11 @@ export default function Navigation({ simple = false }) {
           gap: 'var(--spacing-md)'
         }}>
           <Link href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>
-            {/* CISA Shield Logo */}
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              marginRight: 'var(--spacing-md)',
-              height: '40px'
-            }}>
-              <img 
-                src="/images/cisa-logo.png" 
-                alt="CISA Logo" 
-                style={{ 
-                  height: '40px', 
-                  width: 'auto',
-                  objectFit: 'contain'
-                }}
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                  e.target.nextSibling.style.display = 'block';
-                }}
-              />
-              <div style={{ display: 'none' }}>
-                <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <defs>
-                    <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" style={{stopColor:'#ffffff',stopOpacity:1}} />
-                      <stop offset="100%" style={{stopColor:'#f8f9fa',stopOpacity:1}} />
-                    </linearGradient>
-                  </defs>
-                  <path d="M20 5 L30 2 L35 5 L35 15 L32 25 L20 35 L8 25 L5 15 L5 5 L10 2 Z" 
-                        fill="url(#shieldGradient)" 
-                        stroke="#ffffff" 
-                        strokeWidth="1"/>
-                  <text x="20" y="22" fontFamily="Arial, sans-serif" fontSize="8" fontWeight="bold" fill="#1a365d" textAnchor="middle">CISA</text>
-                </svg>
-              </div>
-            </div>
+            <img
+              src="/images/cisa-logo.png"
+              alt="CISA Logo"
+              style={{ height: '40px', width: 'auto', marginRight: 'var(--spacing-md)' }}
+            />
             <div className="logo-text">
               <h1 style={{
                 margin: '0',
@@ -428,66 +399,6 @@ export default function Navigation({ simple = false }) {
               >
                 ⚙️ Admin Panel
               </Link>
-              {currentUser.role === 'admin' && (
-                <>
-                  <Link
-                    href="/admin/ofcs"
-                    style={{
-                      padding: 'var(--spacing-sm) var(--spacing-md)',
-                      borderRadius: 'var(--border-radius)',
-                      textDecoration: 'none',
-                      color: pathname === '/admin/ofcs' ? 'var(--cisa-white)' : 'rgba(255,255,255,0.8)',
-                      backgroundColor: pathname === '/admin/ofcs' ? 'rgba(255,255,255,0.2)' : 'transparent',
-                      fontWeight: '600',
-                      fontSize: 'var(--font-size-sm)',
-                      transition: 'all 0.3s ease',
-                      border: '2px solid transparent'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (pathname !== '/admin/ofcs') {
-                        e.target.style.backgroundColor = 'rgba(255,255,255,0.1)';
-                        e.target.style.color = 'var(--cisa-white)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (pathname !== '/admin/ofcs') {
-                        e.target.style.backgroundColor = 'transparent';
-                        e.target.style.color = 'rgba(255,255,255,0.8)';
-                      }
-                    }}
-                  >
-                    💡 Manage OFCs
-                  </Link>
-                  <Link
-                    href="/admin/disciplines"
-                    style={{
-                      padding: 'var(--spacing-sm) var(--spacing-md)',
-                      borderRadius: 'var(--border-radius)',
-                      textDecoration: 'none',
-                      color: pathname === '/admin/disciplines' ? 'var(--cisa-white)' : 'rgba(255,255,255,0.8)',
-                      backgroundColor: pathname === '/admin/disciplines' ? 'rgba(255,255,255,0.2)' : 'transparent',
-                      fontWeight: '600',
-                      fontSize: 'var(--font-size-sm)',
-                      transition: 'all 0.3s ease',
-                      border: '2px solid transparent'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (pathname !== '/admin/disciplines') {
-                        e.target.style.backgroundColor = 'rgba(255,255,255,0.1)';
-                        e.target.style.color = 'var(--cisa-white)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (pathname !== '/admin/disciplines') {
-                        e.target.style.backgroundColor = 'transparent';
-                        e.target.style.color = 'rgba(255,255,255,0.8)';
-                      }
-                    }}
-                  >
-                    📚 Disciplines
-                  </Link>
-                </>
-              )}
             </>
           )}
         </nav>

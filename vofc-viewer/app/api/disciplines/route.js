@@ -1,22 +1,14 @@
 import { NextResponse } from 'next/server';
-import { getServerClient } from '../../lib/supabase-manager';
+import { supabase } from '../../lib/supabaseClient';
 
 // Get all disciplines
 export async function GET(request) {
   try {
-    const supabaseServer = getServerClient();
-    if (!supabaseServer) {
-      return NextResponse.json(
-        { success: false, error: 'Database connection failed' },
-        { status: 500 }
-      );
-    }
-
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
     const active = searchParams.get('active');
 
-    let query = supabaseServer
+    let query = supabase
       .from('disciplines')
       .select('*')
       .order('category, name');
@@ -54,14 +46,6 @@ export async function GET(request) {
 // Create a new discipline
 export async function POST(request) {
   try {
-    const supabaseServer = getServerClient();
-    if (!supabaseServer) {
-      return NextResponse.json(
-        { success: false, error: 'Database connection failed' },
-        { status: 500 }
-      );
-    }
-
     const { name, description, category, is_active = true } = await request.json();
 
     if (!name) {
@@ -71,7 +55,7 @@ export async function POST(request) {
       );
     }
 
-    const { data, error } = await supabaseServer
+    const { data, error } = await supabase
       .from('disciplines')
       .insert({
         name,

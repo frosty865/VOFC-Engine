@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getServerClient } from '../../../lib/supabase-manager';
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 
 // User registration with multi-agency support
 export async function POST(request) {
@@ -13,7 +13,7 @@ export async function POST(request) {
       );
     }
 
-    const supabaseServer = getServerClient();
+    const supabaseServer = supabaseAdmin;
     if (!supabaseServer) {
       return NextResponse.json(
         { success: false, error: 'Database connection failed' },

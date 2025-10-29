@@ -1,11 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-// Use service role for API submissions to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 
 export async function POST(request) {
   try {
@@ -30,7 +24,7 @@ export async function POST(request) {
       updated_at: new Date().toISOString()
     };
 
-    const { data: submission, error: submissionError } = await supabase
+    const { data: submission, error: submissionError } = await supabaseAdmin
       .from('submissions')
       .insert([submissionData])
       .select()
@@ -78,7 +72,7 @@ export async function POST(request) {
     try {
       console.log('🤖 Running Ollama API for document analysis...');
       
-      const ollamaBaseUrl = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+      const ollamaBaseUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
       const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
       
       // Create system prompt for vulnerability and OFC extraction
@@ -185,7 +179,7 @@ Please provide a structured JSON response with vulnerabilities and OFCs.`;
         vulnerability_count: vulnCount
       };
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await supabaseAdmin
         .from('submissions')
         .update({
           data: JSON.stringify(enhancedData),

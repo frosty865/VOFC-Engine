@@ -1,22 +1,34 @@
 import { NextResponse } from 'next/server';
-import { getServerClient } from '../../../lib/supabase-manager';
+import { supabaseAdmin } from '@/lib/supabase-client.js';
+import { writeFile, mkdir } from 'fs/promises';
+import { join } from 'path';
+import { existsSync } from 'fs';
 
 export async function POST(request) {
   try {
-    console.log('📄 Document submission API called');
+    console.log('📄 Document submit API called (local storage mode)');
     
-    // Get Supabase server client
-    const supabaseServer = getServerClient();
-    if (!supabaseServer) {
-      console.error('❌ Supabase server client not available');
+    // Check content type
+    const contentType = request.headers.get('content-type');
+    if (!contentType || !contentType.includes('multipart/form-data')) {
+      console.log('❌ Invalid content type:', contentType);
       return NextResponse.json(
-        { error: 'Server configuration error' },
-        { status: 500 }
+        { success: false, error: 'Content-Type must be multipart/form-data' },
+        { status: 400 }
       );
     }
-
+    
     // Parse form data
-    const formData = await request.formData();
+    let formData;
+    try {
+      formData = await request.formData();
+    } catch (formError) {
+      console.error('FormData parsing error:', formError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to parse form data' },
+        { status: 400 }
+      );
+    }
     
     // Extract form fields
     const source_title = formData.get('source_title');
@@ -25,285 +37,169 @@ export async function POST(request) {
     const author_org = formData.get('author_org');
     const publication_year = formData.get('publication_year');
     const content_restriction = formData.get('content_restriction');
-    const document = formData.get('file'); // Frontend sends as 'file'
+    const document = formData.get('file');
 
-    // Debug logging
-    console.log('📋 Form data received:');
-    console.log('  source_title:', source_title);
-    console.log('  source_type:', source_type);
-    console.log('  source_url:', source_url);
-    console.log('  author_org:', author_org);
-    console.log('  publication_year:', publication_year);
-    console.log('  content_restriction:', content_restriction);
-    console.log('  document:', document ? `${document.name} (${document.size} bytes)` : 'null');
-
-    // Validate required fields
-    if (!source_title || !document) {
-      console.log('❌ Validation failed: missing required fields');
+    if (!document) {
       return NextResponse.json(
-        { error: 'Missing required fields: source_title and document' },
+        { success: false, error: 'No document file provided' },
         { status: 400 }
       );
     }
 
-    // Validate document size (10MB limit)
+    // Validate file size (10MB limit)
     if (document.size > 10 * 1024 * 1024) {
       return NextResponse.json(
-        { error: 'Document size exceeds 10MB limit' },
+        { success: false, error: 'Document size exceeds 10MB limit' },
         { status: 413 }
       );
     }
 
-    // Save document file to Supabase Storage first
-    let savedFilePath = null;
-    try {
-      console.log('💾 Uploading document to Supabase Storage...');
-      
-      // Create a unique filename
+             // Save document file to local Ollama storage
+             let savedFilePath = null;
+             try {
+               // Use local storage path from environment or default
+               // Handle both Windows (local dev) and Linux (production) paths
+               const incomingDir = process.env.OLLAMA_INCOMING_PATH || 
+                 (process.platform === 'win32' 
+                   ? 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\incoming'
+                   : '/tmp/ollama/files/incoming');
+      const timestamp = Date.now();
       const fileExtension = document.name.split('.').pop();
       const baseName = document.name.replace(/\.[^/.]+$/, '');
-      const uniqueFileName = `${baseName}_${Date.now()}.${fileExtension}`;
-      
-      // Convert file to buffer
+      const fileName = `${baseName}_${timestamp}.${fileExtension}`;
+      const filePath = join(incomingDir, fileName);
+
+      console.log('📁 Local Ollama storage details:');
+      console.log('- Incoming directory:', incomingDir);
+      console.log('- File name:', fileName);
+      console.log('- File path:', filePath);
+      console.log('- File size:', document.size, 'bytes');
+
+      // Ensure upload directory exists
+      if (!existsSync(incomingDir)) {
+        await mkdir(incomingDir, { recursive: true });
+        console.log('✅ Created upload directory:', incomingDir);
+      }
+
+      // Convert file to buffer and save locally
       const buffer = await document.arrayBuffer();
+      await writeFile(filePath, Buffer.from(buffer));
       
-      // Upload to Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabaseServer.storage
-        .from('documents')
-        .upload(uniqueFileName, buffer, {
-          contentType: document.type,
-          cacheControl: '3600',
-          upsert: false
-        });
+      savedFilePath = filePath;
+      console.log('📄 Document saved to local Ollama storage:', filePath);
       
-      if (uploadError) {
-        console.error('❌ Error uploading to Supabase Storage:', uploadError);
-        return NextResponse.json({
-          success: false,
-          error: 'Failed to upload document to storage'
-        }, { status: 500 });
+               // Also archive to Library for historical backup
+               try {
+                 const libraryDir = process.env.OLLAMA_LIBRARY_PATH || 
+                   (process.platform === 'win32' 
+                     ? 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\library'
+                     : '/tmp/ollama/files/library');
+        if (!existsSync(libraryDir)) {
+          await mkdir(libraryDir, { recursive: true });
+        }
+        const libraryPath = join(libraryDir, fileName);
+        await writeFile(libraryPath, Buffer.from(buffer));
+        console.log('📚 Document archived to Library:', libraryPath);
+      } catch (libraryError) {
+        console.warn('⚠️ Failed to archive to Library (non-critical):', libraryError.message);
       }
-      
-      savedFilePath = uploadData.path;
-      console.log('✅ Document uploaded to Supabase Storage:', savedFilePath);
-      
-    } catch (fileError) {
-      console.error('❌ Error saving document to storage:', fileError);
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to save document file'
-      }, { status: 500 });
-    }
+             } catch (fileError) {
+               console.error('❌ Error saving document to local storage:', fileError);
+               console.error('❌ Platform:', process.platform);
+               console.error('❌ Incoming dir:', incomingDir);
+               
+               return NextResponse.json({
+                 success: false,
+                 error: 'Failed to save document file locally: ' + fileError.message
+               }, { status: 500 });
+             }
 
-    // Prepare submission data with storage path
-    const submissionData = {
-      type: 'document',
-      data: JSON.stringify({
-        source_title,
-        source_type: source_type || 'unknown',
-        source_url: source_url || null,
-        author_org: author_org || null,
-        publication_year: publication_year ? parseInt(publication_year) : null,
-        content_restriction: content_restriction || 'public',
-        document_name: document.name,
-        document_type: document.type,
-        document_size: document.size,
-        storage_path: savedFilePath, // Include the Supabase Storage path
-        storage_bucket: 'documents'
-      }),
-      status: 'pending_review',
-      source: 'document_submission',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    // Insert into database
-    console.log('💾 Attempting to insert submission data...');
+    console.log('✅ Document saved to local storage successfully');
     
+    // Create submission record in Supabase for tracking/review
+    let submissionId = null;
     try {
-      const { data: submission, error } = await supabaseServer
-        .from('submissions')
-        .insert([submissionData])
-        .select()
-        .single();
-
-      if (error) {
-        console.error('❌ Database error:', error);
-        console.error('Error details:', JSON.stringify(error, null, 2));
-        
-        // Return success even if database fails
-        console.log('✅ File saved successfully, returning success despite database error');
-        return NextResponse.json({
-          success: true,
-          submission_id: 'temp-' + Date.now(),
+      if (supabaseAdmin) {
+               const submissionData = {
+                 type: 'ofc', // Document submissions are treated as OFC submissions
+          data: JSON.stringify({
+            source_title,
+            source_type: source_type || 'unknown',
+            source_url: source_url || null,
+            author_org: author_org || null,
+            publication_year: publication_year ? parseInt(publication_year) : null,
+            content_restriction: content_restriction || 'public',
+            document_name: document.name,
+            document_type: document.type,
+            document_size: document.size,
+            local_file_path: savedFilePath,
+            storage_type: 'local_filesystem'
+          }),
           status: 'pending_review',
-          message: 'Document submitted successfully (database error logged)',
-          file_path: savedFilePath
-        }, { status: 201 });
-      }
+          source: 'document_submission',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
 
-      console.log('✅ Database insertion successful:', submission);
-    } catch (dbError) {
-      console.error('❌ Database connection error:', dbError);
-      return NextResponse.json({
-        success: true,
-        submission_id: 'temp-' + Date.now(),
-        status: 'pending_review',
-        message: 'Document submitted successfully (database unavailable)',
-        file_path: savedFilePath
-      }, { status: 201 });
-    }
+        const { data: submission, error } = await supabaseAdmin
+          .from('submissions')
+          .insert([submissionData])
+          .select()
+          .single();
 
-    console.log('Database insertion successful:', submission);
-    
-    // Process document with Ollama immediately
-    try {
-      console.log('🤖 Processing document with Ollama...');
-      
-      const ollamaBaseUrl = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-      const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
-      
-      // Create system prompt for document analysis
-      const systemPrompt = `You are an expert document analyzer for the VOFC (Vulnerability and Options for Consideration) Engine. 
-Your task is to extract vulnerabilities and options for consideration from security documents.
-
-Extract the following information:
-1. Vulnerabilities: Security weaknesses, risks, or threats mentioned in the document
-2. Options for Consideration (OFCs): Mitigation strategies, recommendations, or actions to address vulnerabilities
-
-IMPORTANT: Return ONLY a valid JSON object with this exact structure. Do not include any markdown formatting, explanations, or additional text. Just the raw JSON:
-
-{
-  "vulnerabilities": [
-    {
-      "id": "unique_id",
-      "text": "vulnerability description",
-      "discipline": "relevant discipline",
-      "source": "source information"
-    }
-  ],
-  "options_for_consideration": [
-    {
-      "id": "unique_id", 
-      "text": "OFC description",
-      "discipline": "relevant discipline",
-      "source": "source information"
-    }
-  ]
-}`;
-
-      // For now, we'll process the document metadata since we don't store file content
-      // In a production system, you'd extract text from the uploaded file
-      const userPrompt = `Analyze this document and extract vulnerabilities and options for consideration:
-
-Document Title: ${source_title}
-Document Type: ${document.type}
-Document Size: ${document.size} bytes
-Source Organization: ${author_org || 'Unknown'}
-Publication Year: ${publication_year || 'Unknown'}
-
-Please provide a structured JSON response with vulnerabilities and OFCs based on the document metadata and title.`;
-
-      // Call Ollama API
-      const response = await fetch(`${ollamaBaseUrl}/api/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: ollamaModel,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          stream: false
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const ollamaContent = data.message?.content || data.response;
-        
-        if (ollamaContent) {
-          try {
-            // Extract JSON from markdown-formatted response
-            let jsonContent = ollamaContent;
-            
-            // Remove markdown code blocks if present
-            if (jsonContent.includes('```json')) {
-              const jsonMatch = jsonContent.match(/```json\s*([\s\S]*?)\s*```/);
-              if (jsonMatch) {
-                jsonContent = jsonMatch[1];
-              }
-            } else if (jsonContent.includes('```')) {
-              const jsonMatch = jsonContent.match(/```\s*([\s\S]*?)\s*```/);
-              if (jsonMatch) {
-                jsonContent = jsonMatch[1];
-              }
-            }
-            
-            // Try to find JSON object in the response
-            const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              jsonContent = jsonMatch[0];
-            }
-            
-            const parsedResult = JSON.parse(jsonContent);
-            console.log('✅ Ollama analysis completed successfully');
-            
-            const ofcCount = parsedResult.options_for_consideration?.length || 0;
-            const vulnCount = parsedResult.vulnerabilities?.length || 0;
-            
-            console.log(`📊 OFCs found: ${ofcCount}`);
-            console.log(`📊 Vulnerabilities found: ${vulnCount}`);
-            
-            // Update submission with Ollama results
-            const enhancedData = {
-              ...JSON.parse(submission.data),
-              enhanced_extraction: parsedResult,
-              parsed_at: new Date().toISOString(),
-              parser_version: 'ollama_api_v1.0',
-              extraction_stats: {
-                ofc_count: ofcCount,
-                vulnerability_count: vulnCount
-              },
-              ofc_count: ofcCount,
-              vulnerability_count: vulnCount
-            };
-
-            await supabaseServer
-              .from('submissions')
-              .update({
-                data: JSON.stringify(enhancedData),
-                status: 'pending_review',
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', submission.id);
-
-            console.log('✅ Submission updated with Ollama results');
-          } catch (parseError) {
-            console.error('❌ Error parsing Ollama response:', parseError);
-          }
+        if (error) {
+          console.error('❌ Database insertion failed:', error);
+          console.log('⚠️ File saved locally but not tracked in database');
+        } else {
+          submissionId = submission.id;
+          console.log('✅ Submission record created:', submissionId);
         }
       } else {
-        console.error('❌ Ollama API error:', response.status, response.statusText);
+        console.warn('⚠️ Supabase admin client not available - file saved locally only');
       }
-    } catch (ollamaError) {
-      console.error('❌ Ollama processing failed:', ollamaError);
-      console.log('⚠️ Document submitted but processing failed');
+    } catch (dbError) {
+      console.error('❌ Database error (non-critical):', dbError);
+      console.log('⚠️ File saved locally but database tracking failed');
+    }
+    
+    // Optional: Process document with Ollama (if enabled)
+    const autoProcess = process.env.AUTO_PROCESS_ON_UPLOAD === 'true';
+    if (autoProcess) {
+      try {
+        console.log('🤖 Auto-processing document with Ollama...');
+        const ollamaUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
+        const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
+        
+        await fetch(`${ollamaUrl}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: ollamaModel,
+            prompt: `Parse and extract vulnerabilities and OFCs from ${document.name}`
+          })
+        });
+        console.log('✅ Auto-processing completed');
+      } catch (err) {
+        console.warn('⚠️ Auto-processing failed (non-critical):', err.message);
+      }
     }
     
     return NextResponse.json({
       success: true,
-      submission_id: submission.id,
-      status: submission.status,
-      message: 'Document submitted and processed successfully'
-    }, { status: 201 });
+      submission_id: submissionId || 'local-' + Date.now(),
+      status: 'pending_review',
+      message: 'Document submitted successfully to local storage',
+      file_path: savedFilePath,
+      document_name: document.name,
+      document_size: document.size,
+      storage_type: 'local_filesystem',
+      tracked_in_database: !!submissionId
+    });
 
   } catch (error) {
-    console.error('API error:', error);
+    console.error('❌ Document submission error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { success: false, error: 'Document submission failed: ' + error.message },
       { status: 500 }
     );
   }

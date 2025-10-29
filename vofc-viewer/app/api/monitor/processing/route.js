@@ -1,13 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 import fs from 'fs';
 import path from 'path';
-
-// Use service role for API submissions to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
 
 export async function GET() {
   try {
@@ -40,7 +34,7 @@ export async function GET() {
 async function getSubmissionStatus() {
   try {
     // Get submissions with processing status
-    const { data: submissions, error } = await supabase
+    const { data: submissions, error } = await supabaseAdmin
       .from('submissions')
       .select('id, type, status, created_at, updated_at, data')
       .order('created_at', { ascending: false })
@@ -130,7 +124,7 @@ async function getFileProcessingStatus() {
 
 async function getOllamaStatus() {
   try {
-    const ollamaBaseUrl = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+    const ollamaBaseUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
     const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
     
     // Test Ollama connectivity
@@ -164,7 +158,7 @@ async function getOllamaStatus() {
     return {
       status: 'offline',
       error: error.message,
-      url: process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434'
+      url: process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site'
     };
   }
 }

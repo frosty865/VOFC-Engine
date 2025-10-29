@@ -1,19 +1,14 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 import { spawn } from 'child_process';
 import path from 'path';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
 
 export async function POST() {
   try {
     console.log('🤖 Starting auto OFC generation...');
     
     // Check if there are vulnerabilities that need OFCs
-    const { data: vulns, error } = await supabase.rpc('get_vulns_missing_ofcs');
+    const { data: vulns, error } = await supabaseAdmin.rpc('get_vulns_missing_ofcs');
     
     if (error) {
       console.error('Error fetching vulnerabilities:', error);
@@ -43,7 +38,7 @@ export async function POST() {
           ...process.env,
           SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
           SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
-          OLLAMA_URL: process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434/api/generate',
+          OLLAMA_URL: process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site/api',
           OLLAMA_MODEL: process.env.OLLAMA_MODEL || 'mistral:latest'
         }
       });

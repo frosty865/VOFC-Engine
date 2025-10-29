@@ -1,87 +1,70 @@
 import { NextResponse } from 'next/server';
-import { getServerClient } from '../../../lib/supabase-manager';
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 
 export async function GET() {
   try {
-    const supabaseServer = getServerClient();
-    if (!supabaseServer) {
+    console.log('🔍 /api/documents/status-all called');
+    
+    // Read from Supabase submissions table - no auto-sync
+    if (!supabaseAdmin) {
+      console.warn('⚠️ Supabase admin client not available - using fallback');
+      return NextResponse.json({
+        success: true,
+        documents: [],
+        processing: [],
+        completed: [],
+        failed: [],
+        library: [],
+        message: 'Supabase not configured - using empty data'
+      });
+    }
+
+    // Get all submissions from the database
+    const { data: submissions, error } = await supabaseAdmin
+      .from('submissions')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ Error fetching submissions:', error);
       return NextResponse.json(
-        { success: false, error: 'Database connection failed' },
+        { success: false, error: 'Failed to fetch submissions from database' },
         { status: 500 }
       );
     }
+
+    // Categorize submissions by status
+    const documents = submissions.filter(s => s.status === 'pending_review');
+    const processing = submissions.filter(s => s.status === 'processing');
+    const completed = submissions.filter(s => s.status === 'approved');
+    const failed = submissions.filter(s => s.status === 'rejected');
     
-    // Get documents from storage
-    const { data: storageFiles, error: storageError } = await supabaseServer.storage
-      .from('documents')
-      .list('', { limit: 100 });
-    
-    if (storageError) {
-      console.error('Error fetching storage files:', storageError);
-    }
-    
-    // Get processing status from database
-    const { data: processingData, error: processingError } = await supabaseServer
-      .from('document_processing')
-      .select('*')
-      .order('updated_at', { ascending: false });
-    
-    if (processingError) {
-      console.error('Error fetching processing data:', processingError);
-    }
-    
-    // Organize files by status
-    const documents = [];
-    const processing = [];
-    const completed = [];
-    const failed = [];
-    
-    // Process storage files
-    if (storageFiles) {
-      for (const file of storageFiles) {
-        const fileInfo = {
-          filename: file.name,
-          name: file.name,
-          size: file.metadata?.size || 0,
-          modified: file.updated_at || new Date().toISOString()
-        };
-        
-        // Check if file has processing status
-        const processingRecord = processingData?.find(p => p.filename === file.name);
-        
-        if (processingRecord) {
-          if (processingRecord.status === 'processing') {
-            processing.push({ ...fileInfo, status: 'processing' });
-          } else if (processingRecord.status === 'completed') {
-            completed.push({ ...fileInfo, status: 'completed' });
-          } else if (processingRecord.status === 'failed') {
-            failed.push({ ...fileInfo, status: 'failed', error: processingRecord.error_message });
-          }
-        } else {
-          // No processing record means it's pending
-          documents.push(fileInfo);
-        }
-      }
-    }
-    
-    return NextResponse.json({
+    // Library is all submissions (for historical backup)
+    const library = submissions;
+
+    const response = {
       success: true,
       documents,
       processing,
       completed,
       failed,
-      summary: {
-        docs: documents.length,
-        processing: processing.length,
-        completed: completed.length,
-        failed: failed.length
-      }
+      library
+    };
+    
+    console.log('📊 Document counts from database:', {
+      documents: documents.length,
+      processing: processing.length,
+      completed: completed.length,
+      failed: failed.length,
+      library: library.length
     });
     
+    return NextResponse.json(response);
+    
   } catch (error) {
-    console.error('Error getting consolidated document status:', error);
+    console.error('Error getting all document status:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to get document status' },
+      { success: false, error: error.message },
       { status: 500 }
     );
   }

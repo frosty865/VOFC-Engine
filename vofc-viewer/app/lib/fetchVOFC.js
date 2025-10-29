@@ -2,7 +2,7 @@
  * VOFC Fetching Functions - Optimized with proper relationships
  */
 
-import { supabase } from './supabaseClient';
+import { supabase } from '@/lib/supabase-client.js';
 
 // Database Schema Discovery Function - Query actual column information
 export async function discoverDatabaseSchema() {
@@ -90,7 +90,7 @@ export async function linkOFCtoSource(ofcId, referenceNumber) {
   const { data: source, error: sourceError } = await supabase
     .from('sources')
     .select('id')
-    .eq('reference_number', referenceNumber)
+    .eq('"reference number"', referenceNumber)
     .single();
 
   if (sourceError || !source) throw sourceError || new Error('Source not found');
@@ -189,87 +189,22 @@ export async function fetchSubsectorsBySector(sectorId) {
   }
 }
 
-// Fetch vulnerabilities with their linked OFCs using manual joins
+// Fetch vulnerabilities with their linked OFCs using API route
 export async function fetchVulnerabilities() {
   try {
-    // Get all vulnerabilities
-    const { data: vulnerabilities, error: vulnError } = await supabase
-      .from('vulnerabilities')
-      .select('*')
-      .order('created_at', { ascending: false });
+    // Use the API route instead of direct Supabase calls to respect authentication
+    const response = await fetch('/api/vulnerabilities', {
+      method: 'GET',
+      credentials: 'include'
+    });
 
-    if (vulnError) {
-      console.error('❌ Error fetching vulnerabilities:', vulnError);
+    if (!response.ok) {
+      console.error('❌ Error fetching vulnerabilities from API:', response.status, response.statusText);
       return [];
     }
 
-    // Get all vulnerability-OFC links
-    const { data: links, error: linkError } = await supabase
-      .from('vulnerability_ofc_links')
-      .select('*');
-
-    if (linkError) {
-      console.error('❌ Error fetching vulnerability-OFC links:', linkError);
-      return vulnerabilities || [];
-    }
-
-    // Get all OFCs
-    const { data: ofcs, error: ofcError } = await supabase
-      .from('options_for_consideration')
-      .select('*');
-
-    if (ofcError) {
-      console.error('❌ Error fetching OFCs:', ofcError);
-      return vulnerabilities || [];
-    }
-
-    // Get all OFC-Source links
-    const { data: ofcSources, error: ofcSourceError } = await supabase
-      .from('ofc_sources')
-      .select('*');
-
-    if (ofcSourceError) {
-      console.error('❌ Error fetching OFC-Source links:', ofcSourceError);
-      return vulnerabilities || [];
-    }
-
-    // Get all sources
-    const { data: sources, error: sourceError } = await supabase
-      .from('sources')
-      .select('*');
-
-    if (sourceError) {
-      console.error('❌ Error fetching sources:', sourceError);
-      return vulnerabilities || [];
-    }
-
-
-    // Build the complete data structure
-    const vulnerabilitiesWithOFCs = vulnerabilities.map(vuln => {
-      const vulnLinks = links.filter(link => link.vulnerability_id === vuln.id);
-      
-      const ofcsWithSources = vulnLinks.map(link => {
-        const ofc = ofcs.find(o => o.id === link.ofc_id);
-        if (!ofc) return null;
-        
-        const ofcSourceLinks = ofcSources.filter(os => os.ofc_id === ofc.id);
-        const ofcSourcesData = ofcSourceLinks.map(sourceLink => 
-          sources.find(s => s.id === sourceLink.source_id)
-        ).filter(Boolean);
-        
-        return {
-          ...ofc,
-          sources: ofcSourcesData
-        };
-      }).filter(Boolean);
-
-      return {
-        ...vuln,
-        ofcs: ofcsWithSources
-      };
-    });
-
-    return vulnerabilitiesWithOFCs || [];
+    const data = await response.json();
+    return data || [];
   } catch (error) {
     console.error('Error in fetchVulnerabilities:', error);
     return [];

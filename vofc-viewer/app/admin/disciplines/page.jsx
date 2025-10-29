@@ -36,8 +36,8 @@ export default function DisciplineManagement() {
 
       setCurrentUser(user);
 
-      // Allow admin, spsa, and analyst to manage disciplines
-      if (!(user.role === 'admin' || user.role === 'spsa' || user.role === 'analyst')) {
+      // Allow admin and spsa to manage disciplines
+      if (!['admin', 'spsa'].includes(user.role)) {
         router.push('/');
         return;
       }
@@ -158,12 +158,6 @@ export default function DisciplineManagement() {
         <div className="card">
           <div className="card-header">
             <h1 className="card-title">Discipline Management</h1>
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="btn btn-primary"
-            >
-              Add Discipline
-            </button>
           </div>
           
           <div className="card-body">

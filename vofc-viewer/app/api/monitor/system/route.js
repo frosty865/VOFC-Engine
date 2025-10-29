@@ -1,14 +1,8 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-client.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-
-// Use service role for API submissions to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
 
 export async function GET() {
   try {
@@ -55,7 +49,7 @@ async function getDatabaseStatus() {
     const startTime = Date.now();
     
     // Test database connection
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('submissions')
       .select('count')
       .limit(1);
@@ -71,7 +65,7 @@ async function getDatabaseStatus() {
     }
 
     // Get connection info
-    const { data: submissions } = await supabase
+    const { data: submissions } = await supabaseAdmin
       .from('submissions')
       .select('id')
       .limit(100);
@@ -94,7 +88,7 @@ async function getDatabaseStatus() {
 
 async function getOllamaStatus() {
   try {
-    const ollamaBaseUrl = process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+    const ollamaBaseUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
     const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
     
     // Test Ollama connectivity
@@ -129,7 +123,7 @@ async function getOllamaStatus() {
     return {
       status: 'offline',
       error: error.message,
-      url: process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434'
+      url: process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site'
     };
   }
 }
@@ -213,7 +207,7 @@ async function getApiStatus() {
 async function getPipelineStatus() {
   try {
     // Get submission counts by status
-    const { data: submissions, error } = await supabase
+    const { data: submissions, error } = await supabaseAdmin
       .from('submissions')
       .select('status, created_at')
       .order('created_at', { ascending: false })
@@ -255,7 +249,7 @@ async function getPipelineStatus() {
 async function getPerformanceMetrics() {
   try {
     // Get recent processing stats
-    const { data: recentSubmissions } = await supabase
+    const { data: recentSubmissions } = await supabaseAdmin
       .from('submissions')
       .select('created_at, updated_at, data')
       .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Last 24 hours
@@ -330,7 +324,7 @@ async function getSystemAlerts() {
     const alerts = [];
 
     // Check for failed submissions
-    const { data: failedSubmissions } = await supabase
+    const { data: failedSubmissions } = await supabaseAdmin
       .from('submissions')
       .select('id, created_at, status')
       .eq('status', 'processing_failed')
@@ -346,7 +340,7 @@ async function getSystemAlerts() {
     }
 
     // Check for high processing queue
-    const { data: processingSubmissions } = await supabase
+    const { data: processingSubmissions } = await supabaseAdmin
       .from('submissions')
       .select('id')
       .eq('status', 'processing')
@@ -374,7 +368,7 @@ async function getSystemAlerts() {
 async function getRecentActivity() {
   try {
     // Get recent submission activity
-    const { data: recentSubmissions } = await supabase
+    const { data: recentSubmissions } = await supabaseAdmin
       .from('submissions')
       .select('id, type, status, created_at, updated_at')
       .order('updated_at', { ascending: false })
