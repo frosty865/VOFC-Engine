@@ -15,12 +15,40 @@ export async function GET(request) {
   const { user, error } = await requireAdmin(request);
   if (error) return authErrorResponse(error);
   try {
-    const { data: users, error } = await supabaseAdmin
-      .from('vofc_users')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return NextResponse.json({ success: true, users: users || [] });
+    // 1) List all auth users (service role bypasses RLS)
+    const { data: authList, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+    if (listErr) throw listErr;
+    const authUsers = authList?.users || [];
+
+    // 2) Load profiles for these users
+    const ids = authUsers.map(u => u.id);
+    let profiles = [];
+    if (ids.length > 0) {
+      const { data: profData, error: profErr } = await supabaseAdmin
+        .from('user_profiles')
+        .select('id, full_name, role, group, is_admin')
+        .in('id', ids);
+      if (profErr) throw profErr;
+      profiles = profData || [];
+    }
+
+    // 3) Merge
+    const profileById = new Map(profiles.map(p => [p.id, p]));
+    const merged = authUsers.map(u => {
+      const p = profileById.get(u.id) || {};
+      const derivedRole = String(p.role || p.group || (p.is_admin ? 'admin' : '') || u.user_metadata?.role || 'user').toLowerCase();
+      return {
+        id: u.id,
+        email: u.email,
+        created_at: u.created_at,
+        last_sign_in_at: u.last_sign_in_at,
+        role: derivedRole,
+        full_name: p.full_name || u.user_metadata?.name || u.email,
+        is_admin: Boolean(p.is_admin)
+      };
+    }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    return NextResponse.json({ success: true, users: merged });
   } catch (error) {
     console.error('Error getting users:', error);
     return NextResponse.json(
