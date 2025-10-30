@@ -5,9 +5,15 @@ import { supabaseAdmin } from '@/lib/supabase-client.js';
 import bcrypt from 'bcryptjs';
 
 // Get all users (admin only)
+function authErrorResponse(error) {
+  const msg = String(error || 'Unauthorized');
+  const status = msg.includes('Authentication') ? 401 : 403;
+  return NextResponse.json({ success: false, error: msg }, { status });
+}
+
 export async function GET(request) {
   const { user, error } = await requireAdmin(request);
-  if (error) return error;
+  if (error) return authErrorResponse(error);
   try {
     const { data: users, error } = await supabaseAdmin
       .from('vofc_users')
@@ -27,7 +33,7 @@ export async function GET(request) {
 // Create new user (admin only)
 export async function POST(request) {
   const { user, error } = await requireAdmin(request);
-  if (error) return error;
+  if (error) return authErrorResponse(error);
   try {
     const body = await request.json();
     const { username, password, full_name, role, agency } = body;
@@ -75,7 +81,7 @@ export async function POST(request) {
 // Update user (admin only)
 export async function PUT(request) {
   const { user, error } = await requireAdmin(request);
-  if (error) return error;
+  if (error) return authErrorResponse(error);
   try {
     const body = await request.json();
     const { user_id, is_active, password, role, force_password_change, full_name, agency, username } = body;
@@ -140,7 +146,7 @@ export async function PUT(request) {
 // Delete user (admin only)
 export async function DELETE(request) {
   const { user, error } = await requireAdmin(request);
-  if (error) return error;
+  if (error) return authErrorResponse(error);
   try {
     const { searchParams } = new URL(request.url);
     const user_id = searchParams.get('user_id');

@@ -189,8 +189,8 @@ export default function Navigation({ simple = false }) {
                 padding: 'var(--spacing-sm) var(--spacing-md)',
                 borderRadius: 'var(--border-radius)',
                 textDecoration: 'none',
-                color: (pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/process' || pathname === '/submit-psa' || pathname === '/review') ? 'var(--cisa-white)' : 'rgba(255,255,255,0.8)',
-                backgroundColor: (pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/process' || pathname === '/submit-psa' || pathname === '/review') ? 'rgba(255,255,255,0.2)' : 'transparent',
+                color: (pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/submit-psa') ? 'var(--cisa-white)' : 'rgba(255,255,255,0.8)',
+                backgroundColor: (pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/submit-psa') ? 'rgba(255,255,255,0.2)' : 'transparent',
                 fontWeight: '600',
                 fontSize: 'var(--font-size-sm)',
                 transition: 'all 0.3s ease',
@@ -202,13 +202,13 @@ export default function Navigation({ simple = false }) {
                 fontFamily: 'var(--font-family)'
               }}
               onMouseEnter={(e) => {
-                if (!(pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/process' || pathname === '/submit-psa' || pathname === '/review')) {
+                if (!(pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/submit-psa')) {
                   e.target.style.backgroundColor = 'rgba(255,255,255,0.1)';
                   e.target.style.color = 'var(--cisa-white)';
                 }
               }}
               onMouseLeave={(e) => {
-                if (!(pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/process' || pathname === '/submit-psa' || pathname === '/review')) {
+                if (!(pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/submit-psa')) {
                   e.target.style.backgroundColor = 'transparent';
                   e.target.style.color = 'rgba(255,255,255,0.8)';
                 }
@@ -287,52 +287,6 @@ export default function Navigation({ simple = false }) {
                     color: pathname === '/submit-psa' ? 'var(--cisa-blue)' : 'var(--cisa-blue)',
                     textDecoration: 'none',
                     fontSize: 'var(--font-size-sm)',
-                    fontWeight: '500',
-                    borderBottom: '1px solid var(--cisa-gray-light)'
-                  }}
-                  onClick={(e) => { e.stopPropagation(); setShowSubmissionsDropdown(false); }}
-                  onMouseEnter={(e) => {
-                    e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
-                    e.target.style.color = 'var(--cisa-blue-dark)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.backgroundColor = 'transparent';
-                    e.target.style.color = 'var(--cisa-blue)';
-                  }}
-                >
-                  📤 Submit Documents
-                </Link>
-                <Link
-                  href="/process"
-                  style={{
-                    display: 'block',
-                    padding: 'var(--spacing-sm) var(--spacing-md)',
-                    color: pathname === '/process' ? 'var(--cisa-blue)' : 'var(--cisa-blue)',
-                    textDecoration: 'none',
-                    fontSize: 'var(--font-size-sm)',
-                    fontWeight: '500',
-                    borderBottom: '1px solid var(--cisa-gray-light)'
-                  }}
-                  onClick={(e) => { e.stopPropagation(); setShowSubmissionsDropdown(false); }}
-                  onMouseEnter={(e) => {
-                    e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
-                    e.target.style.color = 'var(--cisa-blue-dark)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.backgroundColor = 'transparent';
-                    e.target.style.color = 'var(--cisa-blue)';
-                  }}
-                >
-                  🔄 Process Documents
-                </Link>
-                <Link
-                  href="/review"
-                  style={{
-                    display: 'block',
-                    padding: 'var(--spacing-sm) var(--spacing-md)',
-                    color: pathname === '/review' ? 'var(--cisa-blue)' : 'var(--cisa-blue)',
-                    textDecoration: 'none',
-                    fontSize: 'var(--font-size-sm)',
                     fontWeight: '500'
                   }}
                   onClick={(e) => { e.stopPropagation(); setShowSubmissionsDropdown(false); }}
@@ -345,7 +299,7 @@ export default function Navigation({ simple = false }) {
                     e.target.style.color = 'var(--cisa-blue)';
                   }}
                 >
-                  📋 Review Submissions
+                  📤 Submit Documents
                 </Link>
               </div>
             )}
