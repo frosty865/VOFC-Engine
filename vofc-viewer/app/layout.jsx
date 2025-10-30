@@ -16,6 +16,12 @@ export default function RootLayout({ children }) {
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
       </head>
       <body className="antialiased">
+        <script dangerouslySetInnerHTML={{__html: `
+          console.error('🔴🔴🔴 PAGE LOADING - BEFORE REACT 🔴🔴🔴');
+          console.warn('🟡🟡🟡 PAGE LOADING - BEFORE REACT 🟡🟡🟡');
+          console.log('🟢🟢🟢 PAGE LOADING - BEFORE REACT 🟢🟢🟢');
+          window.__pageLoaded = true;
+        `}} />
         <div className="min-h-screen" style={{backgroundColor: 'var(--cisa-gray-lighter)'}}>
           <Navigation />
           <main className="w-full py-8">
