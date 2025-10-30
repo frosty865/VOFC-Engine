@@ -21,8 +21,8 @@ export async function GET() {
     // Define local folder paths
     const baseDir = process.env.OLLAMA_FILE_STORAGE || 
       (process.platform === 'win32' 
-        ? 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files'
-        : '/tmp/ollama/files');
+        ? 'C:\\Users\\frost\\AppData\\Local\\Ollama\\automation'
+        : '/var/ollama/uploads');
     
     const folders = {
       incoming: path.join(baseDir, 'incoming'),
