@@ -5,6 +5,8 @@ export const getCurrentUser = async () => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
+    // If no session, treat as unauthenticated without calling server
+    if (!token) return null;
     const res = await fetch('/api/auth/verify', {
       method: 'GET',
       headers: token ? { Authorization: `Bearer ${token}` } : {},

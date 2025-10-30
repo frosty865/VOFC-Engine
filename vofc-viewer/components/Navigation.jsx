@@ -14,8 +14,9 @@ export default function Navigation({ simple = false }) {
   const [showSubmissionsDropdown, setShowSubmissionsDropdown] = useState(false);
 
   useEffect(() => {
+    if (simple) return; // Skip auth load on simple/public pages like splash
     loadUser();
-  }, []);
+  }, [simple]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
