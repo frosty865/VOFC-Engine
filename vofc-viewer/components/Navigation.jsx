@@ -359,6 +359,7 @@ export default function Navigation({ simple = false }) {
             📊 Generate Assessment
           </Link>
           {(() => {
+            console.log('[Navigation] Render - Admin check executing', { hasCurrentUser: !!currentUser, loading });
             if (!currentUser) {
               console.log('[Navigation] Admin check: NO currentUser');
               return false;
