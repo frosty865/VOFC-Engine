@@ -10,6 +10,8 @@ export default function SubmissionReview() {
   const [processingSubmission, setProcessingSubmission] = useState(null);
   const [comments, setComments] = useState('');
   const [mounted, setMounted] = useState(false);
+  const [expanded, setExpanded] = useState({});
+  const [reprocessing, setReprocessing] = useState(null);
 
   useEffect(() => {
     setMounted(true);
@@ -131,6 +133,32 @@ export default function SubmissionReview() {
     }
     
     return [];
+  };
+
+  const toggleExpand = (submissionId) => {
+    setExpanded(prev => ({ ...prev, [submissionId]: !prev[submissionId] }));
+  };
+
+  const reprocessSubmission = async (submissionId) => {
+    try {
+      setReprocessing(submissionId);
+      const response = await fetch('/api/documents/process-one', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submissionId })
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        alert(`Reprocess failed: ${result.error || response.statusText}`);
+      } else {
+        alert(`Reprocess started/completed. Extracted: ${result.count ?? 0}`);
+        await loadSubmissions();
+      }
+    } catch (e) {
+      alert(`Reprocess error: ${e.message}`);
+    } finally {
+      setReprocessing(null);
+    }
   };
 
   const vulnerabilities = useMemo(() => {
@@ -396,7 +424,28 @@ export default function SubmissionReview() {
                             <i className="fas fa-calendar mr-1"></i>
                             <span>Date: {new Date(vulnerability.submission_date).toLocaleDateString()}</span>
                           </div>
+                          <div className="flex items-center">
+                            <i className="fas fa-hashtag mr-1"></i>
+                            <span>ID: {vulnerability.submission_id.slice(0,8)}</span>
+                          </div>
                         </div>
+                      </div>
+                      <div className="ml-4 flex flex-col gap-2">
+                        <button
+                          onClick={() => reprocessSubmission(vulnerability.submission_id)}
+                          disabled={reprocessing === vulnerability.submission_id}
+                          className="btn btn-outline-primary btn-sm"
+                          title="Re-run Ollama parsing for this submission"
+                        >
+                          {reprocessing === vulnerability.submission_id ? 'Reprocessing...' : 'Reprocess'}
+                        </button>
+                        <button
+                          onClick={() => toggleExpand(vulnerability.submission_id)}
+                          className="btn btn-outline-secondary btn-sm"
+                          title="Show raw submission data and extraction"
+                        >
+                          {expanded[vulnerability.submission_id] ? 'Hide Data' : 'View Data'}
+                        </button>
                       </div>
                     </div>
 
@@ -477,6 +526,14 @@ export default function SubmissionReview() {
                         </div>
                       </div>
                     )}
+
+                    {/* Raw Data Panel */}
+                    {expanded[vulnerability.submission_id] && (
+                      <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                        <h5 className="font-medium text-gray-900 mb-3">Submission Data</h5>
+                        <SubmissionDataView submission={submissions.find(s => s.id === vulnerability.submission_id)} />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -497,4 +554,32 @@ export default function SubmissionReview() {
       </div>
     </div>
   );
+}
+
+function SubmissionDataView({ submission }) {
+  if (!submission) return null;
+  const data = typeof submission.data === 'string' ? safeParse(submission.data) : submission.data;
+  const pretty = (() => {
+    try { return JSON.stringify(data, null, 2); } catch { return String(submission.data); }
+  })();
+  const hasExtraction = Array.isArray(data?.enhanced_extraction) && data.enhanced_extraction.length > 0;
+  const vulnCount = Number(data?.vulnerabilities_count) || 0;
+  const ofcCount = Number(data?.options_for_consideration_count) || 0;
+  return (
+    <div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3 text-sm">
+        <div className="p-2 bg-white border rounded">Status: <strong>{submission.status}</strong></div>
+        <div className="p-2 bg-white border rounded">Parsed At: <strong>{data?.parsed_at ? new Date(data.parsed_at).toLocaleString() : '—'}</strong></div>
+        <div className="p-2 bg-white border rounded">Extraction: <strong>{hasExtraction ? 'Yes' : 'No'}</strong></div>
+        <div className="p-2 bg-white border rounded">Vulns: <strong>{vulnCount}</strong></div>
+        <div className="p-2 bg-white border rounded">OFCs: <strong>{ofcCount}</strong></div>
+        <div className="p-2 bg-white border rounded">Filename: <strong>{data?.document_name || '—'}</strong></div>
+      </div>
+      <pre className="text-xs bg-white p-3 border rounded overflow-auto" style={{ maxHeight: 300 }}>{pretty}</pre>
+    </div>
+  );
+}
+
+function safeParse(text) {
+  try { return JSON.parse(text); } catch { return null; }
 }
