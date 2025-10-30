@@ -24,14 +24,11 @@ export default function Navigation({ simple = false }) {
   }
 
   useEffect(() => {
-    console.log('[Navigation] useEffect triggered', { simple });
-    if (simple) {
-      console.log('[Navigation] Skipping auth load - simple page');
-      return; // Skip auth load on simple/public pages like splash
-    }
-    console.log('[Navigation] Calling loadUser()');
+    console.error('🔴 [Navigation] useEffect triggered', { simple, pathname });
+    // Always load user - we need to check auth even on simple pages to show admin menu
+    console.error('🔴 [Navigation] Calling loadUser balance always');
     loadUser();
-  }, [simple]);
+  }, [simple, pathname]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
