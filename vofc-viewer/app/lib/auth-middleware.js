@@ -17,18 +17,18 @@ export async function requireAdmin(request) {
       if (!error && user) {
         let { data: profile } = await supabaseAdmin
           .from('user_profiles')
-          .select('role, is_admin, user_id')
+          .select('role, user_id')
           .eq('user_id', user.id)
           .maybeSingle();
         if (!profile) {
           const resp = await supabaseAdmin
             .from('user_profiles')
-            .select('role, is_admin, user_id')
+            .select('role, user_id')
             .eq('id', user.id)
             .maybeSingle();
           profile = resp.data || null;
         }
-        let role = String(profile?.role || (profile?.is_admin ? 'admin' : '') || user.user_metadata?.role || 'user').toLowerCase();
+        let role = String(profile?.role || user.user_metadata?.role || 'user').toLowerCase();
         if (role === 'user') {
           const allowlist = (process.env.ADMIN_EMAILS || '').toLowerCase().split(',').map(s=>s.trim()).filter(Boolean);
           if (allowlist.includes(String(user.email).toLowerCase())) {

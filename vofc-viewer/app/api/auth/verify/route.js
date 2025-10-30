@@ -67,17 +67,17 @@ export async function GET(request) {
       );
     }
 
-    // Get user profile (role/group/is_admin)
+    // Get user profile (role only - is_admin column doesn't exist in your schema)
     // Prefer join by user_id (your schema) and fall back to id
     let { data: profile } = await supabaseAdmin
       .from('user_profiles')
-      .select('role, is_admin, first_name, last_name, organization, user_id')
+      .select('role, first_name, last_name, organization, user_id')
       .eq('user_id', user.id)
       .maybeSingle();
     if (!profile) {
       const resp = await supabaseAdmin
         .from('user_profiles')
-        .select('role, is_admin, first_name, last_name, organization, user_id')
+        .select('role, first_name, last_name, organization, user_id')
         .eq('id', user.id)
         .maybeSingle();
       profile = resp.data || null;
@@ -85,9 +85,11 @@ export async function GET(request) {
 
     // Derive role with robust fallbacks
     let derivedRole = String(
-      profile?.role || (profile?.is_admin ? 'admin' : '') || user.user_metadata?.role || 'user'
+      profile?.role || user.user_metadata?.role || 'user'
     ).toLowerCase();
-    let isUserAdmin = Boolean(profile?.is_admin);
+    
+    // Determine admin status: role-based or email allowlist (is_admin column doesn't exist)
+    let isUserAdmin = false;
     
     // Final fallback: allow admin via configured email allowlist (comma-separated) or user.user_metadata.is_admin
     if (derivedRole === 'user') {
@@ -127,7 +129,6 @@ export async function GET(request) {
       role: derivedRole, 
       is_admin: isUserAdmin,
       profileRole: profile?.role,
-      profileIsAdmin: profile?.is_admin,
       userMetadataRole: user.user_metadata?.role,
       userMetadataIsAdmin: user.user_metadata?.is_admin
     });
