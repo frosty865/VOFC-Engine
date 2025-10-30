@@ -1,34 +1,24 @@
-// Auth functions using Supabase authentication
+// Auth functions using Supabase authentication with server verification endpoint
 import { supabase } from './supabaseClient';
 
 export const getCurrentUser = async () => {
   try {
-    // Get current Supabase session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError || !session?.user) {
-      return null;
-    }
-
-    // Get user profile from user_profiles table
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .single();
-
-    if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = not found
-      console.error('Error fetching user profile:', profileError);
-    }
-
-    // Return user with profile data
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    const res = await fetch('/api/auth/verify', {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include'
+    });
+    if (!res.ok) return null;
+    const result = await res.json();
+    if (!result.success || !result.user) return null;
     return {
-      id: session.user.id,
-      email: session.user.email,
-      role: profile?.role || session.user.user_metadata?.role || 'user',
-      name: profile?.full_name || session.user.user_metadata?.name || session.user.email,
-      full_name: profile?.full_name || session.user.user_metadata?.name || session.user.email,
-      ...profile
+      id: result.user.id,
+      email: result.user.email,
+      role: result.user.role,
+      name: result.user.name,
+      full_name: result.user.name
     };
   } catch (error) {
     console.error('Error getting current user:', error);
@@ -37,45 +27,8 @@ export const getCurrentUser = async () => {
 };
 
 export const getUserProfile = async (userId = null) => {
-  try {
-    let targetUserId = userId;
-    
-    // If no userId provided, get current user
-    if (!targetUserId) {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return null;
-      targetUserId = session.user.id;
-    }
-
-    // Get user profile from user_profiles table
-    const { data: profile, error } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('id', targetUserId)
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') {
-        // Profile doesn't exist yet, return basic user info
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user && session.user.id === targetUserId) {
-          return {
-            id: session.user.id,
-            email: session.user.email,
-            role: session.user.user_metadata?.role || 'user',
-            name: session.user.user_metadata?.name || session.user.email
-          };
-        }
-      }
-      console.error('Error fetching user profile:', error);
-      return null;
-    }
-
-    return profile;
-  } catch (error) {
-    console.error('Error getting user profile:', error);
-    return null;
-  }
+  // For now, mirror getCurrentUser via server verification; ignore other IDs client-side
+  return await getCurrentUser();
 };
 
 export const canAccessAdmin = async () => {

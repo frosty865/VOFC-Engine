@@ -18,6 +18,13 @@ export async function GET(request) {
     
     // Find Supabase auth token cookie
     let accessToken = null;
+    // Prefer Authorization header if provided
+    try {
+      const authHeader = request.headers.get('authorization');
+      if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+        accessToken = authHeader.slice(7).trim();
+      }
+    } catch {}
     for (const cookie of allCookies) {
       if (cookie.name.includes('auth-token') || cookie.name.includes('access-token')) {
         try {
