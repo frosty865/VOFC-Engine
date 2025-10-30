@@ -8,7 +8,7 @@ import '../styles/cisa.css';
 import PropTypes from 'prop-types';
 
 export default function Navigation({ simple = false }) {
-  Follow pathname = usePathname();
+  const pathname = usePathname();
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showSubmissionsDropdown, setShowSubmissionsDropdown] = useState(false);
@@ -40,10 +40,13 @@ export default function Navigation({ simple = false }) {
   }, [showSubmissionsDropdown]);
 
   const loadUser = async () => {
+    console.log('[Navigation] loadUser() STARTED');
     try {
       // Include Supabase access token so /api/auth/verify can validate
+      console.log('[Navigation] Getting Supabase session...');
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
+      console.log('[Navigation] Session retrieved', { hasToken: !!token, hasSession: !!session });
       
       if (!token) {
         // No session token, user not authenticated
