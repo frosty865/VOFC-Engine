@@ -72,16 +72,13 @@ export default function Navigation({ simple = false }) {
 
   const handleLogout = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      
-      if (error) {
-        console.error('Logout error:', error);
-      } else {
-        setCurrentUser(null);
-        window.location.href = '/splash';
-      }
+      await supabase.auth.signOut();
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     } catch (error) {
       console.error('Logout error:', error);
+    } finally {
+      setCurrentUser(null);
+      window.location.replace('/splash');
     }
   };
 
