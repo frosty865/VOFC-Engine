@@ -1,3 +1,7 @@
 {
-  "version": 2
+  "version": 2,
+  "buildCommand": "cd vofc-viewer && npm install && npm run build",
+  "outputDirectory": "vofc-viewer/.next",
+  "framework": "nextjs",
+  "rootDirectory": "vofc-viewer"
 }
