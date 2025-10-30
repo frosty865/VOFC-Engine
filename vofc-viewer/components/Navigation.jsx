@@ -53,11 +53,15 @@ export default function Navigation({ simple = false }) {
         console.error('Error fetching user profile:', profileError);
       }
 
-      // Set current user with profile data
+      // Set current user with normalized role for consistent checks
+      const normalizedRole = String(
+        profile?.role || session.user.user_metadata?.role || 'user'
+      ).toLowerCase();
+
       setCurrentUser({
         id: session.user.id,
         email: session.user.email,
-        role: profile?.role || session.user.user_metadata?.role || 'user',
+        role: normalizedRole,
         name: profile?.full_name || session.user.user_metadata?.name || session.user.email,
         full_name: profile?.full_name || session.user.user_metadata?.name || session.user.email,
         ...profile
@@ -384,7 +388,7 @@ export default function Navigation({ simple = false }) {
           >
             📊 Generate Assessment
           </Link>
-          {currentUser && (currentUser.role === 'admin' || currentUser.role === 'spsa' || currentUser.role === 'psa' || currentUser.role === 'analyst') && (
+          {currentUser && (['admin','spsa','psa','analyst'].includes(String(currentUser.role).toLowerCase()) || currentUser.is_admin === true) && (
             <>
               <Link
                 href="/admin"

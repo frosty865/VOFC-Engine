@@ -40,7 +40,8 @@ export default function Navigation({ simple = false }) {
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
-          setCurrentUser(result.user);
+          const normalizedRole = String(result.user?.role || 'user').toLowerCase();
+          setCurrentUser({ ...result.user, role: normalizedRole });
         }
       }
       // Silent failure for 401 - user just isn't logged in yet
@@ -369,7 +370,7 @@ export default function Navigation({ simple = false }) {
           >
             📊 Generate Assessment
           </Link>
-          {currentUser && (currentUser.role === 'admin' || currentUser.role === 'spsa' || currentUser.role === 'psa' || currentUser.role === 'analyst') && (
+          {currentUser && (['admin','spsa','psa','analyst'].includes(String(currentUser.role).toLowerCase()) || currentUser.is_admin === true) && (
             <>
               <Link
                 href="/admin"
