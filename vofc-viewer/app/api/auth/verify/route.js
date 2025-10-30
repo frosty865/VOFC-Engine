@@ -75,10 +75,26 @@ export async function GET(request) {
     let derivedRole = String(
       profile?.role || (profile?.is_admin ? 'admin' : '') || user.user_metadata?.role || 'user'
     ).toLowerCase();
-    // Final fallback: allow admin via configured email allowlist (comma-separated)
+    let isUserAdmin = Boolean(profile?.is_admin);
+    
+    // Final fallback: allow admin via configured email allowlist (comma-separated) or user.user_metadata.is_admin
     if (derivedRole === 'user') {
       const allowlist = (process.env.ADMIN_EMAILS || '').toLowerCase().split(',').map(s=>s.trim()).filter(Boolean);
       if (allowlist.includes(String(user.email).toLowerCase())) {
+        derivedRole = 'admin';
+        isUserAdmin = true;
+      }
+    }
+    
+    // Also check if role itself indicates admin
+    if (['admin', 'spsa'].includes(derivedRole)) {
+      isUserAdmin = true;
+    }
+    
+    // Check user_metadata for is_admin flag
+    if (user.user_metadata?.is_admin) {
+      isUserAdmin = true;
+      if (derivedRole === 'user') {
         derivedRole = 'admin';
       }
     }
@@ -90,7 +106,7 @@ export async function GET(request) {
         email: user.email,
         role: derivedRole,
         name: (profile?.first_name || '') + (profile?.last_name ? ' ' + profile?.last_name : '') || user.user_metadata?.name || user.email,
-        is_admin: Boolean(profile?.is_admin)
+        is_admin: isUserAdmin
       }
     });
 

@@ -35,31 +35,64 @@ export default function Navigation({ simple = false }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
+      
+      if (!token) {
+        // No session token, user not authenticated
+        setCurrentUser(null);
+        setLoading(false);
+        return;
+      }
+
       const response = await fetch('/api/auth/verify', {
         method: 'GET',
         credentials: 'include',
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
+        headers: { Authorization: `Bearer ${token}` }
       });
       
       if (response.ok) {
         const result = await response.json();
-        if (result.success) {
+        if (result.success && result.user) {
           const rawRole = result.user?.role || result.user?.group || 'user';
           const normalizedRole = String(rawRole).toLowerCase();
-          setCurrentUser({ ...result.user, role: normalizedRole });
+          setCurrentUser({ 
+            ...result.user, 
+            role: normalizedRole,
+            is_admin: result.user.is_admin || normalizedRole === 'admin' || normalizedRole === 'spsa'
+          });
+          setLoading(false);
           return;
         }
       }
+      
       // Fallback to client session for nav display only
       const { data: userData } = await supabase.auth.getUser();
       const u = userData?.user;
       if (u) {
-        const role = (u.user_metadata?.role || 'user').toLowerCase();
-        setCurrentUser({ id: u.id, email: u.email, role, full_name: u.user_metadata?.name || u.email });
+        let role = (u.user_metadata?.role || u.user_metadata?.group || 'user').toLowerCase();
+        let is_admin = u.user_metadata?.is_admin || false;
+        
+        // Check ADMIN_EMAILS fallback (if available client-side via env or hardcoded check)
+        // For now, treat known admin emails as admin
+        const adminEmails = ['admin@vofc.gov', 'spsa@vofc.gov'];
+        if (adminEmails.includes(u.email?.toLowerCase())) {
+          role = role === 'spsa' ? 'spsa' : 'admin';
+          is_admin = true;
+        }
+        
+        setCurrentUser({ 
+          id: u.id, 
+          email: u.email, 
+          role, 
+          full_name: u.user_metadata?.name || u.user_metadata?.full_name || u.email,
+          is_admin
+        });
+      } else {
+        setCurrentUser(null);
       }
     } catch (error) {
       // Silently handle errors during auth check
       // This is normal when user isn't authenticated
+      setCurrentUser(null);
     } finally {
       setLoading(false);
     }
