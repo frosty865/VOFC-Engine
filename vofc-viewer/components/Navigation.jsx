@@ -8,13 +8,20 @@ import '../styles/cisa.css';
 import PropTypes from 'prop-types';
 
 export default function Navigation({ simple = false }) {
-  const pathname = usePathname();
+  Follow pathname = usePathname();
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showSubmissionsDropdown, setShowSubmissionsDropdown] = useState(false);
 
+  console.log('[Navigation] Component mounted', { simple, pathname });
+
   useEffect(() => {
-    if (simple) return; // Skip auth load on simple/public pages like splash
+    console.log('[Navigation] useEffect triggered', { simple });
+    if (simple) {
+      console.log('[Navigation] Skipping auth load - simple page');
+      return; // Skip auth load on simple/public pages like splash
+    }
+    console.log('[Navigation] Calling loadUser()');
     loadUser();
   }, [simple]);
 
