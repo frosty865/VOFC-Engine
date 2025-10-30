@@ -241,6 +241,7 @@ export default function Navigation({ simple = false }) {
                     fontWeight: '500',
                     borderBottom: '1px solid var(--cisa-gray-light)'
                   }}
+                  onClick={(e) => { e.stopPropagation(); setShowSubmissionsDropdown(false); }}
                   onMouseEnter={(e) => {
                     e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
                     e.target.style.color = 'var(--cisa-blue-dark)';
@@ -263,6 +264,7 @@ export default function Navigation({ simple = false }) {
                     fontWeight: '500',
                     borderBottom: '1px solid var(--cisa-gray-light)'
                   }}
+                  onClick={(e) => { e.stopPropagation(); setShowSubmissionsDropdown(false); }}
                   onMouseEnter={(e) => {
                     e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
                     e.target.style.color = 'var(--cisa-blue-dark)';
@@ -285,6 +287,7 @@ export default function Navigation({ simple = false }) {
                     fontWeight: '500',
                     borderBottom: '1px solid var(--cisa-gray-light)'
                   }}
+                  onClick={(e) => { e.stopPropagation(); setShowSubmissionsDropdown(false); }}
                   onMouseEnter={(e) => {
                     e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
                     e.target.style.color = 'var(--cisa-blue-dark)';
@@ -307,6 +310,7 @@ export default function Navigation({ simple = false }) {
                     fontWeight: '500',
                     borderBottom: '1px solid var(--cisa-gray-light)'
                   }}
+                  onClick={(e) => { e.stopPropagation(); setShowSubmissionsDropdown(false); }}
                   onMouseEnter={(e) => {
                     e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
                     e.target.style.color = 'var(--cisa-blue-dark)';
@@ -328,6 +332,7 @@ export default function Navigation({ simple = false }) {
                     fontSize: 'var(--font-size-sm)',
                     fontWeight: '500'
                   }}
+                  onClick={(e) => { e.stopPropagation(); setShowSubmissionsDropdown(false); }}
                   onMouseEnter={(e) => {
                     e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
                     e.target.style.color = 'var(--cisa-blue-dark)';
