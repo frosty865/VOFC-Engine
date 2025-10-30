@@ -87,7 +87,7 @@ export default function Navigation({ simple = false }) {
                 <Link href="/submit" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Submit new vulnerabilities for review">Submit New Vulnerability</Link>
                 <Link href="/submit-psa" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Submit documents for processing">Submit Documents</Link>
                 <Link href="/assessment" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Generate vulnerability assessments">Generate Assessment</Link>
-                <Link href="/admin" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="User management and database health">Admin</Link>
+                {/* Admin link gated in full Navigation; hidden in simple header */}
                 <Link href="/learning" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Monitor continuous learning system">Learning Monitor</Link>
               </div>
             </div>
@@ -329,7 +329,7 @@ export default function Navigation({ simple = false }) {
           >
             📊 Generate Assessment
           </Link>
-          {currentUser && (['admin','spsa','psa','analyst'].includes(String(currentUser.role).toLowerCase()) || currentUser.is_admin === true) && (
+          {currentUser && (['admin','spsa'].includes(String(currentUser.role).toLowerCase()) || currentUser.is_admin === true) && (
             <>
               <Link
                 href="/admin"

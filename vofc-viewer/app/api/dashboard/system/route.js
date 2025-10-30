@@ -1,7 +1,11 @@
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export async function GET() {
+import { requireAdmin } from '../../../lib/auth-middleware'
+
+export async function GET(request) {
+  const { user, error } = await requireAdmin(request)
+  if (error) return Response.json({ error: String(error) }, { status: 403 })
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 5000)
   try {
