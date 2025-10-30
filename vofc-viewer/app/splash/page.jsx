@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser, logout } from '../lib/auth';
+import { supabase } from '../lib/supabaseClient';
 import { trackVOFCEvent } from '../../components/AnalyticsProvider';
 // import SessionTimeoutWarning from '../../components/SessionTimeoutWarning';
 import '../../styles/cisa.css';
@@ -51,6 +52,19 @@ export default function SplashPage() {
       const result = await response.json();
 
       if (result.success) {
+        // Hydrate client session to prevent redirect loops
+        if (result.session?.access_token && result.session?.refresh_token) {
+          try {
+            await supabase.auth.setSession({
+              access_token: result.session.access_token,
+              refresh_token: result.session.refresh_token
+            });
+          } catch (e) {
+            console.warn('Failed to set client session:', e);
+          }
+        }
+        // small delay to ensure session is ready
+        await new Promise(r => setTimeout(r, 150));
         // Track successful login
         trackVOFCEvent.login(result.user?.role || 'unknown');
         // Redirect to dashboard - no localStorage needed
