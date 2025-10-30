@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../Tools/CSV"
+		},
+		{
+			"path": "../../../../AppData/Local/Ollama"
+		}
+	],
+	"settings": {}
+}

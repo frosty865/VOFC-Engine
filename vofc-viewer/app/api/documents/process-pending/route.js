@@ -116,14 +116,11 @@ export async function POST() {
     for (const item of toProcess) {
       try {
         console.log(`🔄 Processing ${item.filename} (submission ${item.submissionId})...`);
-        
-        const processResponse = await fetch(`${baseUrl}/api/documents/process-vofc`, {
+        // Use metadata-only single processor (works on Vercel)
+        const processResponse = await fetch(`${baseUrl}/api/documents/process-one`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fileName: item.filename,
-            submissionId: item.submissionId
-          })
+          body: JSON.stringify({ submissionId: item.submissionId })
         });
         
         if (processResponse.ok) {

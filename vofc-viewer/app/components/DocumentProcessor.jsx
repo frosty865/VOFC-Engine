@@ -127,19 +127,16 @@ export default function DocumentProcessor() {
   // Process single document
   const processDocument = async (filename, docId) => {
     try {
-      // Use process-vofc endpoint which saves to submissions
-      const response = await fetch('/api/documents/process-vofc', {
+      // Prefer server-side single-submission processor (no local files needed)
+      const response = await fetch('/api/documents/process-one', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          fileName: filename,
-          submissionId: docId || undefined
-        })
+        body: JSON.stringify({ submissionId: docId })
       });
 
       const result = await response.json();
       
-      if (result.status === 'ok' || result.success) {
+      if (result.success) {
         await fetchDocuments();
         // Show processing results
         const count = result.count || 0;
