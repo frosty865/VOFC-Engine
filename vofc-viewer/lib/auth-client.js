@@ -1,24 +1,38 @@
 /**
  * Client-side authentication utilities
- * No localStorage usage - all authentication handled server-side
+ * Updated to use Supabase authentication
  */
+import { supabase } from '../app/lib/supabaseClient';
+
 export class AuthClient {
   /**
-   * Get current user from server
+   * Get current user using Supabase
    */
   static async getCurrentUser() {
     try {
-      const response = await fetch('/api/auth/verify', {
-        method: 'GET',
-        credentials: 'include'
-      });
-
-      if (!response.ok) {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session?.user) {
         return null;
       }
 
-      const result = await response.json();
-      return result.success ? result.user : null;
+      // Get user profile from user_profiles table
+      const { data: profile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        console.error('Error fetching user profile:', profileError);
+      }
+
+      return {
+        id: session.user.id,
+        email: session.user.email,
+        role: profile?.role || session.user.user_metadata?.role || 'user',
+        name: profile?.full_name || session.user.user_metadata?.name || session.user.email
+      };
     } catch (error) {
       console.error('Error getting current user:', error);
       return null;
@@ -26,21 +40,37 @@ export class AuthClient {
   }
 
   /**
-   * Login user
+   * Login user using Supabase
    */
   static async login(username, password) {
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify({ username, password })
+      const email = username.includes('@') ? username : `${username}@vofc.gov`;
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
       });
 
-      const result = await response.json();
-      return result;
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      // Get user profile for role
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
+
+      return {
+        success: true,
+        user: {
+          id: data.user.id,
+          email: data.user.email,
+          role: profile?.role || data.user.user_metadata?.role || 'user',
+          name: profile?.full_name || data.user.user_metadata?.name || data.user.email
+        }
+      };
     } catch (error) {
       console.error('Login error:', error);
       return { success: false, error: 'Login failed' };
@@ -48,23 +78,20 @@ export class AuthClient {
   }
 
   /**
-   * Logout user
+   * Logout user using Supabase
    */
   static async logout() {
     try {
-      const response = await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include'
-      });
-
-      const result = await response.json();
+      const { error } = await supabase.auth.signOut();
       
-      // Redirect to login page
-      if (result.success) {
-        window.location.href = '/splash';
+      if (error) {
+        return { success: false, error: error.message };
       }
+
+      // Redirect to login page
+      window.location.href = '/splash';
       
-      return result;
+      return { success: true };
     } catch (error) {
       console.error('Logout error:', error);
       return { success: false, error: 'Logout failed' };
@@ -92,17 +119,20 @@ export class AuthClient {
    */
   static async hasPermission(permission) {
     try {
-      const response = await fetch(`/api/auth/permissions?permission=${permission}`, {
-        method: 'GET',
-        credentials: 'include'
-      });
+      const user = await this.getCurrentUser();
+      if (!user) return false;
 
-      if (!response.ok) {
-        return false;
-      }
+      // Basic permission check based on role
+      const rolePermissions = {
+        admin: ['read', 'write', 'delete', 'admin'],
+        spsa: ['read', 'write', 'delete'],
+        psa: ['read', 'write'],
+        analyst: ['read', 'write'],
+        validator: ['read']
+      };
 
-      const result = await response.json();
-      return result.success && result.hasPermission;
+      const permissions = rolePermissions[user.role] || ['read'];
+      return permissions.includes(permission);
     } catch (error) {
       console.error('Permission check error:', error);
       return false;

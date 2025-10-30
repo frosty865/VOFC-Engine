@@ -1,38 +1,77 @@
-// Simple auth functions for admin pages
+// Auth functions using Supabase authentication
+import { supabase } from './supabaseClient';
+
 export const getCurrentUser = async () => {
   try {
-    const response = await fetch('/api/auth/verify', {
-      method: 'GET',
-      credentials: 'include'
-    });
+    // Get current Supabase session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     
-    if (response.ok) {
-      const result = await response.json();
-      if (result.success) {
-        return result.user;
-      }
+    if (sessionError || !session?.user) {
+      return null;
     }
-    return null;
+
+    // Get user profile from user_profiles table
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('id', session.user.id)
+      .single();
+
+    if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = not found
+      console.error('Error fetching user profile:', profileError);
+    }
+
+    // Return user with profile data
+    return {
+      id: session.user.id,
+      email: session.user.email,
+      role: profile?.role || session.user.user_metadata?.role || 'user',
+      name: profile?.full_name || session.user.user_metadata?.name || session.user.email,
+      full_name: profile?.full_name || session.user.user_metadata?.name || session.user.email,
+      ...profile
+    };
   } catch (error) {
     console.error('Error getting current user:', error);
     return null;
   }
 };
 
-export const getUserProfile = async () => {
+export const getUserProfile = async (userId = null) => {
   try {
-    const response = await fetch('/api/auth/verify', {
-      method: 'GET',
-      credentials: 'include'
-    });
+    let targetUserId = userId;
     
-    if (response.ok) {
-      const result = await response.json();
-      if (result.success) {
-        return result.user;
-      }
+    // If no userId provided, get current user
+    if (!targetUserId) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return null;
+      targetUserId = session.user.id;
     }
-    return null;
+
+    // Get user profile from user_profiles table
+    const { data: profile, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('id', targetUserId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // Profile doesn't exist yet, return basic user info
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user && session.user.id === targetUserId) {
+          return {
+            id: session.user.id,
+            email: session.user.email,
+            role: session.user.user_metadata?.role || 'user',
+            name: session.user.user_metadata?.name || session.user.email
+          };
+        }
+      }
+      console.error('Error fetching user profile:', error);
+      return null;
+    }
+
+    return profile;
   } catch (error) {
     console.error('Error getting user profile:', error);
     return null;
@@ -44,7 +83,7 @@ export const canAccessAdmin = async () => {
     const user = await getCurrentUser();
     if (!user) return false;
     
-    return ['admin', 'spsa', 'psa', 'analyst'].includes(user.role);
+    return ['admin', 'spsa', 'analyst', 'psa'].includes(user.role);
   } catch (error) {
     console.error('Error checking admin access:', error);
     return false;
@@ -56,7 +95,7 @@ export const canSubmitVOFC = async () => {
     const user = await getCurrentUser();
     if (!user) return false;
     
-    return ['admin', 'spsa', 'psa', 'analyst'].includes(user.role);
+    return ['admin', 'spsa', 'analyst', 'psa'].includes(user.role);
   } catch (error) {
     console.error('Error checking submit access:', error);
     return false;
@@ -65,15 +104,12 @@ export const canSubmitVOFC = async () => {
 
 export const logout = async () => {
   try {
-    const response = await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'include'
-    });
+    const { error } = await supabase.auth.signOut();
 
-    if (response.ok) {
-      window.location.href = '/splash';
+    if (error) {
+      console.error('Logout error:', error);
     } else {
-      console.error('Logout failed');
+      window.location.href = '/splash';
     }
   } catch (error) {
     console.error('Logout error:', error);

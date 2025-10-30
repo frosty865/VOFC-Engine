@@ -173,7 +173,8 @@ export default function PSASubmission() {
       formDataToSend.append('publication_year', formData.publication_year.toString());
       formDataToSend.append('content_restriction', formData.content_restriction);
       
-      const response = await fetch('/api/documents/submit', {
+      // Send document to Vercel for processing (Vercel handles Ollama communication)
+      const response = await fetch('/api/documents/process', {
         method: 'POST',
         body: formDataToSend
       });
@@ -181,7 +182,12 @@ export default function PSASubmission() {
       const result = await response.json();
       
       if (result.success) {
-        setMessage("✅ Document submitted successfully! It will be processed and reviewed.");
+        const extractionStats = result.extraction_stats;
+        const entriesCount = extractionStats?.total_entries || 0;
+        const vulnCount = extractionStats?.vulnerabilities_found || 0;
+        const ofcCount = extractionStats?.ofcs_found || 0;
+        
+        setMessage(`✅ Document processed successfully! Found ${entriesCount} entries (${vulnCount} vulnerabilities, ${ofcCount} OFCs). Data stored in database.`);
         setFormData({
           source_title: "",
           source_type: "unknown",

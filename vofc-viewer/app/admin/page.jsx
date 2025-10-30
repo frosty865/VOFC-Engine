@@ -57,21 +57,33 @@ export default function AdminPage() {
     try {
       const user = await getCurrentUser();
       if (!user) {
+        console.log('No user found, redirecting to login');
         router.push('/login');
         return;
       }
 
+      // Get full user profile
       const profile = await getUserProfile(user.id);
-      const canAccess = await canAccessAdmin(user.id);
 
+      // Check admin access
+      const canAccess = await canAccessAdmin();
+      
       if (!canAccess) {
-        alert('You do not have admin access');
+        alert('You do not have admin access. Required roles: admin, spsa, psa, or analyst');
         router.push('/');
         return;
       }
 
+      // Set user and role from the authenticated user object
       setCurrentUser(user);
-      setUserRole(profile?.role || 'user');
+      setUserRole(profile?.role || user?.role || 'user');
+      
+      console.log('Admin access granted:', { 
+        email: user.email, 
+        role: profile?.role || user?.role, 
+        canAccess,
+        userId: user.id
+      });
     } catch (error) {
       console.error('Auth check failed:', error);
       router.push('/login');
@@ -82,40 +94,77 @@ export default function AdminPage() {
 
   const loadStats = async () => {
     try {
-      const [vulnerabilities, ofcs, users] = await Promise.all([
-        fetchVulnerabilities(),
-        fetchVOFC(),
-        supabase.from('user_profiles').select('*')
-      ]);
+      // Use API route that bypasses RLS with service role key
+      const response = await fetch('/api/admin/stats');
+      
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          console.warn('Unauthorized access to admin stats');
+          return;
+        }
+        throw new Error(`Stats API error: ${response.status}`);
+      }
 
+      const result = await response.json();
+      
+      if (result.success && result.stats) {
+        setStats({
+          vulnerabilities: result.stats.vulnerabilities || 0,
+          ofcs: result.stats.ofcs || 0,
+          users: result.stats.users || 0,
+          pendingVulnerabilities: result.stats.pendingVulnerabilities || 0,
+          pendingOFCs: result.stats.pendingOFCs || 0
+        });
+      } else {
+        console.warn('Stats API returned unsuccessful response');
+      }
+    } catch (error) {
+      console.error('Error loading stats:', error);
+      // Fallback to empty stats
       setStats({
-        vulnerabilities: vulnerabilities?.length || 0,
-        ofcs: ofcs?.length || 0,
-        users: users.data?.length || 0,
+        vulnerabilities: 0,
+        ofcs: 0,
+        users: 0,
         pendingVulnerabilities: 0,
         pendingOFCs: 0
       });
-    } catch (error) {
-      console.error('Error loading stats:', error);
     }
   };
 
   const checkDatabaseHealth = async () => {
     const startTime = Date.now();
     try {
-      const { data, error } = await supabase.from('vulnerabilities').select('count').limit(1);
+      // Ensure session is loaded
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        setDbHealth({
+          connection: 'Unauthenticated',
+          responseTime: 0,
+          lastChecked: new Date().toLocaleTimeString()
+        });
+        return;
+      }
+
+      // Use proper query syntax
+      const { data, error } = await supabase
+        .from('vulnerabilities')
+        .select('*', { count: 'exact', head: true });
+      
       const responseTime = Date.now() - startTime;
       
       setDbHealth({
         connection: error ? 'Error' : 'Connected',
         responseTime: responseTime,
-        lastChecked: new Date().toLocaleTimeString()
+        lastChecked: new Date().toLocaleTimeString(),
+        error: error?.message
       });
     } catch (error) {
       setDbHealth({
         connection: 'Error',
         responseTime: 0,
-        lastChecked: new Date().toLocaleTimeString()
+        lastChecked: new Date().toLocaleTimeString(),
+        error: error.message
       });
     }
   };
@@ -126,10 +175,11 @@ export default function AdminPage() {
       if (error) {
         console.error('Error signing out:', error);
       } else {
-        router.push('/');
+        router.push('/splash');
       }
     } catch (error) {
       console.error('Error signing out:', error);
+      router.push('/splash');
     }
   };
 

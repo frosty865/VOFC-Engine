@@ -2,7 +2,6 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { supabase } from '../app/lib/supabaseClient';
 // Removed localStorage dependencies - now using secure server-side authentication
 import '../styles/cisa.css';
 import PropTypes from 'prop-types';
@@ -33,38 +32,21 @@ export default function Navigation({ simple = false }) {
 
   const loadUser = async () => {
     try {
-      // Use Supabase to get current user
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session?.user) {
-        setCurrentUser(null);
-        setLoading(false);
-        return;
-      }
-
-      // Get user profile from user_profiles table
-      const { data: profile, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
-
-      if (profileError && profileError.code !== 'PGRST116') {
-        console.error('Error fetching user profile:', profileError);
-      }
-
-      // Set current user with profile data
-      setCurrentUser({
-        id: session.user.id,
-        email: session.user.email,
-        role: profile?.role || session.user.user_metadata?.role || 'user',
-        name: profile?.full_name || session.user.user_metadata?.name || session.user.email,
-        full_name: profile?.full_name || session.user.user_metadata?.name || session.user.email,
-        ...profile
+      const response = await fetch('/api/auth/verify', {
+        method: 'GET',
+        credentials: 'include'
       });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setCurrentUser(result.user);
+        }
+      }
+      // Silent failure for 401 - user just isn't logged in yet
     } catch (error) {
-      console.error('Error loading user:', error);
-      setCurrentUser(null);
+      // Silently handle errors during auth check
+      // This is normal when user isn't authenticated
     } finally {
       setLoading(false);
     }
@@ -72,13 +54,16 @@ export default function Navigation({ simple = false }) {
 
   const handleLogout = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include'
+      });
       
-      if (error) {
-        console.error('Logout error:', error);
-      } else {
+      if (response.ok) {
         setCurrentUser(null);
         window.location.href = '/splash';
+      } else {
+        console.error('Logout failed');
       }
     } catch (error) {
       console.error('Logout error:', error);

@@ -7,9 +7,9 @@ export async function GET() {
     
     const ollamaUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || 'https://ollama.frostech.site';
     
-    // Try to fetch files from custom Flask server first, then fallback to standard Ollama
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    // Get files from local file system (Ollama folders)
+    const fs = require('fs');
+    const path = require('path');
     
     let filesByFolder = {
       incoming: [],
@@ -18,50 +18,51 @@ export async function GET() {
       errors: []
     };
     
-    // Try custom Flask server first
-    try {
-      const filesResponse = await fetch(`${ollamaUrl}/api/files/list-all`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal
-      });
-      
-      if (filesResponse.ok) {
-        const ollamaData = await filesResponse.json();
-        const allFiles = ollamaData.files || [];
-        
-        // Group files by folder
-        allFiles.forEach(file => {
-          const folder = file.folder || 'incoming';
-          if (filesByFolder[folder]) {
-            filesByFolder[folder].push(file);
-          }
-        });
-        
-        console.log(`📁 Found files on custom Ollama server:`, {
-          incoming: filesByFolder.incoming.length,
-          processed: filesByFolder.processed.length,
-          library: filesByFolder.library.length,
-          errors: filesByFolder.errors.length
-        });
-      } else {
-        throw new Error(`Custom server returned ${filesResponse.status}`);
+    // Define local folder paths
+    const baseDir = process.env.OLLAMA_FILE_STORAGE || 
+      (process.platform === 'win32' 
+        ? 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files'
+        : '/tmp/ollama/files');
+    
+    const folders = {
+      incoming: path.join(baseDir, 'incoming'),
+      processed: path.join(baseDir, 'processed'),
+      library: path.join(baseDir, 'library'),
+      errors: path.join(baseDir, 'errors')
+    };
+    
+    // Scan local folders for files
+    Object.entries(folders).forEach(([folderName, folderPath]) => {
+      if (fs.existsSync(folderPath)) {
+        try {
+          const files = fs.readdirSync(folderPath);
+          files.forEach(filename => {
+            const filePath = path.join(folderPath, filename);
+            const stats = fs.statSync(filePath);
+            
+            if (stats.isFile()) {
+              filesByFolder[folderName].push({
+                filename: filename,
+                path: filePath,
+                size: stats.size,
+                modified: stats.mtime.toISOString(),
+                created: stats.ctime.toISOString(),
+                folder: folderName
+              });
+            }
+          });
+        } catch (error) {
+          console.warn(`⚠️ Error reading ${folderName} folder:`, error.message);
+        }
       }
-    } catch (customError) {
-      console.log('⚠️ Custom Flask server not available, using Supabase-only mode');
-      
-      // Clear timeout and create new controller for Supabase-only mode
-      clearTimeout(timeoutId);
-      
-      // In Supabase-only mode, we'll rely entirely on submission records
-      // and simulate folder structure based on submission status
-      filesByFolder = {
-        incoming: [],
-        processed: [],
-        library: [],
-        errors: []
-      };
-    }
+    });
+    
+    console.log(`📁 Found files in local folders:`, {
+      incoming: filesByFolder.incoming.length,
+      processed: filesByFolder.processed.length,
+      library: filesByFolder.library.length,
+      errors: filesByFolder.errors.length
+    });
     
     // Combine all files for submission matching
     const ollamaFiles = [
