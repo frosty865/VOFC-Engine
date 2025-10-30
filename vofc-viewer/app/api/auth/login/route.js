@@ -116,6 +116,12 @@ export async function POST(request) {
         name: `${profile.first_name} ${profile.last_name}`,
         organization: profile.organization,
         username: profile.username
+      },
+      session: {
+        access_token: data.session?.access_token || null,
+        refresh_token: data.session?.refresh_token || null,
+        expires_at: data.session?.expires_at || null,
+        token_type: data.session?.token_type || 'bearer'
       }
     });
 
