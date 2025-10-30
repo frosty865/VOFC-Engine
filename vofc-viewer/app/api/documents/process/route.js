@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { ollamaChatJSON } from '@/lib/ollama.js';
 
 // Use service role for API submissions to bypass RLS
 const supabase = createClient(
@@ -51,24 +52,10 @@ export async function POST(request) {
       documentContent = `Document: ${source_title}\nOrganization: ${author_org || 'Unknown'}\nYear: ${publication_year || 'Unknown'}`;
     }
 
-    // Send to private Ollama server for processing
-    console.log('🤖 Sending document to private Ollama server...');
-    
-    const ollamaResponse = await fetch('http://10.0.0.213:11434/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'vofc-engine:latest',
-        messages: [{
-          role: 'user',
-          content: `Extract vulnerabilities and options for consideration from this security document:
-
-${documentContent}
-
-Return ONLY valid JSON in this exact format:
-{
+    // Send to Ollama server for processing (uses OLLAMA_URL/OLLAMA_MODEL)
+    console.log('🤖 Sending document to Ollama (env-configured) ...');
+    const model = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
+    const prompt = `Extract vulnerabilities and options for consideration from this security document and return ONLY JSON matching this schema:\n\n{
   "entries": [
     {
       "topic": "Brief descriptive topic",
@@ -82,30 +69,11 @@ Return ONLY valid JSON in this exact format:
       "section_context": "Relevant section or context"
     }
   ]
-}`
-        }],
-        stream: false
-      })
-    });
+}\n\nDocument:\n${documentContent}`;
 
-    if (!ollamaResponse.ok) {
-      throw new Error(`Ollama server error: ${ollamaResponse.status}`);
-    }
-
-    const ollamaData = await ollamaResponse.json();
-    const aiContent = ollamaData.message?.content || '';
-    
-    console.log('✅ Received response from Ollama server');
-
-    // Parse AI response
-    let parsedData;
-    try {
-      const jsonMatch = aiContent.match(/\{[\s\S]*\}/);
-      const jsonString = jsonMatch ? jsonMatch[0] : aiContent;
-      parsedData = JSON.parse(jsonString);
-    } catch (parseError) {
-      console.error('❌ Error parsing Ollama response:', parseError);
-      throw new Error('Failed to parse AI response');
+    const parsedData = await ollamaChatJSON({ model, prompt });
+    if (!parsedData || !parsedData.entries) {
+      throw new Error('Ollama returned no parsable entries');
     }
 
     // Prepare data for Supabase storage
