@@ -13,7 +13,15 @@ export default function Navigation({ simple = false }) {
   const [loading, setLoading] = useState(true);
   const [showSubmissionsDropdown, setShowSubmissionsDropdown] = useState(false);
 
-  console.log('[Navigation] Component mounted', { simple, pathname });
+  // CRITICAL DEBUG: Multiple log types to ensure visibility
+  console.error('🔴 NAVIGATION COMPONENT MOUNTED 🔴', { simple, pathname });
+  console.warn('🟡 NAVIGATION COMPONENT MOUNTED 🟡', { simple, pathname });
+  console.log('🟢 NAVIGATION COMPONENT MOUNTED 🟢', { simple, pathname });
+  
+  // Also log to window for debugging
+  if (typeof window !== 'undefined') {
+    window.__navDebug = { mounted: true, simple, pathname, timestamp: Date.now() };
+  }
 
   useEffect(() => {
     console.log('[Navigation] useEffect triggered', { simple });
