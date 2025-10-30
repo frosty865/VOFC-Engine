@@ -56,41 +56,30 @@ export default function Navigation({ simple = false }) {
         if (result.success && result.user) {
           const rawRole = result.user.role || result.user.group || 'user';
           const normalizedRole = String(rawRole).toLowerCase();
-          setCurrentUser({ 
+          const userObj = { 
             ...result.user, 
             role: normalizedRole,
             is_admin: result.user.is_admin || normalizedRole === 'admin' || normalizedRole === 'spsa'
-          });
+          };
+          console.log('[Navigation] User authenticated:', { email: userObj.email, role: userObj.role, is_admin: userObj.is_admin });
+          setCurrentUser(userObj);
+          setLoading(false);
+          return;
+        } else {
+          console.error('[Navigation] Invalid API response:', result);
+          setCurrentUser(null);
           setLoading(false);
           return;
         }
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('[Navigation] API verify failed:', response.status, errorData);
+        setCurrentUser(null);
+        setLoading(false);
+        return;
       }
       
-      // Fallback: read user from Supabase client for nav-only rendering
-      const { data: userData } = await supabase.auth.getUser();
-      const u = userData?.user;
-      if (u) {
-        let role = (u.user_metadata?.role || u.user_metadata?.group || 'user').toLowerCase();
-        let is_admin = u.user_metadata?.is_admin || false;
-        
-        // Check ADMIN_EMAILS fallback (if available client-side via env or hardcoded check)
-        // For now, treat known admin emails as admin
-        const adminEmails = ['admin@vofc.gov', 'spsa@vofc.gov'];
-        if (adminEmails.includes(u.email?.toLowerCase())) {
-          role = role === 'spsa' ? 'spsa' : 'admin';
-          is_admin = true;
-        }
-        
-        setCurrentUser({ 
-          id: u.id, 
-          email: u.email, 
-          role, 
-          full_name: u.user_metadata?.name || u.user_metadata?.full_name || u.email,
-          is_admin
-        });
-      } else {
-        setCurrentUser(null);
-      }
+      // No fallback - API must work correctly
     } catch (error) {
       console.error('Error loading user:', error);
       setCurrentUser(null);
@@ -369,7 +358,18 @@ export default function Navigation({ simple = false }) {
           >
             📊 Generate Assessment
           </Link>
-          {currentUser && (['admin','spsa'].includes(String(currentUser.role).toLowerCase()) || currentUser.is_admin === true) && (
+          {(() => {
+            const showAdmin = currentUser && (['admin','spsa'].includes(String(currentUser.role).toLowerCase()) || currentUser.is_admin === true);
+            if (currentUser) {
+              console.log('[Navigation] Render check:', {
+                currentUser,
+                role: currentUser.role,
+                is_admin: currentUser.is_admin,
+                showAdmin
+              });
+            }
+            return showAdmin;
+          })() && (
             <>
               <Link
                 href="/admin"
