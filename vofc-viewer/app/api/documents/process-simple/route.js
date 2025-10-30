@@ -10,9 +10,9 @@ export async function POST() {
     console.log('🔄 Starting batch document processing');
     
     const ollamaUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
-    const incomingDir = process.env.OLLAMA_INCOMING_PATH || 'C:/Users/frost/AppData/Local/Ollama/files/incoming';
-    const processedDir = process.env.OLLAMA_PROCESSED_PATH || 'C:/Users/frost/AppData/Local/Ollama/files/processed';
-    const errorDir = process.env.OLLAMA_ERROR_PATH || 'C:/Users/frost/AppData/Local/Ollama/files/errors';
+    const incomingDir = process.env.OLLAMA_INCOMING_PATH || 'C:/Users/frost/AppData/Local/Ollama/automation/incoming';
+    const processedDir = process.env.OLLAMA_PROCESSED_PATH || 'C:/Users/frost/AppData/Local/Ollama/automation/processed';
+    const errorDir = process.env.OLLAMA_ERROR_PATH || 'C:/Users/frost/AppData/Local/Ollama/automation/errors';
 
     if (!existsSync(incomingDir)) {
       return NextResponse.json({ 

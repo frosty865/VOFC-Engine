@@ -77,8 +77,8 @@ export async function POST(request) {
                // Handle both Windows (local dev) and Linux (production) paths
                const incomingDir = process.env.OLLAMA_INCOMING_PATH || 
                  (process.platform === 'win32' 
-                   ? 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\incoming'
-                   : '/tmp/ollama/files/incoming');
+                   ? 'C:\\Users\\frost\\AppData\\Local\\Ollama\\automation\\incoming'
+                   : '/var/ollama/uploads/incoming');
       const timestamp = Date.now();
       const fileExtension = document.name.split('.').pop();
       const baseName = document.name.replace(/\.[^/.]+$/, '');
