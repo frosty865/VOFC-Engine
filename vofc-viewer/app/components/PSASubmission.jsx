@@ -173,8 +173,8 @@ export default function PSASubmission() {
       formDataToSend.append('publication_year', formData.publication_year.toString());
       formDataToSend.append('content_restriction', formData.content_restriction);
       
-      // Send document to Vercel for processing (Vercel handles Ollama communication)
-      const response = await fetch('/api/documents/process', {
+      // New pipeline: submit via tunnel endpoint which creates a submission and triggers process-one
+      const response = await fetch('/api/documents/submit', {
         method: 'POST',
         body: formDataToSend
       });
@@ -182,12 +182,8 @@ export default function PSASubmission() {
       const result = await response.json();
       
       if (result.success) {
-        const extractionStats = result.extraction_stats;
-        const entriesCount = extractionStats?.total_entries || 0;
-        const vulnCount = extractionStats?.vulnerabilities_found || 0;
-        const ofcCount = extractionStats?.ofcs_found || 0;
-        
-        setMessage(`✅ Document processed successfully! Found ${entriesCount} entries (${vulnCount} vulnerabilities, ${ofcCount} OFCs). Data stored in database.`);
+        const submissionId = result.submission_id;
+        setMessage(`✅ Document submitted! Submission ID: ${submissionId}. Processing has been triggered and results will appear after completion.`);
         setFormData({
           source_title: "",
           source_type: "unknown",
