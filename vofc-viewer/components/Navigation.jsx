@@ -359,15 +359,31 @@ export default function Navigation({ simple = false }) {
             📊 Generate Assessment
           </Link>
           {(() => {
-            const showAdmin = currentUser && (['admin','spsa'].includes(String(currentUser.role).toLowerCase()) || currentUser.is_admin === true);
-            if (currentUser) {
-              console.log('[Navigation] Render check:', {
-                currentUser,
-                role: currentUser.role,
-                is_admin: currentUser.is_admin,
-                showAdmin
-              });
+            if (!currentUser) {
+              console.log('[Navigation] Admin check: NO currentUser');
+              return false;
             }
+            
+            const role = String(currentUser.role || '').toLowerCase();
+            const isAdmin = currentUser.is_admin === true;
+            const isAdminRole = ['admin', 'spsa'].includes(role);
+            const showAdmin = isAdminRole || isAdmin;
+            
+            console.log('[Navigation] Admin menu check:', {
+              email: currentUser.email,
+              role: currentUser.role,
+              roleLower: role,
+              is_admin: currentUser.is_admin,
+              isAdminFlag: isAdmin,
+              isAdminRole: isAdminRole,
+              showAdmin: showAdmin,
+              fullUser: JSON.stringify(currentUser, null, 2)
+            });
+            
+            if (!showAdmin) {
+              console.error('[Navigation] ADMIN MENU BLOCKED - Role:', role, 'is_admin:', isAdmin);
+            }
+            
             return showAdmin;
           })() && (
             <>

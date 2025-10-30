@@ -122,7 +122,15 @@ export async function GET(request) {
       }
     };
     
-    console.log('[Auth Verify] Success:', { email: user.email, role: derivedRole, is_admin: isUserAdmin });
+    console.log('[Auth Verify] Success:', { 
+      email: user.email, 
+      role: derivedRole, 
+      is_admin: isUserAdmin,
+      profileRole: profile?.role,
+      profileIsAdmin: profile?.is_admin,
+      userMetadataRole: user.user_metadata?.role,
+      userMetadataIsAdmin: user.user_metadata?.is_admin
+    });
     return NextResponse.json(userResponse);
 
   } catch (error) {
