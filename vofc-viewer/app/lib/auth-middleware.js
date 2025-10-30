@@ -15,12 +15,20 @@ export async function requireAdmin(request) {
       const accessToken = authHeader.slice(7).trim();
       const { data: { user }, error } = await supabaseAdmin.auth.getUser(accessToken);
       if (!error && user) {
-        const { data: profile } = await supabaseAdmin
+        let { data: profile } = await supabaseAdmin
           .from('user_profiles')
-          .select('role, group, is_admin')
-          .eq('id', user.id)
+          .select('role, is_admin, user_id')
+          .eq('user_id', user.id)
           .maybeSingle();
-        const role = String(profile?.role || profile?.group || (profile?.is_admin ? 'admin' : '') || user.user_metadata?.role || 'user').toLowerCase();
+        if (!profile) {
+          const resp = await supabaseAdmin
+            .from('user_profiles')
+            .select('role, is_admin, user_id')
+            .eq('id', user.id)
+            .maybeSingle();
+          profile = resp.data || null;
+        }
+        const role = String(profile?.role || (profile?.is_admin ? 'admin' : '') || user.user_metadata?.role || 'user').toLowerCase();
         if (['admin','spsa'].includes(role)) {
           return { user: { id: user.id, email: user.email, role }, error: null };
         }

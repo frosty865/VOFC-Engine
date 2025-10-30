@@ -56,19 +56,24 @@ export async function GET(request) {
     }
 
     // Get user profile (role/group/is_admin)
-    const { data: profile } = await supabaseAdmin
+    // Prefer join by user_id (your schema) and fall back to id
+    let { data: profile } = await supabaseAdmin
       .from('user_profiles')
-      .select('role, group, is_admin, full_name, email')
-      .eq('id', user.id)
+      .select('role, is_admin, first_name, last_name, organization, user_id')
+      .eq('user_id', user.id)
       .maybeSingle();
+    if (!profile) {
+      const resp = await supabaseAdmin
+        .from('user_profiles')
+        .select('role, is_admin, first_name, last_name, organization, user_id')
+        .eq('id', user.id)
+        .maybeSingle();
+      profile = resp.data || null;
+    }
 
     // Derive role with robust fallbacks
     const derivedRole = String(
-      profile?.role ||
-      profile?.group ||
-      (profile?.is_admin ? 'admin' : '') ||
-      user.user_metadata?.role ||
-      'user'
+      profile?.role || (profile?.is_admin ? 'admin' : '') || user.user_metadata?.role || 'user'
     ).toLowerCase();
 
     return NextResponse.json({
@@ -77,7 +82,7 @@ export async function GET(request) {
         id: user.id,
         email: user.email,
         role: derivedRole,
-        name: profile?.full_name || user.user_metadata?.name || user.email,
+        name: (profile?.first_name || '') + (profile?.last_name ? ' ' + profile?.last_name : '') || user.user_metadata?.name || user.email,
         is_admin: Boolean(profile?.is_admin)
       }
     });
