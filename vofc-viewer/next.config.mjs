@@ -9,8 +9,11 @@ const nextConfig = {
   // Performance optimizations
   compress: true,
   poweredByHeader: false,
+  swcMinify: true,
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
+  // If any page still attempts SSG fetches, cap the wait time hard
+  staticPageGenerationTimeout: 5,
   
   // Experimental features (disabled to avoid build hangs)
   // experimental: {
