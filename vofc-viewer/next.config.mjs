@@ -15,7 +15,6 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '10mb'
     },
-    optimizeCss: true,
     optimizePackageImports: ['@supabase/supabase-js', 'react-icons']
   },
   
