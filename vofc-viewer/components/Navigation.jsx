@@ -33,39 +33,24 @@ export default function Navigation({ simple = false }) {
 
   const loadUser = async () => {
     try {
-      // Use Supabase to get current user
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session?.user) {
+      // Use server-verified endpoint to avoid client REST 406s
+      const response = await fetch('/api/auth/verify', {
+        method: 'GET',
+        credentials: 'include'
+      });
+      if (!response.ok) {
         setCurrentUser(null);
         setLoading(false);
         return;
       }
-
-      // Get user profile from user_profiles table
-      const { data: profile, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
-
-      if (profileError && profileError.code !== 'PGRST116') {
-        console.error('Error fetching user profile:', profileError);
+      const result = await response.json();
+      if (!result.success || !result.user) {
+        setCurrentUser(null);
+        setLoading(false);
+        return;
       }
-
-      // Set current user with normalized role for consistent checks
-      const normalizedRole = String(
-        profile?.role || session.user.user_metadata?.role || 'user'
-      ).toLowerCase();
-
-      setCurrentUser({
-        id: session.user.id,
-        email: session.user.email,
-        role: normalizedRole,
-        name: profile?.full_name || session.user.user_metadata?.name || session.user.email,
-        full_name: profile?.full_name || session.user.user_metadata?.name || session.user.email,
-        ...profile
-      });
+      const normalizedRole = String(result.user.role || 'user').toLowerCase();
+      setCurrentUser({ ...result.user, role: normalizedRole });
     } catch (error) {
       console.error('Error loading user:', error);
       setCurrentUser(null);
