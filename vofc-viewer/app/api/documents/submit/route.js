@@ -6,7 +6,7 @@ import { existsSync } from 'fs';
 
 export async function POST(request) {
   try {
-    console.log('📄 Document submit API called (local storage mode)');
+    console.log('📄 Document submit API called (tunnel mode - no local save)');
     
     // Get user from authorization header
     let userId = null;
@@ -70,54 +70,13 @@ export async function POST(request) {
       );
     }
 
-             // Save document file to local Ollama storage
-             let savedFilePath = null;
-             try {
-               // Use local storage path from environment or default
-               // Handle both Windows (local dev) and Linux (production) paths
-               const incomingDir = process.env.OLLAMA_INCOMING_PATH || 
-                 (process.platform === 'win32' 
-                   ? 'C:\\Users\\frost\\AppData\\Local\\Ollama\\automation\\incoming'
-                   : '/var/ollama/uploads/incoming');
-      const timestamp = Date.now();
-      const fileExtension = document.name.split('.').pop();
-      const baseName = document.name.replace(/\.[^/.]+$/, '');
-      const fileName = `${baseName}_${timestamp}.${fileExtension}`;
-      const filePath = join(incomingDir, fileName);
-
-      console.log('📁 Local Ollama storage details:');
-      console.log('- Incoming directory:', incomingDir);
-      console.log('- File name:', fileName);
-      console.log('- File path:', filePath);
-      console.log('- File size:', document.size, 'bytes');
-
-      // Ensure upload directory exists
-      if (!existsSync(incomingDir)) {
-        await mkdir(incomingDir, { recursive: true });
-        console.log('✅ Created upload directory:', incomingDir);
-      }
-
-      // Convert file to buffer and save locally
-      const buffer = await document.arrayBuffer();
-      await writeFile(filePath, Buffer.from(buffer));
-      
-      savedFilePath = filePath;
-      console.log('📄 Document saved to incoming folder:', filePath);
-      console.log('📝 Document will be moved to library after successful processing');
-      
-      // Note: Files are only stored locally - Supabase only tracks metadata
-             } catch (fileError) {
-               console.error('❌ Error saving document to local storage:', fileError);
-               console.error('❌ Platform:', process.platform);
-               console.error('❌ Incoming dir:', incomingDir);
-               
-               return NextResponse.json({
-                 success: false,
-                 error: 'Failed to save document file locally: ' + fileError.message
-               }, { status: 500 });
-             }
-
-    console.log('✅ Document saved to local storage successfully');
+    // Do not write locally; forward-only via metadata
+    let savedFilePath = null;
+    const timestamp = Date.now();
+    const fileExtension = document.name.split('.').pop();
+    const baseName = document.name.replace(/\.[^/.]+$/, '');
+    const fileName = `${baseName}_${timestamp}.${fileExtension}`;
+    console.log('📡 Tunnel submission (no local save):', { fileName, size: document.size });
     
     // Create submission record in Supabase for tracking/review
     let submissionId = null;
@@ -137,10 +96,11 @@ export async function POST(request) {
             document_type: document.type,
             document_size: document.size,
             local_file_path: savedFilePath,
-            storage_type: 'local_filesystem'
+            storage_type: 'tunnel',
+            tunnel_forwarded: true
           }),
           status: 'pending_review',
-          source: 'document_submission',
+          source: 'tunnel_submission',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -168,7 +128,7 @@ export async function POST(request) {
     
     // Auto-process document after upload (default behavior)
     const autoProcess = process.env.AUTO_PROCESS_ON_UPLOAD !== 'false'; // Default to true
-    if (autoProcess && savedFilePath) {
+    if (autoProcess) {
       try {
         console.log('🤖 Auto-processing document with VOFC parser...');
         
@@ -178,15 +138,13 @@ export async function POST(request) {
           ? `https://${process.env.VERCEL_URL}`
           : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
         
-        fetch(`${baseUrl}/api/documents/process-one`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            submissionId: submissionId || undefined
-          })
-        }).catch(err => {
-          console.warn('⚠️ Auto-processing request failed (non-critical):', err.message);
-        });
+        if (submissionId) {
+          fetch(`${baseUrl}/api/documents/process-one`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ submissionId })
+          }).catch(() => {});
+        }
         
         console.log('✅ Auto-processing triggered (running in background)');
       } catch (err) {
@@ -198,11 +156,11 @@ export async function POST(request) {
       success: true,
       submission_id: submissionId || 'local-' + Date.now(),
       status: 'pending_review',
-      message: 'Document submitted successfully to local storage',
+      message: 'Document submitted successfully via tunnel',
       file_path: savedFilePath,
       document_name: document.name,
       document_size: document.size,
-      storage_type: 'local_filesystem',
+      storage_type: 'tunnel',
       tracked_in_database: !!submissionId
     });
 
