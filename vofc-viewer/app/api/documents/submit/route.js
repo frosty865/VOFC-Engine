@@ -178,11 +178,10 @@ export async function POST(request) {
           ? `https://${process.env.VERCEL_URL}`
           : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
         
-        fetch(`${baseUrl}/api/documents/process-vofc`, {
+        fetch(`${baseUrl}/api/documents/process-one`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            fileName: fileName,
             submissionId: submissionId || undefined
           })
         }).catch(err => {

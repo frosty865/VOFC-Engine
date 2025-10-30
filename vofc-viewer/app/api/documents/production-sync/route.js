@@ -115,7 +115,22 @@ export async function POST() {
     }
 
     console.log(`✅ Production sync completed: ${insertedData.length} new documents`);
-    
+
+    // Fire-and-forget auto-processing for newly synced documents
+    try {
+      const baseUrl = process.env.VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL}`
+        : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
+      for (const doc of insertedData) {
+        fetch(`${baseUrl}/api/documents/process-one`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ submissionId: doc.id })
+        }).catch(() => {});
+        await new Promise(r => setTimeout(r, 150));
+      }
+    } catch {}
+
     return NextResponse.json({
       success: true,
       message: `Production sync completed: ${insertedData.length} new documents`,
