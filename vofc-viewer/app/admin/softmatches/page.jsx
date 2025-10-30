@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { fetchWithAuth } from '../../lib/fetchWithAuth'
 
 export default function SoftmatchesPage() {
   const [rows, setRows] = useState([])
@@ -11,7 +12,7 @@ export default function SoftmatchesPage() {
     let isMounted = true
     const load = async () => {
       try {
-        const res = await fetch('/api/dashboard/softmatches', { cache: 'no-store' })
+        const res = await fetchWithAuth('/api/dashboard/softmatches', { cache: 'no-store' })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const data = await res.json()
         if (isMounted) setRows(Array.isArray(data) ? data : [])

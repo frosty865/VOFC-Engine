@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { fetchWithAuth } from '../lib/fetchWithAuth'
 
 export default function AdminOverviewPage() {
   const [stats, setStats] = useState([])
@@ -12,7 +13,7 @@ export default function AdminOverviewPage() {
     let isMounted = true
     const load = async () => {
       try {
-        const res = await fetch('/api/dashboard/overview', { cache: 'no-store' })
+        const res = await fetchWithAuth('/api/dashboard/overview', { cache: 'no-store' })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const json = await res.json()
         if (isMounted) {
