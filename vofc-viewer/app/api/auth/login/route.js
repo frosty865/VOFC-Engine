@@ -126,12 +126,20 @@ export async function POST(request) {
     });
 
     // Set the access token and refresh token as HTTP-only cookies
+    const cookieDomain = (() => {
+      const explicit = process.env.AUTH_COOKIE_DOMAIN;
+      if (explicit) return explicit;
+      const site = process.env.NEXT_PUBLIC_SITE_URL || '';
+      if (site.includes('zophielgroup.com')) return '.zophielgroup.com';
+      return undefined;
+    })();
     if (data.session?.access_token) {
       response.cookies.set('sb-access-token', data.session.access_token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
+        domain: cookieDomain,
         maxAge: 60 * 60 * 24 * 7 // 7 days
       });
     }
@@ -142,6 +150,7 @@ export async function POST(request) {
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
+        domain: cookieDomain,
         maxAge: 60 * 60 * 24 * 30 // 30 days
       });
     }
