@@ -1,21 +1,32 @@
-import { createClient } from '@supabase/supabase-js'
-export const dynamic = 'force-dynamic'
-export const fetchCache = 'force-no-store'
+'use client'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-)
+import { useEffect, useState } from 'react'
 
-export default async function SoftmatchesPage() {
-  const { data, error } = await supabase
-    .from('v_recent_softmatches')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(100)
+export default function SoftmatchesPage() {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  if (error)
-    return <div className="text-red-600 p-4">Error loading soft matches: {error.message}</div>
+  useEffect(() => {
+    let isMounted = true
+    const load = async () => {
+      try {
+        const res = await fetch('/api/dashboard/softmatches', { cache: 'no-store' })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        if (isMounted) setRows(Array.isArray(data) ? data : [])
+      } catch (e) {
+        if (isMounted) setError(e.message)
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+    load()
+    const id = setInterval(load, 30000)
+    return () => { isMounted = false; clearInterval(id) }
+  }, [])
+
+  if (error) return <div className="text-red-600 p-4">Error loading soft matches: {error}</div>
 
   return (
     <div>
@@ -31,7 +42,7 @@ export default async function SoftmatchesPage() {
             </tr>
           </thead>
           <tbody>
-            {data?.map((r, i) => (
+            {rows?.map((r, i) => (
               <tr key={i} className="border-t hover:bg-gray-50">
                 <td className="p-3 max-w-md text-gray-800">{r.new_text}</td>
                 <td className="p-3 text-right">{r.similarity?.toFixed(3)}</td>
@@ -44,6 +55,13 @@ export default async function SoftmatchesPage() {
               <tr>
                 <td className="p-3" colSpan="4">
                   <p className="text-gray-500">No soft match data yet.</p>
+                </td>
+              </tr>
+            )}
+            {loading && (
+              <tr>
+                <td className="p-3" colSpan={4}>
+                  <p className="text-gray-500">Loading...</p>
                 </td>
               </tr>
             )}

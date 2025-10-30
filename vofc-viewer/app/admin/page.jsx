@@ -1,23 +1,36 @@
-import { createClient } from '@supabase/supabase-js'
-export const dynamic = 'force-dynamic'
-export const fetchCache = 'force-no-store'
+'use client'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-)
+import { useEffect, useState } from 'react'
 
-export default async function AdminOverviewPage() {
-  const { data: stats } = await supabase
-    .from('v_learning_overview')
-    .select('*')
-    .order('updated_at', { ascending: false })
-    .limit(3)
+export default function AdminOverviewPage() {
+  const [stats, setStats] = useState([])
+  const [soft, setSoft] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  const { data: soft } = await supabase
-    .from('v_recent_softmatches')
-    .select('*')
-    .limit(5)
+  useEffect(() => {
+    let isMounted = true
+    const load = async () => {
+      try {
+        const res = await fetch('/api/dashboard/overview', { cache: 'no-store' })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const json = await res.json()
+        if (isMounted) {
+          setStats(json.stats || [])
+          setSoft(json.soft || [])
+        }
+      } catch (e) {
+        if (isMounted) setError(e.message)
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+    load()
+    const id = setInterval(load, 30000)
+    return () => { isMounted = false; clearInterval(id) }
+  }, [])
+
+  if (error) return <div className="text-red-600 p-4">Error: {error}</div>
 
   return (
     <div className="space-y-8">
@@ -34,6 +47,7 @@ export default async function AdminOverviewPage() {
               </div>
             </div>
           )) || <p className="text-gray-500">No data available</p>}
+          {loading && <p className="text-gray-500">Loading...</p>}
         </div>
       </section>
 
@@ -48,6 +62,7 @@ export default async function AdminOverviewPage() {
               </div>
             </li>
           )) || <p className="p-3 text-gray-500">No soft matches yet</p>}
+          {loading && <li className="p-3 text-sm text-gray-500">Loading...</li>}
         </ul>
       </section>
     </div>
