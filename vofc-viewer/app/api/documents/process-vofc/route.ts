@@ -32,16 +32,23 @@ const DISCIPLINE_CATEGORIES = [
   'Surveillance Systems', 'Intrusion Detection', 'Command and Control'
 ]
 
-// ---- GPU-optimized processing functions ----
-async function processBatchWithRetry(batch: {page:number; text:string}[], batchIndex: number): Promise<any[]> {
-  let lastError: Error | null = null
+// ---- Multi-model processing pipeline ----
+const MODELS = [
+  { name: 'vofc-engine:latest', weight: 0.6, role: 'primary' },
+  { name: 'mistral:latest', weight: 0.25, role: 'validation' },
+  { name: 'llama3:latest', weight: 0.15, role: 'cross-check' }
+]
+
+async function processWithMultipleModels(batch: {page:number; text:string}[]): Promise<any[]> {
+  console.log(`🔄 Processing with ${MODELS.length} models...`)
   
-  for (let attempt = 1; attempt <= GPU_CONFIG.retryAttempts; attempt++) {
+  // Process with all models in parallel
+  const modelPromises = MODELS.map(async (modelConfig) => {
     try {
-      console.log(`Processing batch ${batchIndex}, attempt ${attempt}/${GPU_CONFIG.retryAttempts}`)
+      console.log(`🤖 Processing with ${modelConfig.name} (${modelConfig.role})`)
       
       const result = await ollamaChatJSON({ 
-        model: process.env.OLLAMA_MODEL || 'vofc-engine:latest',
+        model: modelConfig.name,
         prompt: buildPrompt(batch),
         temperature: GPU_CONFIG.temperature,
         top_p: GPU_CONFIG.topP,
@@ -49,9 +56,70 @@ async function processBatchWithRetry(batch: {page:number; text:string}[], batchI
         timeout: GPU_CONFIG.batchTimeout
       })
       
-      if (Array.isArray(result) && result.length > 0) {
-        console.log(`Batch ${batchIndex} completed successfully with ${result.length} items`)
-        return result
+      return {
+        model: modelConfig.name,
+        role: modelConfig.role,
+        weight: modelConfig.weight,
+        result: Array.isArray(result) ? result : []
+      }
+    } catch (error) {
+      console.warn(`⚠️ ${modelConfig.name} failed:`, error.message)
+      return {
+        model: modelConfig.name,
+        role: modelConfig.role,
+        weight: modelConfig.weight,
+        result: []
+      }
+    }
+  })
+  
+  const modelResults = await Promise.allSettled(modelPromises)
+  
+  // Combine results from all models
+  const allResults: any[] = []
+  const modelData = modelResults
+    .filter(result => result.status === 'fulfilled')
+    .map(result => (result as PromiseFulfilledResult<any>).value)
+  
+  // Primary model results (vofc-engine)
+  const primaryModel = modelData.find(m => m.role === 'primary')
+  if (primaryModel && primaryModel.result.length > 0) {
+    allResults.push(...primaryModel.result)
+  }
+  
+  // Validation and cross-check from other models
+  const validationModels = modelData.filter(m => m.role !== 'primary')
+  for (const validationModel of validationModels) {
+    if (validationModel.result.length > 0) {
+      // Add unique results that weren't found by primary model
+      for (const item of validationModel.result) {
+        const isDuplicate = allResults.some(existing => 
+          normalizeVulnerabilityText(existing.vulnerability) === normalizeVulnerabilityText(item.vulnerability)
+        )
+        if (!isDuplicate) {
+          allResults.push(item)
+        }
+      }
+    }
+  }
+  
+  console.log(`✅ Multi-model processing complete: ${allResults.length} total items`)
+  return allResults
+}
+
+async function processBatchWithRetry(batch: {page:number; text:string}[], batchIndex: number): Promise<any[]> {
+  let lastError: Error | null = null
+  
+  for (let attempt = 1; attempt <= GPU_CONFIG.retryAttempts; attempt++) {
+    try {
+      console.log(`Processing batch ${batchIndex}, attempt ${attempt}/${GPU_CONFIG.retryAttempts}`)
+      
+      // Use multi-model pipeline for better results
+      const results = await processWithMultipleModels(batch)
+      
+      if (Array.isArray(results) && results.length > 0) {
+        console.log(`Batch ${batchIndex} completed successfully with ${results.length} items`)
+        return results
       } else {
         console.warn(`Batch ${batchIndex} returned empty or invalid result`)
         return []
@@ -237,33 +305,32 @@ function splitIntoChunks(textByPages: string[]): {page:number; text:string}[] {
   })
 }
 
-// Helper function to move file using Ollama server API (if custom server available)
+// Helper function to move file using local Ollama server API
 async function moveFile(filename: string, source: string, target: string) {
-  const ollamaUrl = resolveOllamaBase()
+  const localOllamaUrl = 'http://127.0.0.1:5000'
   try {
-    const response = await fetch(`${ollamaUrl}/api/files/move`, {
+    const response = await fetch(`${localOllamaUrl}/api/files/move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filename, source, target })
     })
     if (!response.ok) {
-      throw new Error(`Custom server returned ${response.status}`)
+      throw new Error(`Local server returned ${response.status}`)
     }
     return await response.json()
   } catch (error) {
-    console.warn(`⚠️ Custom server not available for file operations: ${error.message}`)
-    // In Supabase-only mode, we'll just log the operation
-    console.log(`📁 Would move ${filename} from ${source} to ${target}`)
-    return { success: true, message: 'File operation logged (custom server not available)' }
+    console.error(`❌ Local Ollama server not available for file operations: ${error.message}`)
+    console.log('💡 Make sure to run: cd vofc-viewer/ollama && python server.py')
+    throw new Error(`File operation failed: ${error.message}`)
   }
 }
 
-// Helper function to write processed JSON to processed folder (if custom server available)
+// Helper function to write processed JSON to processed folder using local Ollama server
 async function writeProcessedFile(filename: string, content: any) {
-  const ollamaUrl = resolveOllamaBase()
+  const localOllamaUrl = 'http://127.0.0.1:5000'
   const jsonFilename = filename.replace(/\.pdf$/i, '.json')
   try {
-    const response = await fetch(`${ollamaUrl}/api/files/write`, {
+    const response = await fetch(`${localOllamaUrl}/api/files/write`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -273,14 +340,13 @@ async function writeProcessedFile(filename: string, content: any) {
       })
     })
     if (!response.ok) {
-      throw new Error(`Custom server returned ${response.status}`)
+      throw new Error(`Local server returned ${response.status}`)
     }
     return await response.json()
   } catch (error) {
-    console.warn(`⚠️ Custom server not available for file operations: ${error.message}`)
-    // In Supabase-only mode, we'll just log the operation
-    console.log(`📁 Would write processed JSON: ${jsonFilename}`)
-    return { success: true, message: 'File operation logged (custom server not available)' }
+    console.error(`❌ Local Ollama server not available for file operations: ${error.message}`)
+    console.log('💡 Make sure to run: cd vofc-viewer/ollama && python server.py')
+    throw new Error(`File write operation failed: ${error.message}`)
   }
 }
 
@@ -293,45 +359,28 @@ export async function POST(req: Request) {
     submissionId = body.submissionId
     if (!fileName) throw new Error('fileName is required')
 
-    const ollamaUrl = resolveOllamaBase()
-    
-    // 1) Try to get PDF from custom Flask server first, then fallback to Supabase
-    console.log(`📥 Fetching ${fileName} from Ollama server...`)
+    // 1) Get PDF from local Ollama server (Flask server running on localhost:5000)
+    console.log(`📥 Fetching ${fileName} from local Ollama server...`)
     let arrayBuffer: ArrayBuffer
     let buf: Buffer
     
     try {
-      const fileResponse = await fetch(`${ollamaUrl}/api/files/get/${encodeURIComponent(fileName)}`, {
+      const localOllamaUrl = 'http://127.0.0.1:5000'
+      const fileResponse = await fetch(`${localOllamaUrl}/api/files/get/${encodeURIComponent(fileName)}`, {
         method: 'GET',
       })
       
       if (!fileResponse.ok) {
-        throw new Error(`Custom server returned ${fileResponse.status}`)
+        throw new Error(`Local Ollama server returned ${fileResponse.status}`)
       }
       
       arrayBuffer = await fileResponse.arrayBuffer()
       buf = Buffer.from(arrayBuffer)
-      console.log(`✅ Retrieved ${fileName} from Ollama server (${buf.length} bytes)`)
-    } catch (customError) {
-      console.warn(`⚠️ Custom server not available: ${customError.message}`)
-      
-      // Fallback: Get file from Supabase storage
-      if (!supabaseAdmin) {
-        throw new Error('No file storage available - neither custom server nor Supabase admin')
-      }
-      
-      console.log(`📥 Fetching ${fileName} from Supabase storage...`)
-      const { data: fileData, error: downloadError } = await supabaseAdmin.storage
-        .from('submissions')
-        .download(fileName)
-      
-      if (downloadError || !fileData) {
-        throw new Error(`File not found in Supabase storage: ${fileName} - ${downloadError?.message}`)
-      }
-      
-      arrayBuffer = await fileData.arrayBuffer()
-      buf = Buffer.from(arrayBuffer)
-      console.log(`✅ Retrieved ${fileName} from Supabase storage (${buf.length} bytes)`)
+      console.log(`✅ Retrieved ${fileName} from local Ollama server (${buf.length} bytes)`)
+    } catch (localError) {
+      console.error(`❌ Local Ollama server not available: ${localError.message}`)
+      console.log('💡 Make sure to run: cd vofc-viewer/ollama && python server.py')
+      throw new Error(`Local Ollama server not running: ${localError.message}`)
     }
 
     // 2) Extract text per page
