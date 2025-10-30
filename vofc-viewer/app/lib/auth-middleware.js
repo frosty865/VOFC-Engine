@@ -28,7 +28,13 @@ export async function requireAdmin(request) {
             .maybeSingle();
           profile = resp.data || null;
         }
-        const role = String(profile?.role || (profile?.is_admin ? 'admin' : '') || user.user_metadata?.role || 'user').toLowerCase();
+        let role = String(profile?.role || (profile?.is_admin ? 'admin' : '') || user.user_metadata?.role || 'user').toLowerCase();
+        if (role === 'user') {
+          const allowlist = (process.env.ADMIN_EMAILS || '').toLowerCase().split(',').map(s=>s.trim()).filter(Boolean);
+          if (allowlist.includes(String(user.email).toLowerCase())) {
+            role = 'admin';
+          }
+        }
         if (['admin','spsa'].includes(role)) {
           return { user: { id: user.id, email: user.email, role }, error: null };
         }

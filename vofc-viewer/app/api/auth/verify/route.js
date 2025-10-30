@@ -72,9 +72,16 @@ export async function GET(request) {
     }
 
     // Derive role with robust fallbacks
-    const derivedRole = String(
+    let derivedRole = String(
       profile?.role || (profile?.is_admin ? 'admin' : '') || user.user_metadata?.role || 'user'
     ).toLowerCase();
+    // Final fallback: allow admin via configured email allowlist (comma-separated)
+    if (derivedRole === 'user') {
+      const allowlist = (process.env.ADMIN_EMAILS || '').toLowerCase().split(',').map(s=>s.trim()).filter(Boolean);
+      if (allowlist.includes(String(user.email).toLowerCase())) {
+        derivedRole = 'admin';
+      }
+    }
 
     return NextResponse.json({
       success: true,
