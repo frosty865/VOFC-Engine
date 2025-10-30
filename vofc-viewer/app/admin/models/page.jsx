@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
-
-export const revalidate = 60
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,

@@ -1,4 +1,5 @@
 export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
 
 export default async function SystemStatusPage() {
   const res = await fetch('/api/dashboard/system', { cache: 'no-store' })
