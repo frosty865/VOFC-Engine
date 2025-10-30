@@ -2,6 +2,7 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
+import { supabase } from '../app/lib/supabaseClient';
 // Removed localStorage dependencies - now using secure server-side authentication
 import '../styles/cisa.css';
 import PropTypes from 'prop-types';
@@ -32,19 +33,30 @@ export default function Navigation({ simple = false }) {
 
   const loadUser = async () => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       const response = await fetch('/api/auth/verify', {
         method: 'GET',
-        credentials: 'include'
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
-          const normalizedRole = String(result.user?.role || 'user').toLowerCase();
+          const rawRole = result.user?.role || result.user?.group || 'user';
+          const normalizedRole = String(rawRole).toLowerCase();
           setCurrentUser({ ...result.user, role: normalizedRole });
+          return;
         }
       }
-      // Silent failure for 401 - user just isn't logged in yet
+      // Fallback to client session for nav display only
+      const { data: userData } = await supabase.auth.getUser();
+      const u = userData?.user;
+      if (u) {
+        const role = (u.user_metadata?.role || 'user').toLowerCase();
+        setCurrentUser({ id: u.id, email: u.email, role, full_name: u.user_metadata?.name || u.email });
+      }
     } catch (error) {
       // Silently handle errors during auth check
       // This is normal when user isn't authenticated
@@ -55,19 +67,15 @@ export default function Navigation({ simple = false }) {
 
   const handleLogout = async () => {
     try {
-      const response = await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include'
-      });
-      
-      if (response.ok) {
-        setCurrentUser(null);
-        window.location.href = '/splash';
-      } else {
-        console.error('Logout failed');
-      }
+      // Clear Supabase session locally
+      await supabase.auth.signOut();
+      // Also clear server cookies (best-effort)
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     } catch (error) {
       console.error('Logout error:', error);
+    } finally {
+      setCurrentUser(null);
+      window.location.href = '/splash';
     }
   };
 
@@ -87,7 +95,9 @@ export default function Navigation({ simple = false }) {
                 <Link href="/submit" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Submit new vulnerabilities for review">Submit New Vulnerability</Link>
                 <Link href="/submit-psa" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Submit documents for processing">Submit Documents</Link>
                 <Link href="/assessment" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Generate vulnerability assessments">Generate Assessment</Link>
-                {/* Admin link gated in full Navigation; hidden in simple header */}
+                {currentUser && (['admin','spsa'].includes(String(currentUser.role).toLowerCase()) || currentUser.is_admin === true) && (
+                  <Link href="/admin" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Admin Dashboard">Admin</Link>
+                )}
                 <Link href="/learning" className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white" title="Monitor continuous learning system">Learning Monitor</Link>
               </div>
             </div>

@@ -33,10 +33,13 @@ export default function Navigation({ simple = false }) {
 
   const loadUser = async () => {
     try {
-      // Use server-verified endpoint to avoid client REST 406s
+      // Include Supabase access token so /api/auth/verify can validate
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       const response = await fetch('/api/auth/verify', {
         method: 'GET',
-        credentials: 'include'
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       if (!response.ok) {
         setCurrentUser(null);
@@ -44,13 +47,21 @@ export default function Navigation({ simple = false }) {
         return;
       }
       const result = await response.json();
-      if (!result.success || !result.user) {
-        setCurrentUser(null);
-        setLoading(false);
-        return;
+      if (result.success && result.user) {
+        const rawRole = result.user.role || result.user.group || 'user';
+        const normalizedRole = String(rawRole).toLowerCase();
+        setCurrentUser({ ...result.user, role: normalizedRole });
+      } else {
+        // Fallback: read user from Supabase client for nav-only rendering
+        const { data: userData } = await supabase.auth.getUser();
+        const u = userData?.user;
+        if (u) {
+          const role = (u.user_metadata?.role || 'user').toLowerCase();
+          setCurrentUser({ id: u.id, email: u.email, role, full_name: u.user_metadata?.name || u.email });
+        } else {
+          setCurrentUser(null);
+        }
       }
-      const normalizedRole = String(result.user.role || 'user').toLowerCase();
-      setCurrentUser({ ...result.user, role: normalizedRole });
     } catch (error) {
       console.error('Error loading user:', error);
       setCurrentUser(null);
