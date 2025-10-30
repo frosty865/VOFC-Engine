@@ -216,37 +216,62 @@ export async function GET() {
         };
       });
     } else {
-      // Supabase-only mode - categorize by submission status
+      // Supabase-only mode - categorize by submission status and presence of extraction
       console.log('📊 Using Supabase-only mode for document categorization');
       
+      const pendingStatuses = new Set(['pending_review', 'pending', 'uploaded', 'new', 'submitted', null, undefined, '']);
+      
       submissions.forEach(sub => {
-        const subData = typeof sub.data === 'string' ? JSON.parse(sub.data) : sub.data;
-        const filename = subData?.document_name || subData?.filename || sub.filename;
-        
-        if (!filename) return;
-        
-        const docInfo = {
-          id: sub.id,
-          filename: filename,
-          status: sub.status,
-          source: 'submission',
-          size: Number(subData?.document_size) || 0,
-          modified: sub.updated_at || sub.created_at || new Date().toISOString(),
-          path: subData?.local_file_path || null,
-          created_at: sub.created_at || new Date().toISOString(),
-          submitted_by: submissionMap[filename]?.submitted_by || 'System',
-          submitted_by_email: submissionMap[filename]?.submitted_by_email || null,
-          submitted_at: submissionMap[filename]?.submitted_at || sub.created_at || null,
-          data: typeof sub.data === 'string' ? sub.data : JSON.stringify(sub.data)
-        };
-        
-        // Categorize by status
-        if (sub.status === 'pending_review' || sub.status === 'processing') {
-          documentsFromIncoming.push(docInfo);
-        } else if (sub.status === 'approved' || sub.status === 'completed') {
-          completedFromLibrary.push(docInfo);
-        } else if (sub.status === 'rejected' || sub.status === 'failed') {
-          failedFromErrors.push(docInfo);
+        try {
+          const subData = typeof sub.data === 'string' ? JSON.parse(sub.data) : sub.data;
+          const filename = subData?.document_name || subData?.filename || sub.filename;
+          if (!filename) return;
+          
+          const hasExtraction = Boolean(
+            subData?.enhanced_extraction && Array.isArray(subData.enhanced_extraction) && subData.enhanced_extraction.length > 0
+          ) || Boolean(subData?.parsed_at);
+          
+          const docInfo = {
+            id: sub.id,
+            filename: filename,
+            status: sub.status,
+            source: 'submission',
+            size: Number(subData?.document_size) || 0,
+            modified: sub.updated_at || sub.created_at || new Date().toISOString(),
+            path: subData?.local_file_path || null,
+            created_at: sub.created_at || new Date().toISOString(),
+            submitted_by: submissionMap[filename]?.submitted_by || 'System',
+            submitted_by_email: submissionMap[filename]?.submitted_by_email || null,
+            submitted_at: submissionMap[filename]?.submitted_at || sub.created_at || null,
+            data: typeof sub.data === 'string' ? sub.data : JSON.stringify(sub.data)
+          };
+          
+          // Pending if status is in pendingStatuses OR no extraction yet
+          if (pendingStatuses.has(sub.status) || !hasExtraction) {
+            if (sub.status === 'processing') {
+              // processing will be added to processing list below; keep out of pending
+            } else {
+              documentsFromIncoming.push(docInfo);
+            }
+            return;
+          }
+          
+          if (sub.status === 'processing') {
+            // handled below in processingDocs
+            return;
+          }
+          
+          if (sub.status === 'approved' || sub.status === 'completed') {
+            completedFromLibrary.push(docInfo);
+            return;
+          }
+          
+          if (sub.status === 'rejected' || sub.status === 'failed') {
+            failedFromErrors.push(docInfo);
+            return;
+          }
+        } catch (e) {
+          // ignore bad rows
         }
       });
     }
