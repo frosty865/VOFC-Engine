@@ -48,18 +48,55 @@ export async function POST(request) {
     }
 
     // Get user profile from user_profiles table using the same service role client
-    const { data: profile, error: profileError } = await serviceSupabase
-      .from('user_profiles')
-      .select('role, first_name, last_name, organization, is_active, username')
-      .eq('id', data.user.id)
-      .single();
+    let profile = null;
+    let profileError = null;
+    // Try by canonical id first
+    {
+      const res = await serviceSupabase
+        .from('user_profiles')
+        .select('role, first_name, last_name, organization, is_active, username')
+        .eq('id', data.user.id)
+        .single();
+      profile = res.data;
+      profileError = res.error;
+    }
+    // Fallback: some databases may still use user_id column
+    if ((!profile || profileError) && profileError?.code === 'PGRST116') {
+      const resFallback = await serviceSupabase
+        .from('user_profiles')
+        .select('role, first_name, last_name, organization, is_active, username')
+        .eq('user_id', data.user.id)
+        .single();
+      profile = resFallback.data;
+      profileError = resFallback.error;
+    }
 
-    if (profileError || !profile) {
-      console.error('Profile fetch error:', profileError);
-      return NextResponse.json(
-        { success: false, error: 'User profile not found' },
-        { status: 401 }
-      );
+    // Auto-create minimal active profile on first login if missing
+    if (!profile) {
+      const firstName = data.user.user_metadata?.first_name || '';
+      const lastName = data.user.user_metadata?.last_name || '';
+      const newProfile = {
+        id: data.user.id,
+        role: data.user.user_metadata?.role || 'user',
+        first_name: firstName,
+        last_name: lastName,
+        organization: data.user.user_metadata?.organization || null,
+        is_active: true,
+        username: data.user.user_metadata?.username || data.user.email
+      };
+      const { data: inserted, error: insertError } = await serviceSupabase
+        .from('user_profiles')
+        .upsert(newProfile, { onConflict: 'id' })
+        .select('role, first_name, last_name, organization, is_active, username')
+        .single();
+      if (insertError) {
+        console.error('Profile create error:', insertError);
+        return NextResponse.json(
+          { success: false, error: 'User profile not found' },
+          { status: 401 }
+        );
+      }
+      profile = inserted;
     }
 
     if (!profile.is_active) {
