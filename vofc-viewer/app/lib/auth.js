@@ -46,9 +46,8 @@ export const canAccessAdmin = async () => {
 export const canSubmitVOFC = async () => {
   try {
     const user = await getCurrentUser();
-    if (!user) return false;
-    
-    return ['admin', 'spsa', 'analyst', 'psa'].includes(user.role);
+    // Allow any authenticated user to submit documents (RLS will enforce specifics)
+    return !!user;
   } catch (error) {
     console.error('Error checking submit access:', error);
     return false;

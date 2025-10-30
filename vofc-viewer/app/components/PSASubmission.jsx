@@ -38,7 +38,7 @@ export default function PSASubmission() {
 
       const canSubmit = await canSubmitVOFC();
       if (!canSubmit) {
-        router.push('/');
+        router.push('/login');
         return;
       }
 
