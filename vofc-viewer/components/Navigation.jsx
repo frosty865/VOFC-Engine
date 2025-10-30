@@ -378,7 +378,7 @@ export default function Navigation({ simple = false }) {
           >
             📊 Generate Assessment
           </Link>
-          {currentUser && (['admin','spsa','psa','analyst'].includes(String(currentUser.role).toLowerCase()) || currentUser.is_admin === true) && (
+          {currentUser && (['admin','spsa'].includes(String(currentUser.role).toLowerCase()) || currentUser.is_admin === true) && (
             <>
               <Link
                 href="/admin"

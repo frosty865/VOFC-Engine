@@ -1,394 +1,55 @@
-'use client';
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { fetchVulnerabilities, fetchVOFC } from '../lib/fetchVOFC';
-import { getCurrentUser, getUserProfile, canAccessAdmin } from '../lib/auth';
-import { supabase } from '../lib/supabaseClient';
+import { createClient } from '@supabase/supabase-js'
 
-export default function AdminPage() {
-  const [stats, setStats] = useState({
-    vulnerabilities: 0,
-    ofcs: 0,
-    users: 0,
-    pendingVulnerabilities: 0,
-    pendingOFCs: 0
-  });
-  const [dbHealth, setDbHealth] = useState({
-    connection: 'Unknown',
-    responseTime: 0,
-    lastChecked: null
-  });
-  const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState(null);
-  const [userRole, setUserRole] = useState(null);
-  const [showBackToTop, setShowBackToTop] = useState(false);
-  const router = useRouter();
+export const revalidate = 30
 
-  useEffect(() => {
-    checkAuth();
-    loadStats();
-    checkDatabaseHealth();
-  }, []);
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+)
 
-  useEffect(() => {
-    const handleScroll = () => {
-      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-      setShowBackToTop(scrollTop > 300);
-    };
+export default async function AdminOverviewPage() {
+  const { data: stats } = await supabase
+    .from('v_learning_overview')
+    .select('*')
+    .order('updated_at', { ascending: false })
+    .limit(3)
 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        loadStats();
-        checkDatabaseHealth();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, []);
-
-  const checkAuth = async () => {
-    try {
-      const user = await getCurrentUser();
-      if (!user) {
-        console.log('No user found, redirecting to login');
-        router.push('/login');
-        return;
-      }
-
-      // Get full user profile
-      const profile = await getUserProfile(user.id);
-
-      // Check admin access
-      const canAccess = await canAccessAdmin();
-      
-      if (!canAccess) {
-        alert('You do not have admin access. Required roles: admin, spsa, psa, or analyst');
-        router.push('/');
-        return;
-      }
-
-      // Set user and role from the authenticated user object
-      setCurrentUser(user);
-      setUserRole(profile?.role || user?.role || 'user');
-      
-      console.log('Admin access granted:', { 
-        email: user.email, 
-        role: profile?.role || user?.role, 
-        canAccess,
-        userId: user.id
-      });
-    } catch (error) {
-      console.error('Auth check failed:', error);
-      router.push('/login');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadStats = async () => {
-    try {
-      // Use API route that bypasses RLS with service role key
-      const response = await fetch('/api/admin/stats');
-      
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          console.warn('Unauthorized access to admin stats');
-          return;
-        }
-        throw new Error(`Stats API error: ${response.status}`);
-      }
-
-      const result = await response.json();
-      
-      if (result.success && result.stats) {
-        setStats({
-          vulnerabilities: result.stats.vulnerabilities || 0,
-          ofcs: result.stats.ofcs || 0,
-          users: result.stats.users || 0,
-          pendingVulnerabilities: result.stats.pendingVulnerabilities || 0,
-          pendingOFCs: result.stats.pendingOFCs || 0
-        });
-      } else {
-        console.warn('Stats API returned unsuccessful response');
-      }
-    } catch (error) {
-      console.error('Error loading stats:', error);
-      // Fallback to empty stats
-      setStats({
-        vulnerabilities: 0,
-        ofcs: 0,
-        users: 0,
-        pendingVulnerabilities: 0,
-        pendingOFCs: 0
-      });
-    }
-  };
-
-  const checkDatabaseHealth = async () => {
-    const startTime = Date.now();
-    try {
-      // Ensure session is loaded
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        setDbHealth({
-          connection: 'Unauthenticated',
-          responseTime: 0,
-          lastChecked: new Date().toLocaleTimeString()
-        });
-        return;
-      }
-
-      // Use proper query syntax
-      const { data, error } = await supabase
-        .from('vulnerabilities')
-        .select('*', { count: 'exact', head: true });
-      
-      const responseTime = Date.now() - startTime;
-      
-      setDbHealth({
-        connection: error ? 'Error' : 'Connected',
-        responseTime: responseTime,
-        lastChecked: new Date().toLocaleTimeString(),
-        error: error?.message
-      });
-    } catch (error) {
-      setDbHealth({
-        connection: 'Error',
-        responseTime: 0,
-        lastChecked: new Date().toLocaleTimeString(),
-        error: error.message
-      });
-    }
-  };
-
-  const handleSignOut = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Error signing out:', error);
-      } else {
-        router.push('/splash');
-      }
-    } catch (error) {
-      console.error('Error signing out:', error);
-      router.push('/splash');
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading admin panel...</p>
-        </div>
-      </div>
-    );
-  }
+  const { data: soft } = await supabase
+    .from('v_recent_softmatches')
+    .select('*')
+    .limit(5)
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-blue-900 text-white p-4">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold">Admin Panel</h1>
-            <p className="text-blue-200">System Administration and Management</p>
-          </div>
-          <div className="flex items-center space-x-4">
-            <span className="text-sm">Welcome, {currentUser?.email}</span>
-            <button
-              onClick={handleSignOut}
-              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
-            >
-              Sign Out
-            </button>
-          </div>
+    <div className="space-y-8">
+      <section>
+        <h2 className="text-lg font-semibold mb-2">Model Performance Summary</h2>
+        <div className="grid md:grid-cols-3 gap-4">
+          {stats?.map((s) => (
+            <div key={s.model_version} className="bg-white shadow p-4 rounded-xl">
+              <div className="font-medium">{s.model_version}</div>
+              <div className="text-sm text-gray-500">Last updated {new Date(s.updated_at).toLocaleString()}</div>
+              <div className="mt-3 text-sm">
+                <p>Accept rate: <strong>{(s.accept_rate * 100).toFixed(1)}%</strong></p>
+                <p>Softmatch ratio: <strong>{(s.softmatch_ratio * 100).toFixed(1)}%</strong></p>
+              </div>
+            </div>
+          )) || <p className="text-gray-500">No data available</p>}
         </div>
-      </div>
+      </section>
 
-      <div className="max-w-7xl mx-auto p-6">
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-3 rounded-full bg-red-100 text-red-600">
-                <i className="fas fa-shield-alt text-xl"></i>
+      <section>
+        <h2 className="text-lg font-semibold mb-2">Recent Soft Matches</h2>
+        <ul className="bg-white shadow rounded-xl divide-y">
+          {soft?.map((r, i) => (
+            <li key={i} className="p-3 text-sm">
+              <div>{r.new_text}</div>
+              <div className="text-gray-500 text-xs">
+                sim {r.similarity?.toFixed(3)} • {r.source_doc}
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Vulnerabilities</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.vulnerabilities}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-3 rounded-full bg-blue-100 text-blue-600">
-                <i className="fas fa-lightbulb text-xl"></i>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">OFCs</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.ofcs}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-3 rounded-full bg-green-100 text-green-600">
-                <i className="fas fa-users text-xl"></i>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Users</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.users}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-3 rounded-full bg-yellow-100 text-yellow-600">
-                <i className="fas fa-clock text-xl"></i>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Pending</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.pendingVulnerabilities + stats.pendingOFCs}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Database Health and Status */}
-        <div className="card mb-6">
-          <div className="card-header">
-            <div className="flex justify-between items-center">
-              <h2 className="card-title">Database Health and Status</h2>
-              <div className="flex gap-2">
-                <Link href="/admin/users" className="btn btn-primary btn-sm">
-                  <i className="fas fa-users mr-2"></i>
-                  Manage Users
-                </Link>
-              <Link href="/admin/ofcs" className="btn btn-success btn-sm">
-                <i className="fas fa-lightbulb mr-2"></i>
-                Manage OFCs
-              </Link>
-              <Link href="/admin/ofc-requests" className="btn btn-info btn-sm">
-                <i className="fas fa-clipboard-list mr-2"></i>
-                Review OFC Requests
-              </Link>
-              </div>
-            </div>
-          </div>
-          <div className="card-body">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="text-center">
-                <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                  dbHealth.connection === 'Connected' 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-red-100 text-red-800'
-                }`}>
-                  <div className={`w-2 h-2 rounded-full mr-2 ${
-                    dbHealth.connection === 'Connected' ? 'bg-green-500' : 'bg-red-500'
-                  }`}></div>
-                  {dbHealth.connection}
-                </div>
-                <p className="text-sm text-gray-600 mt-1">Database Status</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-gray-900">{dbHealth.responseTime}ms</p>
-                <p className="text-sm text-gray-600">Response Time</p>
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-gray-600">Last Checked</p>
-                <p className="text-sm font-medium text-gray-900">{dbHealth.lastChecked}</p>
-              </div>
-            </div>
-            <div className="mt-4 flex justify-center">
-              <button
-                onClick={() => {
-                  loadStats();
-                  checkDatabaseHealth();
-                }}
-                className="btn btn-secondary btn-sm"
-              >
-                <i className="fas fa-sync-alt mr-2"></i>
-                Refresh Status
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="card mb-6">
-          <div className="card-header">
-            <h2 className="card-title">Quick Actions</h2>
-          </div>
-          <div className="card-body">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Link href="/review" className="btn btn-primary">
-                <i className="fas fa-clipboard-check mr-2"></i>
-                Review Submissions
-              </Link>
-              <Link href="/admin/users" className="btn btn-secondary">
-                <i className="fas fa-users mr-2"></i>
-                Manage Users
-              </Link>
-              <Link href="/admin/ofcs" className="btn btn-success">
-                <i className="fas fa-lightbulb mr-2"></i>
-                Manage OFCs
-              </Link>
-              <Link href="/admin/ofc-requests" className="btn btn-info">
-                <i className="fas fa-clipboard-list mr-2"></i>
-                Review OFC Requests
-              </Link>
-              <button 
-                onClick={async () => {
-                  if (confirm('Generate OFCs for vulnerabilities with fewer than 3 OFCs? This may take a few minutes.')) {
-                    try {
-                      const response = await fetch('/api/admin/generate-ofcs', { method: 'POST' });
-                      const result = await response.json();
-                      if (result.success) {
-                        alert(`OFC generation completed! Processed ${result.vulnerabilities_processed || 0} vulnerabilities.`);
-                      } else {
-                        alert(`OFC generation failed: ${result.error}`);
-                      }
-                    } catch (error) {
-                      alert(`Error: ${error.message}`);
-                    }
-                  }
-                }}
-                className="btn btn-warning"
-              >
-                <i className="fas fa-robot mr-2"></i>
-                Generate OFCs
-              </button>
-              <Link href="/admin/disciplines" className="btn btn-warning">
-                <i className="fas fa-tags mr-2"></i>
-                Manage Disciplines
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        {/* Back to Top Button */}
-        {showBackToTop && (
-          <button
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className="fixed bottom-6 right-6 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-lg transition-all duration-200 z-50"
-          >
-            <i className="fas fa-arrow-up"></i>
-          </button>
-        )}
-      </div>
+            </li>
+          )) || <p className="p-3 text-gray-500">No soft matches yet</p>}
+        </ul>
+      </section>
     </div>
-  );
+  )
 }
