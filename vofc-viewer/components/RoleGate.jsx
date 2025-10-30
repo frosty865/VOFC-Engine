@@ -27,7 +27,7 @@ export default function RoleGate({ children }) {
           setAllowed(true)
         } else {
           console.warn(`Redirected unauthorized role: ${role}`)
-          router.push('/dashboard')
+          router.replace('/dashboard')
         }
       } catch (err) {
         console.error('Auth verify error:', err)

@@ -6,6 +6,8 @@ export const metadata = {
   description: 'Administrative control panel for VOFC Engine analytics and model performance.'
 }
 
+export const dynamic = 'force-dynamic'
+
 export default function AdminLayout({ children }) {
   return (
     <RoleGate>
