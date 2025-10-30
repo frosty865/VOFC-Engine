@@ -22,8 +22,17 @@ export default function RootLayout({ children }) {
           console.log('🟢🟢🟢 PAGE LOADING - BEFORE REACT 🟢🟢🟢');
           window.__pageLoaded = true;
         `}} />
+        <script dangerouslySetInnerHTML={{__html: `
+          console.error('🔴🔴🔴 ABOUT TO RENDER NAVIGATION 🔴🔴🔴');
+        `}} />
         <div className="min-h-screen" style={{backgroundColor: 'var(--cisa-gray-lighter)'}}>
+          <script dangerouslySetInnerHTML={{__html: `
+            console.error('🔴🔴🔴 RENDERING NAVIGATION NOW 🔴🔴🔴');
+          `}} />
           <Navigation />
+          <script dangerouslySetInnerHTML={{__html: `
+            console.error('🔴🔴🔴 AFTER NAVIGATION RENDER 🔴🔴🔴');
+          `}} />
           <main className="w-full py-8">
             {children}
           </main>
