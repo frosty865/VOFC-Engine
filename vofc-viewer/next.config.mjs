@@ -6,22 +6,23 @@ const __dirname = dirname(__filename);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // React/runtime
+  reactStrictMode: true,
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production'
+  },
   // Performance optimizations
   compress: true,
   poweredByHeader: false,
-  swcMinify: true,
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
   // If any page still attempts SSG fetches, cap the wait time hard
-  staticPageGenerationTimeout: 5,
+  staticPageGenerationTimeout: 15,
   
-  // Experimental features (disabled to avoid build hangs)
-  // experimental: {
-  //   serverActions: {
-  //     bodySizeLimit: '10mb'
-  //   },
-  //   // optimizePackageImports: ['@supabase/supabase-js', 'react-icons']
-  // },
+  // Experimental features
+  experimental: {
+    serverActions: true
+  },
   
   // Image optimization
   images: {
