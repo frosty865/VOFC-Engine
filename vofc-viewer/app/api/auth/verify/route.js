@@ -55,20 +55,30 @@ export async function GET(request) {
       );
     }
 
-    // Get user profile
-    const { data: profile, error: profileError } = await supabaseAdmin
+    // Get user profile (role/group/is_admin)
+    const { data: profile } = await supabaseAdmin
       .from('user_profiles')
-      .select('*')
+      .select('role, group, is_admin, full_name, email')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
+
+    // Derive role with robust fallbacks
+    const derivedRole = String(
+      profile?.role ||
+      profile?.group ||
+      (profile?.is_admin ? 'admin' : '') ||
+      user.user_metadata?.role ||
+      'user'
+    ).toLowerCase();
 
     return NextResponse.json({
       success: true,
       user: {
         id: user.id,
         email: user.email,
-        role: profile?.role || user.user_metadata?.role || 'user',
-        name: profile?.full_name || user.user_metadata?.name || user.email
+        role: derivedRole,
+        name: profile?.full_name || user.user_metadata?.name || user.email,
+        is_admin: Boolean(profile?.is_admin)
       }
     });
 
