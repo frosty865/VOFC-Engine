@@ -1,11 +1,34 @@
 // Auth middleware functions for API routes
 import { AuthService } from './auth-server.js';
+import { supabaseAdmin } from '../../lib/supabase-client.js';
 
 export async function requireAuth(request) {
   return await AuthService.requireAuth(request);
 }
 
 export async function requireAdmin(request) {
+  // Prefer Supabase bearer token auth
+  try {
+    const authHeader = request.headers.get('authorization') || '';
+    const hasBearer = authHeader.toLowerCase().startsWith('bearer ');
+    if (hasBearer && supabaseAdmin) {
+      const accessToken = authHeader.slice(7).trim();
+      const { data: { user }, error } = await supabaseAdmin.auth.getUser(accessToken);
+      if (!error && user) {
+        const { data: profile } = await supabaseAdmin
+          .from('user_profiles')
+          .select('role, group, is_admin')
+          .eq('id', user.id)
+          .maybeSingle();
+        const role = String(profile?.role || profile?.group || (profile?.is_admin ? 'admin' : '') || user.user_metadata?.role || 'user').toLowerCase();
+        if (['admin','spsa'].includes(role)) {
+          return { user: { id: user.id, email: user.email, role }, error: null };
+        }
+        return { user: null, error: 'Admin access required' };
+      }
+    }
+  } catch {}
+  // Fallback to legacy JWT if present
   return await AuthService.requireAdmin(request);
 }
 
