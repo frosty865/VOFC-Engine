@@ -63,8 +63,9 @@ export default function SplashPage() {
             console.warn('Failed to set client session:', e);
           }
         }
-        // small delay to ensure session is ready
+        // small delay to ensure session is ready, then refresh
         await new Promise(r => setTimeout(r, 150));
+        try { router.refresh(); } catch {}
         // Track successful login
         trackVOFCEvent.login(result.user?.role || 'unknown');
         // Redirect to dashboard - no localStorage needed

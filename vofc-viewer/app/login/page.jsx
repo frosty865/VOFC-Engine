@@ -61,9 +61,9 @@ export default function Login() {
           }
         }
 
-        // Small delay to ensure session availability
+        // Small delay to ensure session availability, then refresh and navigate
         await new Promise(resolve => setTimeout(resolve, 150));
-        
+        try { router.refresh(); } catch {}
         console.log('Redirecting to home page...');
         router.push('/');
       }
