@@ -12,7 +12,7 @@ export default function DocumentProcessor() {
   const [previewData, setPreviewData] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(null);
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
   const [mounted, setMounted] = useState(false);
 
   // Fetch documents from consolidated API
@@ -64,16 +64,12 @@ export default function DocumentProcessor() {
   }, [mounted]);
 
   useEffect(() => {
-    if (mounted && autoRefresh) {
-      const interval = setInterval(() => {
-        // Only refresh if there are files being processed
-        if (processing.length > 0) {
-          fetchDocuments();
-        }
-      }, 30000); // 30 seconds
-      return () => clearInterval(interval);
-    }
-  }, [mounted, autoRefresh, processing.length]);
+    if (!mounted || !autoRefresh) return;
+    const interval = setInterval(() => {
+      fetchDocuments();
+    }, 15000); // 15 seconds continuous refresh
+    return () => clearInterval(interval);
+  }, [mounted, autoRefresh]);
 
   // Clear completed documents
   const clearCompletedDocuments = async () => {

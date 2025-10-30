@@ -64,6 +64,43 @@ export async function GET() {
       errors: filesByFolder.errors.length
     });
     
+    // Try to fetch remote Ollama file index (for Vercel / remote watchers)
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const resp = await fetch(`${ollamaUrl}/api/files/list`, { method: 'GET', signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (resp.ok) {
+        const remote = await resp.json();
+        const remoteFiles = Array.isArray(remote.files) ? remote.files : [];
+        // Normalize remote entries into our folder buckets when possible
+        for (const rf of remoteFiles) {
+          const filename = rf.filename || rf.name;
+          if (!filename) continue;
+          const mapped = {
+            filename,
+            path: rf.path || null,
+            size: Number(rf.size) || 0,
+            modified: rf.modified || rf.mtime || new Date().toISOString(),
+            created: rf.created || rf.ctime || rf.modified || new Date().toISOString(),
+            folder: (rf.folder || rf.location || '').toLowerCase()
+          };
+          const bucket = ['incoming','processed','library','errors'].includes(mapped.folder) ? mapped.folder : 'incoming';
+          // Avoid duplicates with local scan
+          const exists = filesByFolder[bucket].some(f => f.filename === mapped.filename);
+          if (!exists) filesByFolder[bucket].push(mapped);
+        }
+        console.log('🌐 Merged remote Ollama file index:', {
+          incoming: filesByFolder.incoming.length,
+          processed: filesByFolder.processed.length,
+          library: filesByFolder.library.length,
+          errors: filesByFolder.errors.length
+        });
+      }
+    } catch (e) {
+      console.warn('⚠️ Remote Ollama file index unavailable:', e.message);
+    }
+
     // Combine all files for submission matching
     const ollamaFiles = [
       ...filesByFolder.incoming,
