@@ -52,6 +52,36 @@ export default function AdminOverviewPage() {
       </section>
 
       <section>
+        <h2 className="text-lg font-semibold mb-2">Admin Actions</h2>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <a href="/admin/users" className="bg-white shadow rounded-xl p-4 hover:bg-gray-50">
+            <div className="font-medium">User Management</div>
+            <div className="text-sm text-gray-500">Add, activate, and manage users</div>
+          </a>
+          <a href="/review" className="bg-white shadow rounded-xl p-4 hover:bg-gray-50">
+            <div className="font-medium">Review Submissions</div>
+            <div className="text-sm text-gray-500">Moderate new content</div>
+          </a>
+          <a href="/admin/models" className="bg-white shadow rounded-xl p-4 hover:bg-gray-50">
+            <div className="font-medium">Model Analytics</div>
+            <div className="text-sm text-gray-500">Accept rate, edits, softmatch ratio</div>
+          </a>
+          <a href="/admin/softmatches" className="bg-white shadow rounded-xl p-4 hover:bg-gray-50">
+            <div className="font-medium">Soft Match Audit</div>
+            <div className="text-sm text-gray-500">Near-duplicate detections</div>
+          </a>
+          <a href="/admin/system" className="bg-white shadow rounded-xl p-4 hover:bg-gray-50">
+            <div className="font-medium">System Health</div>
+            <div className="text-sm text-gray-500">Backend and Ollama status</div>
+          </a>
+          <a href="/learning" className="bg-white shadow rounded-xl p-4 hover:bg-gray-50">
+            <div className="font-medium">Learning Monitor</div>
+            <div className="text-sm text-gray-500">Continuous learning overview</div>
+          </a>
+        </div>
+      </section>
+
+      <section>
         <h2 className="text-lg font-semibold mb-2">Recent Soft Matches</h2>
         <ul className="bg-white shadow rounded-xl divide-y">
           {soft?.map((r, i) => (
