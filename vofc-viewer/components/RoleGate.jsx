@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
+import { supabase } from '../app/lib/supabaseClient'
 
 /**
  * RoleGate Component
@@ -17,11 +18,17 @@ export default function RoleGate({ children }) {
   useEffect(() => {
     const verifyUser = async () => {
       try {
-        const res = await fetch('/api/auth/verify', { method: 'GET', credentials: 'include' })
+        const { data: { session } } = await supabase.auth.getSession()
+        const token = session?.access_token
+        const res = await fetch('/api/auth/verify', {
+          method: 'GET',
+          credentials: 'include',
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
         if (!res.ok) throw new Error('Verification failed')
 
         const { user } = await res.json()
-        const role = user?.role || user?.group || 'user'
+        let role = user?.role || user?.group || 'user'
 
         if (['admin', 'spsa'].includes(String(role).toLowerCase())) {
           setAllowed(true)
@@ -30,8 +37,18 @@ export default function RoleGate({ children }) {
           router.replace('/dashboard')
         }
       } catch (err) {
+        // Fallback to client session info for gating if verify fails
+        try {
+          const { data: userData } = await supabase.auth.getUser()
+          const u = userData?.user
+          const role = (u?.user_metadata?.role || 'user').toLowerCase()
+          if (['admin', 'spsa'].includes(role)) {
+            setAllowed(true)
+            return
+          }
+        } catch {}
         console.error('Auth verify error:', err)
-        router.push('/login')
+        router.replace('/login')
       } finally {
         setLoading(false)
       }
