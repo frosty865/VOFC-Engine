@@ -393,8 +393,23 @@ def extract_text_from_pdf(pdf_path):
         from pdf2image import convert_from_path
         import pytesseract
         
+        # Configure poppler path for Windows (default location: C:\tools\poppler\Library\bin)
+        poppler_path = os.getenv('POPPLER_PATH', r'C:\tools\poppler\Library\bin')
+        if not os.path.exists(os.path.join(poppler_path, 'pdftoppm.exe')):
+            # Try alternative common locations
+            alt_paths = [
+                r'C:\poppler\bin',
+                r'C:\tools\poppler\bin',
+                os.path.join(os.path.expanduser('~'), 'poppler', 'bin')
+            ]
+            for alt in alt_paths:
+                if os.path.exists(os.path.join(alt, 'pdftoppm.exe')):
+                    poppler_path = alt
+                    break
+        print(f"   Using poppler from: {poppler_path}")
+        
         # Convert PDF pages to images
-        images = convert_from_path(pdf_path, dpi=200)
+        images = convert_from_path(pdf_path, dpi=200, poppler_path=poppler_path)
         
         # Extract text from each page using OCR
         ocr_text = ""
