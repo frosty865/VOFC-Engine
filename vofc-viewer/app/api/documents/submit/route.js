@@ -1,8 +1,19 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-client.js';
+import { createClient } from '@supabase/supabase-js';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error('❌ Missing Supabase environment variables in submit API');
+}
+
+const supabaseAdmin = supabaseUrl && supabaseServiceKey 
+  ? createClient(supabaseUrl, supabaseServiceKey)
+  : null;
 
 export async function POST(request) {
   try {
@@ -113,10 +124,14 @@ export async function POST(request) {
 
         if (error) {
           console.error('❌ Database insertion failed:', error);
-          console.log('⚠️ File saved locally but not tracked in database');
-        } else {
+          console.error('❌ Error details:', JSON.stringify(error, null, 2));
+          console.error('❌ Submission data:', JSON.stringify(submissionData, null, 2));
+          // Still continue, but log the error clearly
+        } else if (submission) {
           submissionId = submission.id;
           console.log('✅ Submission record created:', submissionId);
+        } else {
+          console.error('❌ No submission returned from insert, but no error either');
         }
       } else {
         console.warn('⚠️ Supabase admin client not available - file saved locally only');
@@ -155,13 +170,16 @@ export async function POST(request) {
     return NextResponse.json({
       success: true,
       submission_id: submissionId || 'local-' + Date.now(),
-      status: 'pending_review',
-      message: 'Document submitted successfully via tunnel',
+      status: submissionId ? 'processing' : 'pending_review',
+      message: submissionId 
+        ? 'Document submitted successfully and is being processed'
+        : 'Document submitted but database tracking failed. Check server logs.',
       file_path: savedFilePath,
       document_name: document.name,
       document_size: document.size,
       storage_type: 'tunnel',
-      tracked_in_database: !!submissionId
+      tracked_in_database: !!submissionId,
+      warning: !submissionId ? 'Submission not tracked in database - check server logs for details' : undefined
     });
 
   } catch (error) {
