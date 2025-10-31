@@ -16,9 +16,21 @@ const chokidar = require('chokidar');
 const path = require('path');
 const fs = require('fs').promises;
 
-// Configuration
+// Configuration - HARDCODED to use /data folder, not /files
+const BASE_DIR = process.env.OLLAMA_FILE_STORAGE || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\data';
 const INCOMING_DIR = process.env.OLLAMA_INCOMING_PATH || 
-  path.join(process.env.OLLAMA_FILE_STORAGE || 'C:/Users/frost/AppData/Local/Ollama/data', 'incoming');
+  path.join(BASE_DIR, 'incoming');
+
+// Ensure we're using /data, not /files
+if (INCOMING_DIR.includes('\\Ollama\\files') || INCOMING_DIR.includes('/Ollama/files')) {
+  console.error('❌ ERROR: Path is pointing to /files folder!');
+  console.error('   Please set OLLAMA_FILE_STORAGE or OLLAMA_INCOMING_PATH to use /data folder');
+  process.exit(1);
+}
+
+// Log the actual path being used (for debugging)
+console.log(`📁 Base directory: ${BASE_DIR}`);
+console.log(`📁 Incoming directory: ${INCOMING_DIR}`);
 
 const PROCESSING_URL = process.env.PROCESSING_API_URL || 
   process.env.NEXT_PUBLIC_APP_URL || 
