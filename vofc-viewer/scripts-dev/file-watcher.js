@@ -210,10 +210,7 @@ function startWatcher() {
     // Wait a bit more to ensure file is fully written
     setTimeout(async () => {
       try {
-        // First try to process via pending submissions (if file is linked to a submission)
-        await processPendingDocuments();
-        
-        // Also try direct file processing (for files not linked to submissions)
+        // Process files directly via Ollama server
         await processFilesInFolder();
       } catch (error) {
         log(`❌ Error processing ${fileName}: ${error.message}`, 'red');
