@@ -1,12 +1,7 @@
+'use client'
+
 import RoleGate from '@/components/RoleGate'
 import Link from 'next/link'
-
-export const metadata = {
-  title: 'Admin Dashboard | VOFC Engine',
-  description: 'Administrative control panel for VOFC Engine analytics and model performance.'
-}
-
-export const dynamic = 'force-dynamic'
 
 export default function AdminLayout({ children }) {
   return (
