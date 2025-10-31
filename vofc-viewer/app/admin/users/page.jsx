@@ -91,9 +91,8 @@ export default function UserManagement() {
   const handleCreateUser = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('/api/admin/users', {
+      const response = await fetchWithAuth('/api/admin/users', {
         method: 'POST',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -243,7 +242,6 @@ export default function UserManagement() {
           password: newPassword
         }),
       });
- конца
 
       const result = await response.json();
 
@@ -261,9 +259,8 @@ export default function UserManagement() {
 
   const handleForcePasswordChange = async (userId, forceChange) => {
     try {
-      const response = await fetch('/api/admin/users', {
+      const response = await fetchWithAuth('/api/admin/users', {
         method: 'PUT',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
