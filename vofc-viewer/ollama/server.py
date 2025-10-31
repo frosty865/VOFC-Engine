@@ -520,23 +520,23 @@ def process_file_with_heuristic_pipeline(filepath, filename):
 
 @app.route('/api/files/process', methods=['POST'])
 def process_files():
-    """Process all files in the incoming folder using heuristic pipeline."""
+    """Process all files in the incoming folder using the heuristic pipeline."""
     try:
+        # --- Validate incoming directory ---
         if not os.path.exists(UPLOAD_DIR):
             return jsonify({
                 "success": False,
-                "error": "Incoming directory does not exist",
+                "error": f"Incoming directory does not exist: {UPLOAD_DIR}",
                 "processed": 0
             }), 404
-        
-        # Get absolute file paths
-        incoming_files = []
+
+        # --- Gather absolute file paths ---
         try:
-            all_files = os.listdir(UPLOAD_DIR)
-            for f in all_files:
-                file_path = os.path.join(UPLOAD_DIR, f)
-                if os.path.isfile(file_path) and not f.endswith('_temp.txt'):
-                    incoming_files.append(file_path)
+            incoming_files = [
+                os.path.join(UPLOAD_DIR, f)
+                for f in os.listdir(UPLOAD_DIR)
+                if os.path.isfile(os.path.join(UPLOAD_DIR, f)) and not f.endswith('_temp.txt')
+            ]
         except Exception as list_error:
             return jsonify({
                 "success": False,
@@ -554,11 +554,12 @@ def process_files():
             })
         
         print(f"📁 Found {len(incoming_files)} file(s) to process in {UPLOAD_DIR}")
-        
+
         processed = 0
         errors = 0
         results = []
-        
+
+        # --- Process each file ---
         for filepath in incoming_files:
             filename = os.path.basename(filepath)
             
@@ -586,11 +587,16 @@ def process_files():
                 library_filepath = os.path.join(LIBRARY_DIR, filename)
                 shutil.move(filepath, library_filepath)
                 
-                print(f"✅ Processed: {filename} - {process_result['vulnerabilities_count']} vulnerabilities, {process_result['ofcs_count']} OFCs")
+                print(f"✅ Processed: {filename} - "
+                      f"{process_result['vulnerabilities_count']} vulnerabilities, "
+                      f"{process_result['ofcs_count']} OFCs")
+
                 results.append({
                     "file": filename,
                     "success": True,
-                    "message": f"Processed successfully - {process_result['vulnerabilities_count']} vulnerabilities, {process_result['ofcs_count']} OFCs",
+                    "message": f"Processed successfully - "
+                               f"{process_result['vulnerabilities_count']} vulnerabilities, "
+                               f"{process_result['ofcs_count']} OFCs",
                     "vulnerabilities": process_result['vulnerabilities_count'],
                     "ofcs": process_result['ofcs_count'],
                     "submission_id": process_result["submission_id"]
@@ -598,14 +604,13 @@ def process_files():
                 processed += 1
                 
             except Exception as e:
-                # Log detailed error
                 error_msg = str(e)
                 error_type = type(e).__name__
                 print(f"❌ Failed to process {filename}: {error_type}: {error_msg}")
                 import traceback
                 traceback.print_exc()
-                
-                # Move to errors folder on failure
+
+                # Move to errors folder
                 try:
                     error_path = os.path.join(ERRORS_DIR, filename)
                     shutil.move(filepath, error_path)
@@ -620,7 +625,8 @@ def process_files():
                     "error_type": error_type
                 })
                 errors += 1
-        
+
+        # --- Final summary ---
         return jsonify({
             "success": True,
             "message": f"Processing completed: {processed} successful, {errors} errors",
@@ -629,13 +635,12 @@ def process_files():
             "total": len(incoming_files),
             "results": results
         })
-    
+
     except Exception as e:
         return jsonify({
             "success": False,
             "error": str(e),
-            "processed": 0,
-            "errors": 0
+            "processed": 0
         }), 500
 
 @app.route('/api/documents/process-batch', methods=['POST'])
