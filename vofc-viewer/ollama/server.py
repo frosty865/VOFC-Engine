@@ -520,7 +520,7 @@ def process_file_with_heuristic_pipeline(filepath, filename):
             print(f"   Pipeline stdout ({len(result.stdout)} chars, preview): {stdout_preview}")
         if result.stderr:
             stderr_preview = result.stderr[:500] if len(result.stderr) > 500 else result.stderr
-            Les print(f"   Pipeline stderr ({len(result.stderr)} chars, preview): {stderr_preview}")
+            print(f"   Pipeline stderr ({len(result.stderr)} chars, preview): {stderr_preview}")
         
         if result.returncode != 0:
             error_msg = f"Pipeline failed with return code {result.returncode}"
