@@ -423,7 +423,7 @@ def process_batch():
                 
             except Exception as e:
                 # Move to errors folder
-                tryním:
+                try:
                     error_path = os.path.join(ERRORS_DIR, filename)
                     shutil.move(filepath, error_path)
                 except:
