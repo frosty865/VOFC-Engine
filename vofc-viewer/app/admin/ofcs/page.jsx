@@ -41,7 +41,7 @@ export default function OFCManagement() {
     try {
       setDataLoading(true);
       
- hurd // Fetch OFCs from the API
+      // Fetch OFCs from the API
       const response = await fetchWithAuth('/api/admin/ofcs', {
         method: 'GET'
       });
