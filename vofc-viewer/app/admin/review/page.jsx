@@ -137,20 +137,90 @@ export default function ReviewSubmissionsPage() {
                   </div>
                 </div>
 
-                {submission.data && (
-                  <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                    <h4 className="font-medium text-gray-900 mb-2">Submission Data:</h4>
-                    <pre className="text-xs text-gray-700 overflow-x-auto">
-                      {JSON.stringify(
-                        typeof submission.data === 'string'
-                          ? JSON.parse(submission.data)
-                          : submission.data,
-                        null,
-                        2
+                {submission.data && (() => {
+                  const data = typeof submission.data === 'string' 
+                    ? JSON.parse(submission.data) 
+                    : submission.data;
+                  const vulnerabilities = data.vulnerabilities || [];
+                  const ofcs = data.ofcs || [];
+                  
+                  return (
+                    <div className="mt-4 space-y-4">
+                      {/* Summary */}
+                      <div className="p-4 bg-blue-50 rounded-lg">
+                        <h4 className="font-medium text-gray-900 mb-2">Extraction Summary</h4>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="font-medium">Vulnerabilities:</span> {vulnerabilities.length}
+                          </div>
+                          <div>
+                            <span className="font-medium">OFCs:</span> {ofcs.length}
+                          </div>
+                          {data.document_name && (
+                            <div className="col-span-2">
+                              <span className="font-medium">Document:</span> {data.document_name}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Vulnerabilities */}
+                      {vulnerabilities.length > 0 && (
+                        <div className="p-4 bg-gray-50 rounded-lg">
+                          <h4 className="font-medium text-gray-900 mb-3">Vulnerabilities ({vulnerabilities.length})</h4>
+                          <div className="space-y-2 max-h-96 overflow-y-auto">
+                            {vulnerabilities.slice(0, 20).map((vuln, idx) => (
+                              <div key={vuln.id || idx} className="p-3 bg-white rounded border border-gray-200">
+                                <div className="font-medium text-sm text-gray-900">{vuln.title || vuln.vulnerability}</div>
+                                {vuln.category && (
+                                  <div className="text-xs text-gray-500 mt-1">Category: {vuln.category}</div>
+                                )}
+                                {vuln.description && (
+                                  <div className="text-xs text-gray-600 mt-1">{vuln.description}</div>
+                                )}
+                              </div>
+                            ))}
+                            {vulnerabilities.length > 20 && (
+                              <div className="text-xs text-gray-500 italic">
+                                ... and {vulnerabilities.length - 20} more vulnerabilities
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       )}
-                    </pre>
-                  </div>
-                )}
+                      
+                      {/* OFCs */}
+                      {ofcs.length > 0 && (
+                        <div className="p-4 bg-gray-50 rounded-lg">
+                          <h4 className="font-medium text-gray-900 mb-3">Options for Consideration ({ofcs.length})</h4>
+                          <div className="space-y-2 max-h-96 overflow-y-auto">
+                            {ofcs.slice(0, 20).map((ofc, idx) => (
+                              <div key={ofc.id || idx} className="p-3 bg-white rounded border border-gray-200">
+                                <div className="font-medium text-sm text-gray-900">{ofc.title || ofc.option}</div>
+                                {ofc.description && (
+                                  <div className="text-xs text-gray-600 mt-1">{ofc.description}</div>
+                                )}
+                              </div>
+                            ))}
+                            {ofcs.length > 20 && (
+                              <div className="text-xs text-gray-500 italic">
+                                ... and {ofcs.length - 20} more OFCs
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Raw Data (collapsible) */}
+                      <details className="p-4 bg-gray-50 rounded-lg">
+                        <summary className="font-medium text-gray-900 cursor-pointer">View Raw Data</summary>
+                        <pre className="text-xs text-gray-700 overflow-x-auto mt-2">
+                          {JSON.stringify(data, null, 2)}
+                        </pre>
+                      </details>
+                    </div>
+                  );
+                })()}
               </div>
             ))}
           </div>

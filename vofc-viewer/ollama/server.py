@@ -5,10 +5,13 @@ import shutil
 import subprocess
 import sys
 import uuid
+import requests
 from datetime import datetime
 from pathlib import Path
 
 app = Flask(__name__)
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Disable caching
+# Note: For production, consider using background tasks (Celery, etc.) for long-running processing
 
 # Configuration - can be overridden via environment variables
 BASE_DIR = os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'Ollama', 'data')
@@ -28,14 +31,98 @@ ERRORS_DIR = os.getenv(
     'OLLAMA_ERRORS_DIR',
     os.path.join(BASE_DIR, 'errors')
 )
+EXTRACTED_TEXT_DIR = os.getenv(
+    'OLLAMA_EXTRACTED_TEXT_DIR',
+    os.path.join(BASE_DIR, 'extracted_text')
+)
 MODEL_NAME = os.getenv('OLLAMA_MODEL', 'vofc-engine:latest')
 SERVER_HOST = os.getenv('SERVER_HOST', '127.0.0.1')
 SERVER_PORT = int(os.getenv('SERVER_PORT', '5000'))
 DEBUG_MODE = os.getenv('DEBUG', 'True').lower() == 'true'
 
+# Supabase configuration for creating submission records
+SUPABASE_URL = os.getenv('SUPABASE_URL') or os.getenv('NEXT_PUBLIC_SUPABASE_URL', '').rstrip('/')
+SUPABASE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '')
+
 # Ensure all directories exist
-for directory in [UPLOAD_DIR, PROCESSED_DIR, LIBRARY_DIR, ERRORS_DIR]:
+for directory in [UPLOAD_DIR, PROCESSED_DIR, LIBRARY_DIR, ERRORS_DIR, EXTRACTED_TEXT_DIR]:
     os.makedirs(directory, exist_ok=True)
+
+# Helper function to create submission record in Supabase
+def create_submission_record(submission_id, filename, vuln_count, ofc_count, filepath=None, vofc_data=None):
+    """
+    Create a submission record in Supabase submissions table.
+    This is Step 4: Update approval queue with extracted data.
+    
+    Args:
+        submission_id: Unique submission ID
+        filename: Original filename
+        vuln_count: Number of vulnerabilities found
+        ofc_count: Number of OFCs found
+        filepath: Path to processed file
+        vofc_data: Full VOFC extraction results (vulnerabilities, ofcs, etc.)
+    """
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print(f"WARNING: Supabase credentials not configured - skipping submission record creation")
+        return None
+    
+    try:
+        # Prepare metadata
+        metadata = {
+            "document_name": filename,
+            "file_path": filepath or "",
+            "vulnerabilities_count": vuln_count,
+            "ofcs_count": ofc_count,
+            "processed_at": datetime.utcnow().isoformat(),
+            "storage_type": "local",
+            "processing_method": "heuristic_pipeline_llm"
+        }
+        
+        # Include full VOFC data if provided
+        if vofc_data:
+            # Store the full extracted data for review
+            submission_payload = {
+                **metadata,
+                "vulnerabilities": vofc_data.get('vulnerabilities', []),
+                "ofcs": vofc_data.get('ofcs', []),
+                "sources": vofc_data.get('sources', []),
+                "links": vofc_data.get('links', {})
+            }
+        else:
+            # Fallback to metadata only
+            submission_payload = metadata
+        
+        submission_data = {
+            "id": submission_id,
+            "type": "ofc",  # Document submissions are treated as OFC submissions
+            "status": "pending_review",  # Ready for approval queue
+            "source": "file_processing",
+            "data": json.dumps(submission_payload),
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        
+        # Use Supabase REST API
+        url = f"{SUPABASE_URL}/rest/v1/submissions"
+        headers = {
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        
+        response = requests.post(url, headers=headers, json=submission_data, timeout=10)
+        
+        if response.status_code >= 200 and response.status_code < 300:
+            print(f"SUCCESS: Created submission record {submission_id} in Supabase")
+            return response.json()
+        else:
+            print(f"WARNING: Failed to create submission record: {response.status_code} - {response.text}")
+            return None
+            
+    except Exception as e:
+        print(f"WARNING: Error creating submission record: {type(e).__name__}: {e}")
+        return None
 
 # Helper functions
 def get_file_info(filepath):
@@ -500,15 +587,15 @@ def process_file_with_heuristic_pipeline(filepath, filename):
         print(f"   Running heuristic pipeline...")
         cmd = [sys.executable, pipeline_script,
                '--submission-id', submission_id,
-               '--text-file', text_file,
-               '--dry-run']
+               '--text-file', text_file]
+        # Removed --dry-run to enable Supabase writes (Step 4: Update approval queue)
         print(f"   Command: {' '.join(cmd)}")
         
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=600,  # 10 minute timeout (OCR can take longer)
+            timeout=1800,  # 30 minute timeout (LLM processing can take much longer for large documents)
             cwd=os.path.dirname(pipeline_script) if os.path.exists(pipeline_script) else None,
             encoding='utf-8',
             errors='replace'  # Handle encoding errors gracefully
@@ -563,10 +650,13 @@ def process_file_with_heuristic_pipeline(filepath, filename):
             print(f"ERROR: {error_msg}")
             raise ValueError(error_msg)
         
-        # Clean up temp file if created
+        # Move extracted text file to EXTRACTED_TEXT_DIR for additional analysis
         if file_ext == '.pdf' and os.path.exists(text_file):
-            os.remove(text_file)
-            print(f"   Cleaned up temporary file: {text_file}")
+            # Save text file with clean name (remove _temp suffix)
+            text_filename = f"{os.path.splitext(filename)[0]}.txt"
+            saved_text_path = os.path.join(EXTRACTED_TEXT_DIR, text_filename)
+            shutil.move(text_file, saved_text_path)
+            print(f"   Saved extracted text to: {saved_text_path}")
         
         return {
             "success": True,
@@ -588,7 +678,11 @@ def process_file_with_heuristic_pipeline(filepath, filename):
 
 @app.route('/api/files/process', methods=['POST'])
 def process_files():
-    """Process all files in the incoming folder using the heuristic pipeline."""
+    """
+    Process all files in the incoming folder using heuristic pipeline.
+    Flow: incoming/ → extracted_text/ → library/
+    Note: This endpoint can take 10-30+ minutes for large documents with LLM processing.
+    """
     try:
         # --- Validate incoming directory ---
         if not os.path.exists(UPLOAD_DIR):
@@ -598,21 +692,17 @@ def process_files():
                 "processed": 0
             }), 404
 
-        # --- Gather absolute file paths ---
-        try:
-            incoming_files = [
-                os.path.join(UPLOAD_DIR, f)
-                for f in os.listdir(UPLOAD_DIR)
-                if os.path.isfile(os.path.join(UPLOAD_DIR, f)) and not f.endswith('_temp.txt')
-            ]
-        except Exception as list_error:
-            return jsonify({
-                "success": False,
-                "error": f"Failed to list incoming directory: {list_error}",
-                "processed": 0,
-                "errors": 0
-            }), 500
-        
+        # Ensure extracted_text directory exists
+        os.makedirs(EXTRACTED_TEXT_DIR, exist_ok=True)
+
+        # --- Gather files from incoming folder ---
+        incoming_files = [
+            os.path.join(UPLOAD_DIR, f)
+            for f in os.listdir(UPLOAD_DIR)
+            if os.path.isfile(os.path.join(UPLOAD_DIR, f))
+            and not f.endswith('_temp.txt')
+        ]
+
         if not incoming_files:
             return jsonify({
                 "success": True,
@@ -620,61 +710,91 @@ def process_files():
                 "processed": 0,
                 "errors": 0
             })
-        
-        print(f"Found {len(incoming_files)} file(s) to process in {UPLOAD_DIR}")
 
         processed = 0
         errors = 0
         results = []
 
+        # Import pipeline functions
+        # Add pipeline directory to path if needed
+        pipeline_path = os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'Ollama', 'pipeline')
+        if pipeline_path not in sys.path:
+            sys.path.insert(0, pipeline_path)
+        
+        try:
+            from heuristic_pipeline import extract_text_from_pdf, process_text_with_vofc_engine
+        except ImportError:
+            # Fallback: try direct import if already in path
+            try:
+                from pipeline.heuristic_pipeline import extract_text_from_pdf, process_text_with_vofc_engine
+            except ImportError:
+                return jsonify({
+                    "success": False,
+                    "error": "Failed to import heuristic_pipeline functions. Check pipeline path.",
+                    "processed": 0
+                }), 500
+
         # --- Process each file ---
         for filepath in incoming_files:
             filename = os.path.basename(filepath)
-            
-            if not os.path.exists(filepath):
-                print(f"WARNING:  File not found: {filepath}")
-                errors += 1
-                results.append({
-                    "file": filename,
-                    "success": False,
-                    "error": "File not found after listing"
-                })
-                continue
-            
-            try:
-                # Process file with heuristic pipeline
-                process_result = process_file_with_heuristic_pipeline(filepath, filename)
-                
-                # Save JSON output to library folder
-                json_filename = f"{os.path.splitext(filename)[0]}.json"
-                json_path = os.path.join(LIBRARY_DIR, json_filename)
-                with open(json_path, 'w', encoding='utf-8') as f:
-                    json.dump(process_result["extracted_data"], f, indent=2)
-                
-                # Move original file to library folder
-                library_filepath = os.path.join(LIBRARY_DIR, filename)
-                shutil.move(filepath, library_filepath)
-                
-                print(f"SUCCESS: Processed: {filename} - "
-                      f"{process_result['vulnerabilities_count']} vulnerabilities, "
-                      f"{process_result['ofcs_count']} OFCs")
+            file_basename = os.path.splitext(filename)[0]
+            print(f"Processing {filename} ...")
 
+            try:
+                # Step 1: Extract text from PDF
+                text = extract_text_from_pdf(filepath)
+                txt_name = filename.replace(".pdf", "_temp.txt")
+                extracted_path = os.path.join(EXTRACTED_TEXT_DIR, txt_name)
+                with open(extracted_path, "w", encoding="utf-8") as t:
+                    t.write(text)
+                print(f"Extracted text saved to {extracted_path}")
+
+                # Step 2: Run VOFC Engine on extracted text
+                print(f"Analyzing extracted text for {filename} ...")
+                vofc_result = process_text_with_vofc_engine(text)
+
+                # Step 3: Save JSON output to library
+                json_filename = f"{file_basename}.json"
+                json_path = os.path.join(LIBRARY_DIR, json_filename)
+                with open(json_path, "w", encoding="utf-8") as j:
+                    json.dump(vofc_result, j, indent=2)
+                print(f"JSON written: {json_path}")
+
+                # Step 4: Move original PDF and extracted text to library
+                library_pdf_path = os.path.join(LIBRARY_DIR, filename)
+                library_txt_path = os.path.join(LIBRARY_DIR, txt_name)
+                shutil.move(filepath, library_pdf_path)
+                shutil.move(extracted_path, library_txt_path)
+                print(f"Moved {filename} + {txt_name} to library")
+
+                # Step 5: Create submission record in Supabase
+                submission_id = str(uuid.uuid4())
+                vuln_count = len(vofc_result.get('vulnerabilities', []))
+                ofc_count = len(vofc_result.get('ofcs', []))
+
+                create_submission_record(
+                    submission_id=submission_id,
+                    filename=filename,
+                    vuln_count=vuln_count,
+                    ofc_count=ofc_count,
+                    filepath=library_pdf_path,
+                    vofc_data=vofc_result  # Include full extracted data
+                )
+
+                processed += 1
                 results.append({
                     "file": filename,
                     "success": True,
-                    "message": f"Processed successfully - "
-                               f"{process_result['vulnerabilities_count']} vulnerabilities, "
-                               f"{process_result['ofcs_count']} OFCs",
-                    "vulnerabilities": process_result['vulnerabilities_count'],
-                    "ofcs": process_result['ofcs_count'],
-                    "submission_id": process_result["submission_id"]
+                    "message": f"Processed successfully - {vuln_count} vulnerabilities, {ofc_count} OFCs",
+                    "vulnerabilities": vuln_count,
+                    "ofcs": ofc_count,
+                    "submission_id": submission_id
                 })
-                processed += 1
-                
+
             except Exception as e:
                 error_msg = str(e)
                 error_type = type(e).__name__
-                print(f"ERROR: Failed to process {filename}: {error_type}: {error_msg}")
+                print(f"Failed {filename}: {error_type}: {error_msg}")
                 import traceback
                 traceback.print_exc()
 
@@ -682,17 +802,17 @@ def process_files():
                 try:
                     error_path = os.path.join(ERRORS_DIR, filename)
                     shutil.move(filepath, error_path)
-                    print(f"   Moved {filename} to errors folder: {error_path}")
+                    print(f"Moved {filename} to errors folder")
                 except Exception as move_error:
-                    print(f"   WARNING:  Failed to move file to errors folder: {move_error}")
-                
+                    print(f"WARNING: Failed to move file to errors folder: {move_error}")
+
+                errors += 1
                 results.append({
                     "file": filename,
                     "success": False,
                     "error": f"{error_type}: {error_msg}",
                     "error_type": error_type
                 })
-                errors += 1
 
         # --- Final summary ---
         return jsonify({
@@ -705,10 +825,145 @@ def process_files():
         })
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({
             "success": False,
             "error": str(e),
-            "processed": 0
+            "processed": 0,
+            "errors": 0
+        }), 500
+
+@app.route('/api/files/process-extracted', methods=['POST'])
+def process_extracted_text():
+    """Process all .txt files in the extracted_text folder."""
+    try:
+        if not os.path.exists(EXTRACTED_TEXT_DIR):
+            return jsonify({
+                "success": False,
+                "error": f"Missing folder: {EXTRACTED_TEXT_DIR}"
+            }), 404
+
+        # Get all .txt files in extracted_text directory
+        files = [
+            f for f in os.listdir(EXTRACTED_TEXT_DIR)
+            if os.path.isfile(os.path.join(EXTRACTED_TEXT_DIR, f)) and f.endswith(".txt")
+        ]
+
+        if not files:
+            return jsonify({
+                "success": True,
+                "message": "No extracted text files found.",
+                "processed": 0,
+                "errors": 0
+            })
+
+        processed = 0
+        errors = 0
+        results = []
+
+        # Import pipeline functions
+        pipeline_path = os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'Ollama', 'pipeline')
+        if pipeline_path not in sys.path:
+            sys.path.insert(0, pipeline_path)
+        
+        try:
+            from heuristic_pipeline import process_text_with_vofc_engine
+        except ImportError:
+            try:
+                from pipeline.heuristic_pipeline import process_text_with_vofc_engine
+            except ImportError:
+                return jsonify({
+                    "success": False,
+                    "error": "Failed to import process_text_with_vofc_engine. Check pipeline path.",
+                    "processed": 0
+                }), 500
+
+        for fname in files:
+            path = os.path.join(EXTRACTED_TEXT_DIR, fname)
+            print(f"Processing extracted text: {fname}")
+
+            try:
+                # Read extracted text
+                with open(path, "r", encoding="utf-8") as f:
+                    text = f.read()
+
+                # Process with VOFC engine
+                vofc_result = process_text_with_vofc_engine(text)
+
+                # Save JSON output to library
+                json_filename = fname.replace("_temp.txt", ".json")
+                json_path = os.path.join(LIBRARY_DIR, json_filename)
+                with open(json_path, "w", encoding="utf-8") as j:
+                    json.dump(vofc_result, j, indent=2)
+
+                # Move processed .txt file to library
+                library_txt_path = os.path.join(LIBRARY_DIR, fname)
+                shutil.move(path, library_txt_path)
+
+                # Create submission record
+                submission_id = str(uuid.uuid4())
+                vuln_count = len(vofc_result.get('vulnerabilities', []))
+                ofc_count = len(vofc_result.get('ofcs', []))
+
+                create_submission_record(
+                    submission_id=submission_id,
+                    filename=fname.replace('_temp.txt', '.pdf'),  # Original PDF name
+                    vuln_count=vuln_count,
+                    ofc_count=ofc_count,
+                    filepath=library_txt_path,
+                    vofc_data=vofc_result  # Include full extracted data
+                )
+
+                print(f"SUCCESS: Processed {fname} - {vuln_count} vulnerabilities, {ofc_count} OFCs")
+                processed += 1
+                results.append({
+                    "file": fname,
+                    "success": True,
+                    "vulnerabilities": vuln_count,
+                    "ofcs": ofc_count,
+                    "submission_id": submission_id
+                })
+
+            except Exception as e:
+                error_msg = str(e)
+                error_type = type(e).__name__
+                print(f"Failed to process {fname}: {error_type}: {error_msg}")
+                import traceback
+                traceback.print_exc()
+
+                # Move to errors folder
+                try:
+                    error_path = os.path.join(ERRORS_DIR, fname)
+                    shutil.move(path, error_path)
+                    print(f"Moved {fname} to errors folder")
+                except Exception as move_error:
+                    print(f"WARNING: Failed to move file to errors folder: {move_error}")
+
+                errors += 1
+                results.append({
+                    "file": fname,
+                    "success": False,
+                    "error": f"{error_type}: {error_msg}",
+                    "error_type": error_type
+                })
+
+        return jsonify({
+            "success": True,
+            "message": f"Completed processing {processed} files, {errors} errors.",
+            "processed": processed,
+            "errors": errors,
+            "results": results
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "processed": 0,
+            "errors": 0
         }), 500
 
 @app.route('/api/documents/process-batch', methods=['POST'])
@@ -816,7 +1071,8 @@ def health():
             "incoming": UPLOAD_DIR,
             "processed": PROCESSED_DIR,
             "library": LIBRARY_DIR,
-            "errors": ERRORS_DIR
+            "errors": ERRORS_DIR,
+            "extracted_text": EXTRACTED_TEXT_DIR
         }
         
         for name, path in dir_paths.items():
@@ -868,4 +1124,6 @@ if __name__ == '__main__':
     print(f"Debug mode: {DEBUG_MODE}")
     print("=" * 50)
     
-    app.run(host=SERVER_HOST, port=SERVER_PORT, debug=DEBUG_MODE)
+    # Use threaded=True for handling multiple requests
+    # Note: For production, use a proper WSGI server (gunicorn, waitress) with timeout settings
+    app.run(host=SERVER_HOST, port=SERVER_PORT, debug=DEBUG_MODE, threaded=True)
