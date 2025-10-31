@@ -20,7 +20,7 @@ export async function POST(req) {
     }
 
     // Paths
-    const baseDir = process.env.OLLAMA_FILE_STORAGE || 'C:/Users/frost/AppData/Local/Ollama/files';
+    const baseDir = process.env.OLLAMA_FILE_STORAGE || 'C:/Users/frost/AppData/Local/Ollama/data';
     const incomingDir = process.env.OLLAMA_INCOMING_PATH || join(baseDir, 'incoming');
     const libraryDir = process.env.OLLAMA_LIBRARY_PATH || join(baseDir, 'library');
 
