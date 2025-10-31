@@ -529,10 +529,23 @@ def process_files():
                 "processed": 0
             }), 404
         
-        files = [f for f in os.listdir(UPLOAD_DIR) 
-                if os.path.isfile(os.path.join(UPLOAD_DIR, f)) and not f.endswith('_temp.txt')]
+        # Get absolute file paths
+        incoming_files = []
+        try:
+            all_files = os.listdir(UPLOAD_DIR)
+            for f in all_files:
+                file_path = os.path.join(UPLOAD_DIR, f)
+                if os.path.isfile(file_path) and not f.endswith('_temp.txt'):
+                    incoming_files.append(file_path)
+        except Exception as list_error:
+            return jsonify({
+                "success": False,
+                "error": f"Failed to list incoming directory: {list_error}",
+                "processed": 0,
+                "errors": 0
+            }), 500
         
-        if not files:
+        if not incoming_files:
             return jsonify({
                 "success": True,
                 "message": "No files to process",
@@ -540,12 +553,25 @@ def process_files():
                 "errors": 0
             })
         
+        print(f"📁 Found {len(incoming_files)} file(s) to process in {UPLOAD_DIR}")
+        
         processed = 0
         errors = 0
         results = []
         
-        for filename in files:
-            filepath = os.path.join(UPLOAD_DIR, filename)
+        for filepath in incoming_files:
+            filename = os.path.basename(filepath)
+            
+            if not os.path.exists(filepath):
+                print(f"⚠️  File not found: {filepath}")
+                errors += 1
+                results.append({
+                    "file": filename,
+                    "success": False,
+                    "error": "File not found after listing"
+                })
+                continue
+            
             try:
                 # Process file with heuristic pipeline
                 process_result = process_file_with_heuristic_pipeline(filepath, filename)
@@ -560,6 +586,7 @@ def process_files():
                 library_filepath = os.path.join(LIBRARY_DIR, filename)
                 shutil.move(filepath, library_filepath)
                 
+                print(f"✅ Processed: {filename} - {process_result['vulnerabilities_count']} vulnerabilities, {process_result['ofcs_count']} OFCs")
                 results.append({
                     "file": filename,
                     "success": True,
@@ -631,6 +658,7 @@ def process_batch():
             filepath = os.path.join(UPLOAD_DIR, filename)
             
             if not os.path.exists(filepath):
+                print(f"⚠️  File not found: {filepath}")
                 results.append({
                     "filename": filename,
                     "status": "error",
@@ -653,6 +681,7 @@ def process_batch():
                 library_filepath = os.path.join(LIBRARY_DIR, filename)
                 shutil.move(filepath, library_filepath)
                 
+                print(f"✅ Processed: {filename} - {process_result['vulnerabilities_count']} vulnerabilities, {process_result['ofcs_count']} OFCs")
                 results.append({
                     "filename": filename,
                     "status": "success",
@@ -706,17 +735,55 @@ def process_batch():
 
 @app.route('/health', methods=['GET'])
 def health():
-    """Health check endpoint"""
-    return jsonify({
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "directories": {
-            "incoming": {"path": UPLOAD_DIR, "exists": os.path.exists(UPLOAD_DIR)},
-            "processed": {"path": PROCESSED_DIR, "exists": os.path.exists(PROCESSED_DIR)},
-            "library": {"path": LIBRARY_DIR, "exists": os.path.exists(LIBRARY_DIR)},
-            "errors": {"path": ERRORS_DIR, "exists": os.path.exists(ERRORS_DIR)}
+    """Health check endpoint with directory contents"""
+    try:
+        dirs = {}
+        dir_paths = {
+            "incoming": UPLOAD_DIR,
+            "processed": PROCESSED_DIR,
+            "library": LIBRARY_DIR,
+            "errors": ERRORS_DIR
         }
-    })
+        
+        for name, path in dir_paths.items():
+            if os.path.exists(path):
+                try:
+                    files = os.listdir(path)
+                    dirs[name] = {
+                        "path": path,
+                        "exists": True,
+                        "file_count": len([f for f in files if os.path.isfile(os.path.join(path, f))]),
+                        "files": [f for f in files if os.path.isfile(os.path.join(path, f))][:10]  # First 10 files
+                    }
+                except Exception as e:
+                    dirs[name] = {
+                        "path": path,
+                        "exists": True,
+                        "error": str(e)
+                    }
+            else:
+                dirs[name] = {
+                    "path": path,
+                    "exists": False
+                }
+        
+        return jsonify({
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "directories": dirs,
+            "server": {
+                "host": SERVER_HOST,
+                "port": SERVER_PORT,
+                "model": MODEL_NAME
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }), 500
+auf
 
 if __name__ == '__main__':
     print("=" * 50)
