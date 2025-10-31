@@ -169,11 +169,13 @@ async function processFilesInFolder() {
       
       // Use process-simple to handle files directly from folder
       try {
+        log(`🔗 Calling processing API: ${PROCESS_SIMPLE_ENDPOINT}`, 'cyan');
         const response = await fetch(PROCESS_SIMPLE_ENDPOINT, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
-          }
+          },
+          signal: AbortSignal.timeout(60000) // 60 second timeout
         });
 
         if (response.ok) {
@@ -185,12 +187,28 @@ async function processFilesInFolder() {
             }
             // Mark files as processed
             validFiles.forEach(file => processedFiles.add(file));
+          } else {
+            log(`❌ Processing failed: ${result.error || result.message || 'Unknown error'}`, 'red');
           }
         } else {
-          log(`❌ Processing endpoint returned ${response.status}`, 'red');
+          const errorText = await response.text().catch(() => 'Unknown error');
+          log(`❌ Processing endpoint returned ${response.status}: ${errorText}`, 'red');
         }
       } catch (error) {
-        log(`❌ Error processing files: ${error.message}`, 'red');
+        if (error.name === 'AbortError') {
+          log(`❌ Processing request timed out after 60 seconds`, 'red');
+        } else if (error.code === 'ECONNREFUSED' || error.message.includes('fetch failed')) {
+          log(`❌ Cannot connect to processing API at ${PROCESS_SIMPLE_ENDPOINT}`, 'red');
+          log(`   Make sure your Next.js server is running!`, 'yellow');
+          log(`   Expected URL: ${PROCESSING_URL}`, 'yellow');
+          log(`   Try running: npm run dev (in vofc-viewer directory)`, 'yellow');
+        } else {
+          log(`❌ Error processing files: ${error.message}`, 'red');
+          log(`   Endpoint: ${PROCESS_SIMPLE_ENDPOINT}`, 'yellow');
+          if (error.code) {
+            log(`   Error code: ${error.code}`, 'yellow');
+          }
+        }
       }
     }
   } catch (error) {
