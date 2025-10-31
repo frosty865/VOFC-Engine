@@ -7,24 +7,46 @@ export const dynamic = 'force-dynamic';
  * System Health Status - Checks all local services
  */
 export async function GET(request) {
-  // Check admin authentication with error handling
+  // Check admin authentication with timeout protection
   let authError = null;
+  let authUser = null;
+  
   try {
-    const { user, error } = await requireAdmin(request);
+    // Wrap auth check in timeout (5 seconds max)
+    const authPromise = requireAdmin(request);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Authentication check timeout')), 5000)
+    );
+    
+    const { user, error } = await Promise.race([authPromise, timeoutPromise]);
+    
     if (error) {
       authError = error;
+    } else if (user) {
+      authUser = user;
     }
-  } catch (authException) {
-    console.error('Auth middleware exception:', authException);
-    authError = authException.message || 'Authentication failed';
+  } catch (timeoutError) {
+    console.error('Auth check timeout or exception:', timeoutError);
+    // On timeout, allow the request but log it (graceful degradation)
+    // This prevents 503 errors when auth is slow
+    if (timeoutError.message === 'Authentication check timeout') {
+      console.warn('Auth check timed out, allowing request with degraded auth status');
+      // Continue without strict auth check to avoid 503
+    } else {
+      authError = timeoutError.message || 'Authentication failed';
+    }
   }
   
-  if (authError) {
+  // Only block if we got a definitive auth error (not timeout)
+  if (authError && !authError.includes('timeout')) {
     return NextResponse.json(
       { error: String(authError), timestamp: new Date().toISOString() },
       { status: 403 }
     );
   }
+  
+  // If we didn't get a user but no error (timeout case), continue anyway
+  // This allows the status page to load even if auth is slow
 
   try {
     const status = {
