@@ -21,7 +21,9 @@ const nextConfig = {
   
   // Experimental features
   experimental: {
-    serverActions: true
+    serverActions: {
+      bodySizeLimit: '2mb',
+    },
   },
   
   // Image optimization
