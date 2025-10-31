@@ -393,6 +393,7 @@ def extract_text_from_pdf(pdf_path):
 
 def process_file_with_heuristic_pipeline(filepath, filename):
     """Process a file using the heuristic pipeline."""
+    error_details = []
     try:
         # Get the heuristic pipeline script path
         pipeline_script = os.path.join(
@@ -400,48 +401,104 @@ def process_file_with_heuristic_pipeline(filepath, filename):
             'AppData', 'Local', 'Ollama', 'pipeline', 'heuristic_pipeline.py'
         )
         
+        print(f"📄 Processing {filename}...")
+        print(f"   Pipeline script: {pipeline_script}")
+        
         if not os.path.exists(pipeline_script):
-            raise FileNotFoundError(f"Heuristic pipeline not found at: {pipeline_script}")
+            error_msg = f"Heuristic pipeline not found at: {pipeline_script}"
+            error_details.append(error_msg)
+            print(f"❌ {error_msg}")
+            raise FileNotFoundError(error_msg)
         
         # Extract text from PDF if needed
         file_ext = os.path.splitext(filename)[1].lower()
+        print(f"   File extension: {file_ext}")
+        
         if file_ext == '.pdf':
+            print(f"   Extracting text from PDF...")
             text_content = extract_text_from_pdf(filepath)
-            if not text_content:
-                raise ValueError("Could not extract text from PDF")
+            if not text_content or len(text_content.strip()) < 10:
+                error_msg = f"Could not extract text from PDF (got {len(text_content) if text_content else 0} characters)"
+                error_details.append(error_msg)
+                print(f"❌ {error_msg}")
+                raise ValueError(error_msg)
+            print(f"   Extracted {len(text_content)} characters from PDF")
             # Write text to temporary file
             temp_txt = os.path.join(UPLOAD_DIR, f"{os.path.splitext(filename)[0]}_temp.txt")
-            with open(temp_txt, 'w', encoding='utf-8') as f:
+            with open(temp_txt, 'w', diagnosing='utf-8') as f:
                 f.write(text_content)
             text_file = temp_txt
+            print(f"   Temporary text file created: {text_file}")
         elif file_ext in ['.txt', '.md']:
             text_file = filepath
+            print(f"   Using text file directly: {text_file}")
+            # Verify file exists and is readable
+            if not os.path.exists(text_file):
+                error_msg = f"Text file not found: {text_file}"
+                error_details.append(error_msg)
+                raise FileNotFoundError(error_msg)
+            with open(text_file, 'r', encoding='utf-8', errors='ignore') as f:
+                content_preview = f.read(100)
+            if len(content_preview) < 10:
+                error_msg = f"Text file appears empty or unreadable: {text_file}"
+                error_details.append(error_msg)
+                raise ValueError(error_msg)
         else:
-            raise ValueError(f"Unsupported file type: {file_ext}")
+            error_msg = f"Unsupported file type: {file_ext}. Supported: .pdf, .txt, .md"
+            error_details.append(error_msg)
+            print(f"❌ {error_msg}")
+            raise ValueError(error_msg)
         
         # Generate submission ID
         submission_id = str(uuid.uuid4())
+        print(f"   Submission ID: {submission_id}")
         
         # Run heuristic pipeline
+        print(f"   Running heuristic pipeline...")
+        cmd = [sys.executable, pipeline_script,
+               '--submission-id', submission_id,
+               '--text-file', text_file,
+               '--dry-run']
+        print(f"   Command: {' '.join(cmd)}")
+        
         result = subprocess.run(
-            [sys.executable, pipeline_script,
-             '--submission-id', submission_id,
-             '--text-file', text_file,
-             '--dry-run'],  # Use dry-run to get JSON output without DB writes
+            cmd,
             capture_output=True,
             text=True,
-            timeout=300  # 5 minute timeout
+            timeout=300,  # 5 minute timeout
+            cwd=os.path.dirname(pipeline_script) if os.path.exists(pipeline_script) else None
         )
         
+        print(f"   Pipeline return code: {result.returncode}")
+        if result.stdout:
+            print(f"   Pipeline stdout (first 200 chars): {result.stdout[:200]}")
+        if result.stderr:
+            print(f"   Pipeline stderr: {result.stderr}")
+        
         if result.returncode != 0:
-            raise RuntimeError(f"Pipeline failed: {result.stderr}")
+            error_msg = f"Pipeline failed with return code {result.returncode}"
+            if result.stderr:
+                error_msg += f": {result.stderr}"
+            if result.stdout:
+                error_msg += f" Output: {result.stdout[:500]}"
+            error_details.append(error_msg)
+            print(f"❌ {error_msg}")
+            raise RuntimeError(error_msg)
         
         # Parse JSON output
-        output_json = json.loads(result.stdout)
+        try:
+            output_json = json.loads(result.stdout)
+            print(f"   ✅ Pipeline succeeded, extracted {len(output_json.get('vulnerabilities', []))} vulnerabilities, {len(output_json.get('ofcs', []))} OFCs")
+        except json.JSONDecodeError as e:
+            error_msg = f"Failed to parse pipeline JSON output: {e}. Output was: {result.stdout[:500]}"
+            error_details.append(error_msg)
+            print(f"❌ {error_msg}")
+            raise ValueError(error_msg)
         
         # Clean up temp file if created
         if file_ext == '.pdf' and os.path.exists(text_file):
             os.remove(text_file)
+            print(f"   Cleaned up temporary file: {text_file}")
         
         return {
             "success": True,
@@ -452,8 +509,14 @@ def process_file_with_heuristic_pipeline(filepath, filename):
         }
         
     except Exception as e:
-        print(f"❌ Heuristic pipeline error for {filename}: {e}")
-        raise
+        error_msg = f"Error processing {filename}: {type(e).__name__}: {str(e)}"
+        if error_details:
+            error_msg += f" Details: {'; '.join(error_details)}"
+        print(f"❌ {error_msg}")
+        print(f"   Full traceback:")
+        import traceback
+        traceback.print_exc()
+        raise RuntimeError(error_msg) from e
 
 @app.route('/api/files/process', methods=['POST'])
 def process_files():
@@ -529,7 +592,7 @@ def process_files():
                     "error": f"{error_type}: {error_msg}",
                     "error_type": error_type
                 })
- חי errors += 1
+                errors += 1
         
         return jsonify({
             "success": True,
