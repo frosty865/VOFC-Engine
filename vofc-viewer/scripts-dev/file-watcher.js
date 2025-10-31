@@ -129,7 +129,7 @@ async function processFilesInFolder() {
         log(`🔗 Calling Ollama processing API: ${PROCESS_ENDPOINT}`, 'cyan');
         const response = await fetch(PROCESS_ENDPOINT, {
           method: 'POST',
-          headers:表面上 {
+          headers: {
             'Content-Type': 'application/json'
           },
           signal: AbortSignal.timeout(60000) // 60 second timeout
