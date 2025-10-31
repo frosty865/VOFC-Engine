@@ -97,10 +97,11 @@ export default function UserManagement() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username: formData.username,
+          email: formData.email, // API expects 'email', not 'username'
           password: formData.password,
-          full_name: `${formData.first_name} ${formData.last_name}`.trim(),
           role: formData.role,
+          first_name: formData.first_name || '',
+          last_name: formData.last_name || '',
           agency: formData.organization || 'CISA'
         }),
       });
