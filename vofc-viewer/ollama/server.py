@@ -2,6 +2,9 @@ from flask import Flask, jsonify, request, send_file
 import os
 import json
 import shutil
+import subprocess
+import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -308,9 +311,153 @@ def write_file():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+def extract_text_from_pdf(pdf_path):
+    """Extract text from PDF file using Python libraries or Node.js pdf-parse."""
+    # Try Python libraries first
+    try:
+        import PyPDF2
+        with open(pdf_path, 'rb') as f:
+            reader = PyPDF2.PdfReader(f)
+            text = ''
+            for page in reader.pages:
+                text += page.extract_text() + '\n'
+            if text.strip():
+                return text
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"⚠️  PyPDF2 extraction error: {e}")
+    
+    # Try pypdf (newer alternative)
+    try:
+        import pypdf
+        with open(pdf_path, 'rb') as f:
+            reader = pypdf.PdfReader(f)
+            text = ''
+            for page in reader.pages:
+                text += page.extract_text() + '\n'
+            if text.strip():
+                return text
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"⚠️  pypdf extraction error: {e}")
+    
+    # Try Node.js pdf-parse via subprocess (if node is available)
+    try:
+        # Check if we can find the pdf-parse module in node_modules
+        node_modules_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'node_modules')
+        pdf_parse_path = os.path.join(node_modules_path, 'pdf-parse', 'lib', 'pdfumor.js')
+        if os.path.exists(pdf_parse_path):
+            # Use Node.js to extract
+            script = f"""
+            const pdfParse = require('pdf-parse');
+            const fs = require('fs');
+            const data = fs.readFileSync(r'{pdf_path}');
+            pdfParse(data).then(data => {{
+                console.log(data.text);
+            }}).catch(err => {{
+                console.error(err);
+                process.exit(1);
+            }});
+            """
+            result = subprocess.run(
+                ['node', '-e', script],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+    except Exception as e:
+        print(f"⚠️  Node.js pdf-parse extraction error: {e}")
+    
+    # Fallback to pdftotext command if available
+    try:
+        result = subprocess.run(
+            ['pdftotext', pdf_path, '-'],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+    except Exception as e:
+        print(f"⚠️  pdftotext extraction error: {e}")
+    
+    # If all else fails, return empty string (heuristic parser might still work with metadata)
+    print(f"⚠️  Could not extract text from PDF: {pdf_path}")
+    return ""
+
+def process_file_with_heuristic_pipeline(filepath, filename):
+    """Process a file using the heuristic pipeline."""
+    try:
+        # Get the heuristic pipeline script path
+        pipeline_script = os.path.join(
+            os.path.expanduser('~'),
+            'AppData', 'Local', 'Ollama', 'pipeline', 'heuristic_pipeline.py'
+        )
+        
+        if not os.path.exists(pipeline_script):
+            raise FileNotFoundError(f"Heuristic pipeline not found at: {pipeline_script}")
+        
+        # Extract text from PDF if needed
+        file_ext = os.path.splitext(filename)[1].lower()
+        if file_ext == '.pdf':
+            text_content = extract_text_from_pdf(filepath)
+            if not text_content:
+                raise ValueError("Could not extract text from PDF")
+            # Write text to temporary file
+            temp_txt = os.path.join(UPLOAD_DIR, f"{os.path.splitext(filename)[0]}_temp.txt")
+            with open(temp_txt, 'w', encoding='utf-8') as f:
+                f.write(text_content)
+            text_file = temp_txt
+        elif file_ext in ['.txt', '.md']:
+            text_file = filepath
+        else:
+            raise ValueError(f"Unsupported file type: {file_ext}")
+        
+        # Generate submission ID
+        submission_id = str(uuid.uuid4())
+        
+        # Run heuristic pipeline
+        result = subprocess.run(
+            [sys.executable, pipeline_script,
+             '--submission-id', submission_id,
+             '--text-file', text_file,
+             '--dry-run'],  # Use dry-run to get JSON output without DB writes
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+        
+        if result.returncode != 0:
+            raise RuntimeError(f"Pipeline failed: {result.stderr}")
+        
+        # Parse JSON output
+        output_json = json.loads(result.stdout)
+        
+        # Clean up temp file if created
+        if file_ext == '.pdf' and os.path.exists(text_file):
+            os.remove(text_file)
+        
+        return {
+            "success": True,
+            "submission_id": submission_id,
+            "extracted_data": output_json,
+            "vulnerabilities_count": len(output_json.get("vulnerabilities", [])),
+            "ofcs_count": len(output_json.get("ofcs", []))
+        }
+        
+    except Exception as e:
+        print(f"❌ Heuristic pipeline error for {filename}: {e}")
+        raise
+
 @app.route('/api/files/process', methods=['POST'])
 def process_files():
-    """Process all files in the incoming folder."""
+    """Process all files in the incoming folder using heuristic pipeline."""
     try:
         if not os.path.exists(UPLOAD_DIR):
             return jsonify({
@@ -320,7 +467,7 @@ def process_files():
             }), 404
         
         files = [f for f in os.listdir(UPLOAD_DIR) 
-                if os.path.isfile(os.path.join(UPLOAD_DIR, f))]
+                if os.path.isfile(os.path.join(UPLOAD_DIR, f)) and not f.endswith('_temp.txt')]
         
         if not files:
             return jsonify({
@@ -337,15 +484,26 @@ def process_files():
         for filename in files:
             filepath = os.path.join(UPLOAD_DIR, filename)
             try:
-                # For now, just move files from incoming to processed
-                # In the future, integrate with actual Ollama processing
-                target_path = os.path.join(PROCESSED_DIR, filename)
-                shutil.move(filepath, target_path)
+                # Process file with heuristic pipeline
+                process_result = process_file_with_heuristic_pipeline(filepath, filename)
+                
+                # Save JSON output to library folder
+                json_filename = f"{os.path.splitext(filename)[0]}.json"
+                json_path = os.path.join(LIBRARY_DIR, json_filename)
+                with open(json_path, 'w', encoding='utf-8') as f:
+                    json.dump(process_result["extracted_data"], f, indent=2)
+                
+                # Move original file to library folder
+                library_filepath = os.path.join(LIBRARY_DIR, filename)
+                shutil.move(filepath, library_filepath)
                 
                 results.append({
                     "file": filename,
                     "success": True,
-                    "message": f"Moved to processed folder"
+                    "message": f"Processed successfully - {process_result['vulnerabilities_count']} vulnerabilities, {process_result['ofcs_count']} OFCs",
+                    "vulnerabilities": process_result['vulnerabilities_count'],
+                    "ofcs": process_result['ofcs_count'],
+                    "submission_id": process_result["submission_id"]
                 })
                 processed += 1
                 
@@ -382,7 +540,7 @@ def process_files():
 
 @app.route('/api/documents/process-batch', methods=['POST'])
 def process_batch():
-    """Process a batch of files by filename - Ollama server endpoint."""
+    """Process a batch of files by filename using heuristic pipeline - Ollama server endpoint."""
     try:
         data = request.get_json()
         filenames = data.get('filenames', [])
@@ -410,14 +568,26 @@ def process_batch():
                 continue
             
             try:
-                # Move to processed folder (in future: actually process with Ollama)
-                target_path = os.path.join(PROCESSED_DIR, filename)
-                shutil.move(filepath, target_path)
+                # Process file with heuristic pipeline
+                process_result = process_file_with_heuristic_pipeline(filepath, filename)
+                
+                # Save JSON output to library folder
+                json_filename = f"{os.path.splitext(filename)[0]}.json"
+                json_path = os.path.join(LIBRARY_DIR, json_filename)
+                with open(json_path, 'w', encoding='utf-8') as f:
+                    json.dump(process_result["extracted_data"], f, indent=2)
+                
+                # Move original file to library folder
+                library_filepath = os.path.join(LIBRARY_DIR, filename)
+                shutil.move(filepath, library_filepath)
                 
                 results.append({
                     "filename": filename,
                     "status": "success",
-                    "message": "Processed successfully"
+                    "message": f"Processed successfully - {process_result['vulnerabilities_count']} vulnerabilities, {process_result['ofcs_count']} OFCs",
+                    "vulnerabilities": process_result['vulnerabilities_count'],
+                    "ofcs": process_result['ofcs_count'],
+                    "submission_id": process_result["submission_id"]
                 })
                 processed += 1
                 
