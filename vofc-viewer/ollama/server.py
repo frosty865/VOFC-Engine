@@ -389,7 +389,7 @@ def extract_text_from_pdf(pdf_path):
     
     # If all else fails, try OCR (Optical Character Recognition) for scanned PDFs
     try:
-        print(f"⚠️  Standard text extraction failed, trying OCR...")
+        print(f"WARNING: Standard text extraction failed, trying OCR...")
         from pdf2image import convert_from_path
         import pytesseract
         
@@ -419,19 +419,19 @@ def extract_text_from_pdf(pdf_path):
             ocr_text += page_text + "\n"
         
         if ocr_text.strip():
-            print(f"✅ OCR extracted {len(ocr_text)} characters from {len(images)} page(s)")
+            print(f"SUCCESS: OCR extracted {len(ocr_text)} characters from {len(images)} page(s)")
             return ocr_text
         else:
-            print(f"⚠️  OCR returned empty text")
+            print(f"WARNING: OCR returned empty text")
     except ImportError as e:
-        print(f"⚠️  OCR libraries not available: {e}")
+        print(f"WARNING: OCR libraries not available: {e}")
     except FileNotFoundError:
-        print(f"⚠️  Tesseract OCR engine not found. Install from: https://github.com/UB-Mannheim/tesseract/wiki")
+        print(f"WARNING: Tesseract OCR engine not found. Install from: https://github.com/UB-Mannheim/tesseract/wiki")
     except Exception as e:
-        print(f"⚠️  OCR extraction error: {e}")
+        print(f"WARNING: OCR extraction error: {e}")
     
     # If all else fails, return empty string (heuristic parser might still work with metadata)
-    print(f"❌ Could not extract text from PDF using any method: {pdf_path}")
+    print(f"ERROR: Could not extract text from PDF using any method: {pdf_path}")
     return ""
 
 def process_file_with_heuristic_pipeline(filepath, filename):
@@ -596,7 +596,7 @@ def process_files():
                 "errors": 0
             })
         
-        print(f"📁 Found {len(incoming_files)} file(s) to process in {UPLOAD_DIR}")
+        print(f"Found {len(incoming_files)} file(s) to process in {UPLOAD_DIR}")
 
         processed = 0
         errors = 0
@@ -630,7 +630,7 @@ def process_files():
                 library_filepath = os.path.join(LIBRARY_DIR, filename)
                 shutil.move(filepath, library_filepath)
                 
-                print(f"✅ Processed: {filename} - "
+                print(f"SUCCESS: Processed: {filename} - "
                       f"{process_result['vulnerabilities_count']} vulnerabilities, "
                       f"{process_result['ofcs_count']} OFCs")
 
