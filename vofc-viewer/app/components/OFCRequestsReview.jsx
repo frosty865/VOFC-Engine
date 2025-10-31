@@ -91,7 +91,7 @@ export default function OFCRequestsReview() {
 
     try {
       setProcessingRequest(requestId);
-      const response = await fetch(`/api/admin/ofc-requests/${requestId}/reject`, {
+      const response = await fetchWithAuth(`/api/admin/ofc-requests/${requestId}/reject`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
