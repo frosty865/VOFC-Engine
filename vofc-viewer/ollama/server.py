@@ -623,9 +623,10 @@ def process_files():
         
         return jsonify({
             "success": True,
+            "message": f"Processing completed: {processed} successful, {errors} errors",
             "processed": processed,
             "errors": errors,
-            "total": len(files),
+            "total": len(incoming_files),
             "results": results
         })
     
@@ -783,7 +784,6 @@ def health():
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }), 500
-auf
 
 if __name__ == '__main__':
     print("=" * 50)
