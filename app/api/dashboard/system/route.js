@@ -15,38 +15,40 @@ export async function GET(request) {
     // Wrap auth check in timeout (5 seconds max)
     const authPromise = requireAdmin(request);
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Authentication check timeout')), 5000)
+      setTimeout(() => reject(new Error('AUTH_TIMEOUT')), 5000)
     );
     
-    const { user, error } = await Promise.race([authPromise, timeoutPromise]);
+    const result = await Promise.race([authPromise, timeoutPromise]);
     
-    if (error) {
-      authError = error;
-    } else if (user) {
-      authUser = user;
+    if (result && typeof result === 'object') {
+      if (result.error) {
+        authError = result.error;
+      } else if (result.user) {
+        authUser = result.user;
+      }
     }
   } catch (timeoutError) {
     console.error('Auth check timeout or exception:', timeoutError);
     // On timeout, allow the request but log it (graceful degradation)
     // This prevents 503 errors when auth is slow
-    if (timeoutError.message === 'Authentication check timeout') {
-      console.warn('Auth check timed out, allowing request with degraded auth status');
+    if (timeoutError.message === 'AUTH_TIMEOUT') {
+      console.warn('Auth check timed out after 5s, allowing request to proceed');
       // Continue without strict auth check to avoid 503
+      authError = null; // Clear error to allow request
     } else {
       authError = timeoutError.message || 'Authentication failed';
     }
   }
   
   // Only block if we got a definitive auth error (not timeout)
-  if (authError && !authError.includes('timeout')) {
+  if (authError) {
     return NextResponse.json(
       { error: String(authError), timestamp: new Date().toISOString() },
       { status: 403 }
     );
   }
   
-  // If we didn't get a user but no error (timeout case), continue anyway
-  // This allows the status page to load even if auth is slow
+  // Continue with request (auth passed or timed out gracefully)
 
   try {
     const status = {
