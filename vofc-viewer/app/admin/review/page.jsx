@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { fetchWithAuth } from '../../../lib/fetchWithAuth'
+import { fetchWithAuth } from '../../lib/fetchWithAuth'
 import RoleGate from '@/components/RoleGate'
 
 export default function ReviewSubmissionsPage() {
