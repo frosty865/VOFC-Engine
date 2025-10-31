@@ -51,7 +51,7 @@ export default function LearningMonitor() {
   const startLearning = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/learning/start', {
+      const response = await fetchWithAuth('/api/learning/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
