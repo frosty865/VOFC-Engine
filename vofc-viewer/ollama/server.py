@@ -508,19 +508,28 @@ def process_files():
                 processed += 1
                 
             except Exception as e:
+                # Log detailed error
+                error_msg = str(e)
+                error_type = type(e).__name__
+                print(f"❌ Failed to process {filename}: {error_type}: {error_msg}")
+                import traceback
+                traceback.print_exc()
+                
                 # Move to errors folder on failure
                 try:
                     error_path = os.path.join(ERRORS_DIR, filename)
                     shutil.move(filepath, error_path)
-                except:
-                    pass
+                    print(f"   Moved {filename} to errors folder: {error_path}")
+                except Exception as move_error:
+                    print(f"   ⚠️  Failed to move file to errors folder: {move_error}")
                 
                 results.append({
                     "file": filename,
                     "success": False,
-                    "error": str(e)
+                    "error": f"{error_type}: {error_msg}",
+                    "error_type": error_type
                 })
-                errors += 1
+ חי errors += 1
         
         return jsonify({
             "success": True,
@@ -592,17 +601,26 @@ def process_batch():
                 processed += 1
                 
             except Exception as e:
+                # Log detailed error
+                error_msg = str(e)
+                error_type = type(e).__name__
+                print(f"❌ Failed to process {filename}: {error_type}: {error_msg}")
+                import traceback
+                traceback.print_exc()
+                
                 # Move to errors folder
                 try:
                     error_path = os.path.join(ERRORS_DIR, filename)
                     shutil.move(filepath, error_path)
-                except:
-                    pass
+                    print(f"   Moved {filename} to errors folder: {error_path}")
+                except Exception as move_error:
+                    print(f"   ⚠️  Failed to move file to errors folder: {move_error}")
                 
                 results.append({
                     "filename": filename,
                     "status": "error",
-                    "message": str(e)
+                    "message": f"{error_type}: {error_msg}",
+                    "error_type": error_type
                 })
                 errors += 1
         
