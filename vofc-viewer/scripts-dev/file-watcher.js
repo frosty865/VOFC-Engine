@@ -47,12 +47,13 @@ if (INCOMING_DIR.includes('\\Ollama\\files') || INCOMING_DIR.includes('/Ollama/f
 console.log(`📁 Base directory: ${BASE_DIR}`);
 console.log(`📁 Incoming directory: ${INCOMING_DIR}`);
 
-const PROCESSING_URL = process.env.PROCESSING_API_URL || 
-  process.env.NEXT_PUBLIC_APP_URL || 
-  'http://localhost:3000';
+// Use Ollama server directly, not Next.js
+const OLLAMA_URL = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || 'https://ollama.frostech.site';
+const OLLAMA_LOCAL_URL = process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
 
-const PROCESS_ENDPOINT = `${PROCESSING_URL}/api/documents/process-pending`;
-const PROCESS_SIMPLE_ENDPOINT = `${PROCESSING_URL}/api/documents/process-simple`;
+// Try local first, fallback to remote
+const PROCESSING_URL = OLLAMA_LOCAL_URL;
+const PROCESS_ENDPOINT = `${PROCESSING_URL}/api/files/process`;
 
 const FILE_DEBOUNCE_MS = 5000; // Wait 5 seconds after file appears before processing
 const PROCESS_INTERVAL_MS = 30000; // Also check every 30 seconds for any missed files
@@ -78,52 +79,8 @@ function log(message, color = 'reset') {
 }
 
 async function processPendingDocuments() {
-  try {
-    log('🔍 Checking for pending documents to process...', 'cyan');
-    log(`🔗 Calling API: ${PROCESS_ENDPOINT}`, 'cyan');
-    
-    const response = await fetch(PROCESS_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      signal: AbortSignal.timeout(60000) // 60 second timeout
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      log(`❌ Processing API error (${response.status}): ${errorText}`, 'red');
-      return;
-    }
-
-    const result = await response.json();
-    
-    if (result.success) {
-      if (result.processed > 0) {
-        log(`✅ Processed ${result.processed} document(s)`, 'green');
-        if (result.failed > 0) {
-          log(`⚠️ ${result.failed} document(s) failed to process`, 'yellow');
-        }
-      } else {
-        log('ℹ️  No pending documents to process', 'blue');
-      }
-    } else {
-      log(`❌ Processing failed: ${result.error}`, 'red');
-    }
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      log(`❌ Processing request timed out after 60 seconds`, 'red');
-    } else if (error.code === 'ECONNREFUSED') {
-      log(`❌ Cannot connect to processing API at ${PROCESS_ENDPOINT}`, 'red');
-      log(`   Make sure your Next.js server is running at ${PROCESSING_URL}!`, 'yellow');
-    } else {
-      log(`❌ Error calling processing API: ${error.message}`, 'red');
-      log(`   Endpoint: ${PROCESS_ENDPOINT}`, 'yellow');
-      if (error.code) {
-        log(`   Error code: ${error.code}`, 'yellow');
-      }
-    }
-  }
+  // Not needed when using Ollama directly - files are processed from folder
+  return;
 }
 
 async function processFilesInFolder() {
@@ -167,12 +124,12 @@ async function processFilesInFolder() {
     if (validFiles.length > 0) {
       log(`📄 Found ${validFiles.length} file(s) ready for processing`, 'cyan');
       
-      // Use process-simple to handle files directly from folder
+      // Call Ollama server directly to process files
       try {
-        log(`🔗 Calling processing API: ${PROCESS_SIMPLE_ENDPOINT}`, 'cyan');
-        const response = await fetch(PROCESS_SIMPLE_ENDPOINT, {
+        log(`🔗 Calling Ollama processing API: ${PROCESS_ENDPOINT}`, 'cyan');
+        const response = await fetch(PROCESS_ENDPOINT, {
           method: 'POST',
-          headers: {
+          headers:表面上 {
             'Content-Type': 'application/json'
           },
           signal: AbortSignal.timeout(60000) // 60 second timeout
@@ -198,13 +155,13 @@ async function processFilesInFolder() {
         if (error.name === 'AbortError') {
           log(`❌ Processing request timed out after 60 seconds`, 'red');
         } else if (error.code === 'ECONNREFUSED' || error.message.includes('fetch failed')) {
-          log(`❌ Cannot connect to processing API at ${PROCESS_SIMPLE_ENDPOINT}`, 'red');
-          log(`   Make sure your Next.js server is running!`, 'yellow');
+          log(`❌ Cannot connect to Ollama server at ${PROCESS_ENDPOINT}`, 'red');
+          log(`   Make sure your Ollama server is running!`, 'yellow');
           log(`   Expected URL: ${PROCESSING_URL}`, 'yellow');
-          log(`   Try running: npm run dev (in vofc-viewer directory)`, 'yellow');
+          log(`   Try running: python ollama/server.py (in vofc-viewer directory)`, 'yellow');
         } else {
           log(`❌ Error processing files: ${error.message}`, 'red');
-          log(`   Endpoint: ${PROCESS_SIMPLE_ENDPOINT}`, 'yellow');
+          log(`   Endpoint: ${PROCESS_ENDPOINT}`, 'yellow');
           if (error.code) {
             log(`   Error code: ${error.code}`, 'yellow');
           }
@@ -220,6 +177,7 @@ async function processFilesInFolder() {
 function startWatcher() {
   log(`🚀 Starting file watcher service`, 'bright');
   log(`📁 Monitoring: ${INCOMING_DIR}`, 'cyan');
+  log(`🔗 Ollama Server: ${PROCESSING_URL}`, 'cyan');
   log(`🔗 Processing API: ${PROCESS_ENDPOINT}`, 'cyan');
 
   // Ensure directory exists

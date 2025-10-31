@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { readdir, rename, existsSync } from 'fs/promises';
+import { readdir, rename } from 'fs/promises';
+import { existsSync } from 'fs';
 import { join } from 'path';
 
 export const dynamic = 'force-dynamic';

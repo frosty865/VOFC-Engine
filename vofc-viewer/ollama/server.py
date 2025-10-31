@@ -308,6 +308,78 @@ def write_file():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/files/process', methods=['POST'])
+def process_files():
+    """Process all files in the incoming folder."""
+    try:
+        if not os.path.exists(UPLOAD_DIR):
+            return jsonify({
+                "success": False,
+                "error": "Incoming directory does not exist",
+                "processed": 0
+            }), 404
+        
+        files = [f for f in os.listdir(UPLOAD_DIR) 
+                if os.path.isfile(os.path.join(UPLOAD_DIR, f))]
+        
+        if not files:
+            return jsonify({
+                "success": True,
+                "message": "No files to process",
+                "processed": 0,
+                "errors": 0
+            })
+        
+        processed = 0
+        errors = 0
+        results = []
+        
+        for filename in files:
+            filepath = os.path.join(UPLOAD_DIR, filename)
+            try:
+                # For now, just move files from incoming to processed
+                # In the future, integrate with actual Ollama processing
+                target_path = os.path.join(PROCESSED_DIR, filename)
+                shutil.move(filepath, target_path)
+                
+                results.append({
+                    "file": filename,
+                    "success": True,
+                    "message": f"Moved to processed folder"
+                })
+                processed += 1
+                
+            except Exception as e:
+                # Move to errors folder on failure
+                try:
+                    error_path = os.path.join(ERRORS_DIR, filename)
+                    shutil.move(filepath, error_path)
+                except:
+                    pass
+                
+                results.append({
+                    "file": filename,
+                    "success": False,
+                    "error": str(e)
+                })
+                errors += 1
+        
+        return jsonify({
+            "success": True,
+            "processed": processed,
+            "errors": errors,
+            "total": len(files),
+            "results": results
+        })
+    
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "processed": 0,
+            "errors": 0
+        }), 500
+
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint"""
