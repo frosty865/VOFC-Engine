@@ -59,7 +59,7 @@ export default function AdminOverviewPage() {
             <div className="font-medium">User Management</div>
             <div className="text-sm text-gray-500">Add, activate, and manage users</div>
           </a>
-          <a href="/review" className="bg-white shadow rounded-xl p-4 hover:bg-gray-50">
+          <a href="/admin/review" className="bg-white shadow rounded-xl p-4 hover:bg-gray-50">
             <div className="font-medium">Review Submissions</div>
             <div className="text-sm text-gray-500">Moderate new content</div>
           </a>

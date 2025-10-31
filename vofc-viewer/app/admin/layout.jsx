@@ -12,6 +12,7 @@ export default function AdminLayout({ children }) {
             <h1 className="text-xl font-semibold">VOFC Admin Dashboard</h1>
             <nav className="space-x-4 text-sm font-medium">
               <Link href="/admin" className="hover:text-blue-600">Overview</Link>
+              <Link href="/admin/review" className="hover:text-blue-600">Review</Link>
               <Link href="/admin/models" className="hover:text-blue-600">Models</Link>
               <Link href="/admin/softmatches" className="hover:text-blue-600">Soft Matches</Link>
               <Link href="/admin/system" className="hover:text-blue-600">System</Link>
