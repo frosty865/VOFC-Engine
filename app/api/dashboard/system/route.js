@@ -7,10 +7,23 @@ export const dynamic = 'force-dynamic';
  * System Health Status - Checks all local services
  */
 export async function GET(request) {
-  // Check admin authentication
-  const { user, error: authError } = await requireAdmin(request);
+  // Check admin authentication with error handling
+  let authError = null;
+  try {
+    const { user, error } = await requireAdmin(request);
+    if (error) {
+      authError = error;
+    }
+  } catch (authException) {
+    console.error('Auth middleware exception:', authException);
+    authError = authException.message || 'Authentication failed';
+  }
+  
   if (authError) {
-    return NextResponse.json({ error: String(authError) }, { status: 403 });
+    return NextResponse.json(
+      { error: String(authError), timestamp: new Date().toISOString() },
+      { status: 403 }
+    );
   }
 
   try {
@@ -38,42 +51,56 @@ export async function GET(request) {
       }
     };
 
-    // 1. Check Flask Server (Python backend)
+    // 1. Check Flask Server (Python backend) - skip in production
     const flaskUrl = process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
-    try {
-      const flaskResponse = await fetch(`${flaskUrl}/health`, {
-        signal: AbortSignal.timeout(3000)
-      });
-      
-      if (flaskResponse.ok) {
-        const health = await flaskResponse.json();
+    const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
+    const isLocalUrl = flaskUrl.includes('127.0.0.1') || flaskUrl.includes('localhost') || flaskUrl.includes('0.0.0.0');
+    
+    // Only check Flask if we're in development or it's a local URL
+    if (!isProduction || isLocalUrl) {
+      try {
+        const flaskResponse = await fetch(`${flaskUrl}/health`, {
+          signal: AbortSignal.timeout(2000)
+        });
+        
+        if (flaskResponse.ok) {
+          const health = await flaskResponse.json();
+          status.services.flask = {
+            status: 'online',
+            url: flaskUrl,
+            status_code: flaskResponse.status,
+            server: health.server,
+            directories: health.directories
+          };
+          status.files.incoming = health.directories?.incoming?.file_count || 0;
+          status.files.library = health.directories?.library?.file_count || 0;
+          status.files.extracted_text = health.directories?.['extracted_text']?.file_count || 0;
+          status.files.errors = health.directories?.errors?.file_count || 0;
+          status.python.model = health.server?.model || 'unknown';
+          status.python.version = health.server?.python_version || 'unknown';
+          status.python.runtime_status = 'running';
+        } else {
+          status.services.flask = {
+            status: 'error',
+            url: flaskUrl,
+            status_code: flaskResponse.status,
+            error: `HTTP ${flaskResponse.status}`
+          };
+        }
+      } catch (e) {
         status.services.flask = {
-          status: 'online',
+          status: 'offline',
           url: flaskUrl,
-          status_code: flaskResponse.status,
-          server: health.server,
-          directories: health.directories
-        };
-        status.files.incoming = health.directories?.incoming?.file_count || 0;
-        status.files.library = health.directories?.library?.file_count || 0;
-        status.files.extracted_text = health.directories?.['extracted_text']?.file_count || 0;
-        status.files.errors = health.directories?.errors?.file_count || 0;
-        status.python.model = health.server?.model || 'unknown';
-        status.python.version = health.server?.python_version || 'unknown';
-        status.python.runtime_status = 'running';
-      } else {
-        status.services.flask = {
-          status: 'error',
-          url: flaskUrl,
-          status_code: flaskResponse.status,
-          error: `HTTP ${flaskResponse.status}`
+          error: e.message || 'Connection failed',
+          note: isProduction ? 'Flask server not accessible in production' : undefined
         };
       }
-    } catch (e) {
+    } else {
+      // In production with non-local URL, mark as unavailable
       status.services.flask = {
-        status: 'offline',
+        status: 'unavailable',
         url: flaskUrl,
-        error: e.message || 'Connection failed'
+        note: 'Flask server check skipped in production (only accessible locally)'
       };
     }
 
