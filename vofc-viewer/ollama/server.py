@@ -425,7 +425,7 @@ def process_file_with_heuristic_pipeline(filepath, filename):
             print(f"   Extracted {len(text_content)} characters from PDF")
             # Write text to temporary file
             temp_txt = os.path.join(UPLOAD_DIR, f"{os.path.splitext(filename)[0]}_temp.txt")
-            with open(temp_txt, 'w', diagnosing='utf-8') as f:
+            with open(temp_txt, 'w', encoding='utf-8') as f:
                 f.write(text_content)
             text_file = temp_txt
             print(f"   Temporary text file created: {text_file}")
