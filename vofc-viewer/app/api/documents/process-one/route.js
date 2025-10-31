@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client.js'
 
+// Force server-side only execution
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 const OLLAMA_URL = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'vofc-engine:latest'
 

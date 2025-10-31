@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { getOllamaUrl } from '../lib/ollama-client';
 
 export default function DocumentProcessor() {
   const [documents, setDocuments] = useState([]);
@@ -120,9 +121,28 @@ export default function DocumentProcessor() {
     }
   };
 
-  // Process single document
+  // Process single document - keep using Next.js API for Supabase submissions
   const processDocument = async (filename, docId) => {
     try {
+      // process-one works with Supabase submissions, so keep using Next.js API
+      // If docId is null, try Ollama server directly for file-only processing
+      if (!docId) {
+        const ollamaUrl = getOllamaUrl();
+        const response = await fetch(`${ollamaUrl}/api/documents/process-batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filenames: [filename] })
+        });
+        const result = await response.json();
+        if (result.success) {
+          await fetchDocuments();
+          alert(`Document processed successfully!`);
+        } else {
+          alert(`Error: ${result.error || 'Unknown error'}`);
+        }
+        return;
+      }
+      
       // Prefer server-side single-submission processor (no local files needed)
       const response = await fetch('/api/documents/process-one', {
         method: 'POST',
@@ -146,7 +166,7 @@ export default function DocumentProcessor() {
     }
   };
 
-  // Process selected documents
+  // Process selected documents - call Ollama server directly
   const processSelected = async () => {
     if (selectedFiles.length === 0) {
       alert('Please select documents to process');
@@ -154,7 +174,8 @@ export default function DocumentProcessor() {
     }
 
     try {
-      const response = await fetch('/api/documents/process-batch', {
+      const ollamaUrl = getOllamaUrl();
+      const response = await fetch(`${ollamaUrl}/api/documents/process-batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filenames: selectedFiles })
@@ -174,12 +195,13 @@ export default function DocumentProcessor() {
     }
   };
 
-  // Process all pending documents
+  // Process all pending documents - keep using Next.js API (works with Supabase)
   const processAllPending = async () => {
     if (!confirm('Process all pending unparsed documents? This may take several minutes.')) return;
 
     try {
       setLoading(true);
+      // process-pending works with Supabase submissions, keep using Next.js API
       const response = await fetch('/api/documents/process-pending', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
@@ -201,15 +223,15 @@ export default function DocumentProcessor() {
     }
   };
   
-  // Process all documents (legacy)
+  // Process all documents (legacy) - use Ollama              server
   const processAll = async () => {
-    if (!confirm('Process all documents in the docs folder?')) return;
+    if (!confirm('Process all documents in the incoming folder?')) return;
 
     try {
-      const response = await fetch('/api/documents/process-all', {
+      const ollamaUrl = getOllamaUrl();
+      const response = await fetch(`${ollamaUrl}/api/files/process`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        headers: { 'Content-Type': 'application/json' }
       });
 
       const result = await response.json();

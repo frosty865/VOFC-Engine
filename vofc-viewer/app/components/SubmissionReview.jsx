@@ -142,6 +142,7 @@ export default function SubmissionReview() {
   const reprocessSubmission = async (submissionId) => {
     try {
       setReprocessing(submissionId);
+      // process-one works with Supabase submissions, keep using Next.js API
       const response = await fetch('/api/documents/process-one', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

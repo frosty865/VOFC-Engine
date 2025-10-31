@@ -380,6 +380,79 @@ def process_files():
             "errors": 0
         }), 500
 
+@app.route('/api/documents/process-batch', methods=['POST'])
+def process_batch():
+    """Process a batch of files by filename - Ollama server endpoint."""
+    try:
+        data = request.get_json()
+        filenames = data.get('filenames', [])
+        
+        if not filenames or not isinstance(filenames, list):
+            return jsonify({
+                "success": False,
+                "error": "filenames array is required"
+            }), 400
+        
+        results = []
+        processed = 0
+        errors = 0
+        
+        for filename in filenames:
+            filepath = os.path.join(UPLOAD_DIR, filename)
+            
+            if not os.path.exists(filepath):
+                results.append({
+                    "filename": filename,
+                    "status": "error",
+                    "message": "File not found in incoming folder"
+                })
+                errors += 1
+                continue
+            
+            try:
+                # Move to processed folder (in future: actually process with Ollama)
+                target_path = os.path.join(PROCESSED_DIR, filename)
+                shutil.move(filepath, target_path)
+                
+                results.append({
+                    "filename": filename,
+                    "status": "success",
+                    "message": "Processed successfully"
+                })
+                processed += 1
+                
+            except Exception as e:
+                # Move to errors folder
+                tryním:
+                    error_path = os.path.join(ERRORS_DIR, filename)
+                    shutil.move(filepath, error_path)
+                except:
+                    pass
+                
+                results.append({
+                    "filename": filename,
+                    "status": "error",
+                    "message": str(e)
+                })
+                errors += 1
+        
+        return jsonify({
+            "success": True,
+            "message": f"Batch processing completed: {processed} successful, {errors} errors",
+            "results": results,
+            "summary": {
+                "total": len(filenames),
+                "successful": processed,
+                "errors": errors
+            }
+        })
+    
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint"""

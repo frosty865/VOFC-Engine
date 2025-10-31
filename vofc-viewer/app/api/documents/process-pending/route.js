@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-client.js';
 
+// Force server-side only execution
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 /**
  * Process all pending submissions that haven't been parsed yet
  * This endpoint will find submissions without enhanced_extraction data
