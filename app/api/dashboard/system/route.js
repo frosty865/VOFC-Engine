@@ -1,54 +1,85 @@
 import { NextResponse } from 'next/server';
-import { requireAdmin } from '../../../lib/auth-middleware';
+import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 /**
  * System Health Status - Checks all local services
  */
 export async function GET(request) {
-  // Check admin authentication with timeout protection
-  let authError = null;
-  let authUser = null;
+  // Check admin authentication using Supabase token
+  let supabaseAdmin = null;
   
   try {
-    // Wrap auth check in timeout (5 seconds max)
-    const authPromise = requireAdmin(request);
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('AUTH_TIMEOUT')), 5000)
-    );
+    // Get token from Authorization header
+    const authHeader = request.headers.get('authorization');
+    let accessToken = null;
     
-    const result = await Promise.race([authPromise, timeoutPromise]);
+    if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+      accessToken = authHeader.slice(7).trim();
+    }
     
-    if (result && typeof result === 'object') {
-      if (result.error) {
-        authError = result.error;
-      } else if (result.user) {
-        authUser = result.user;
-      }
+    if (!accessToken) {
+      return NextResponse.json(
+        { error: 'No authentication token provided', timestamp: new Date().toISOString() },
+        { status: 401 }
+      );
     }
-  } catch (timeoutError) {
-    console.error('Auth check timeout or exception:', timeoutError);
-    // On timeout, allow the request but log it (graceful degradation)
-    // This prevents 503 errors when auth is slow
-    if (timeoutError.message === 'AUTH_TIMEOUT') {
-      console.warn('Auth check timed out after 5s, allowing request to proceed');
-      // Continue without strict auth check to avoid 503
-      authError = null; // Clear error to allow request
-    } else {
-      authError = timeoutError.message || 'Authentication failed';
+    
+    // Verify token and check admin role
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('Missing Supabase environment variables');
+      return NextResponse.json(
+        { error: 'Server configuration error', timestamp: new Date().toISOString() },
+        { status: 500 }
+      );
     }
-  }
-  
-  // Only block if we got a definitive auth error (not timeout)
-  if (authError) {
+    
+    supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(accessToken);
+    
+    if (userError || !user) {
+      return NextResponse.json(
+        { error: 'Invalid authentication token', timestamp: new Date().toISOString() },
+        { status: 401 }
+      );
+    }
+    
+    // Check user role
+    const { data: profile } = await supabaseAdmin
+      .from('user_profiles')
+      .select('role')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    
+    const derivedRole = String(
+      profile?.role || user.user_metadata?.role || 'user'
+    ).toLowerCase();
+    
+    // Check if admin via role or email allowlist
+    const isAdmin = ['admin', 'spsa'].includes(derivedRole);
+    const allowlist = (process.env.ADMIN_EMAILS || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+    const isEmailAdmin = allowlist.includes(String(user.email).toLowerCase());
+    
+    if (!isAdmin && !isEmailAdmin) {
+      return NextResponse.json(
+        { error: 'Admin access required', timestamp: new Date().toISOString() },
+        { status: 403 }
+      );
+    }
+  } catch (authException) {
+    console.error('Auth check error:', authException);
+    // On any auth error, return 401/403 instead of proceeding
     return NextResponse.json(
-      { error: String(authError), timestamp: new Date().toISOString() },
-      { status: 403 }
+      { error: 'Authentication failed', timestamp: new Date().toISOString() },
+      { status: 401 }
     );
   }
   
-  // Continue with request (auth passed or timed out gracefully)
+  // Continue with request (auth passed - supabaseAdmin is now available)
 
   try {
     const status = {
@@ -160,15 +191,10 @@ export async function GET(request) {
       };
     }
 
-    // 3. Check Supabase
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    
-    if (supabaseUrl && supabaseServiceKey) {
+    // 3. Check Supabase (already have supabaseAdmin from auth check)
+    if (supabaseUrl && supabaseServiceKey && supabaseAdmin) {
       try {
-        const { createClient } = await import('@supabase/supabase-js');
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
-        const { data, error } = await supabase.from('submissions').select('id').limit(1);
+        const { data, error } = await supabaseAdmin.from('submissions').select('id').limit(1);
         
         if (error) {
           status.services.supabase = {
@@ -192,8 +218,8 @@ export async function GET(request) {
     } else {
       status.services.supabase = {
         status: 'warning',
-        url: supabaseUrl,
-        error: 'Supabase credentials missing'
+        url: supabaseUrl || 'Not configured',
+        error: supabaseAdmin ? 'Supabase credentials missing' : 'Supabase client not initialized'
       };
     }
 
