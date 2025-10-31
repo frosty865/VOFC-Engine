@@ -808,6 +808,137 @@ def process_files():
             "errors": 0
         }), 500
 
+@app.route('/api/files/process-extracted', methods=['POST'])
+def process_extracted_text():
+    """Process all .txt files in the extracted_text folder."""
+    try:
+        if not os.path.exists(EXTRACTED_TEXT_DIR):
+            return jsonify({
+                "success": False,
+                "error": f"Missing folder: {EXTRACTED_TEXT_DIR}"
+            }), 404
+
+        # Get all .txt files in extracted_text directory
+        files = [
+            f for f in os.listdir(EXTRACTED_TEXT_DIR)
+            if os.path.isfile(os.path.join(EXTRACTED_TEXT_DIR, f)) and f.endswith(".txt")
+        ]
+
+        if not files:
+            return jsonify({
+                "success": True,
+                "message": "No extracted text files found.",
+                "processed": 0,
+                "errors": 0
+            })
+
+        processed = 0
+        errors = 0
+        results = []
+
+        # Import pipeline functions
+        pipeline_path = os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'Ollama', 'pipeline')
+        if pipeline_path not in sys.path:
+            sys.path.insert(0, pipeline_path)
+        
+        try:
+            from heuristic_pipeline import process_text_with_vofc_engine
+        except ImportError:
+            try:
+                from pipeline.heuristic_pipeline import process_text_with_vofc_engine
+            except ImportError:
+                return jsonify({
+                    "success": False,
+                    "error": "Failed to import process_text_with_vofc_engine. Check pipeline path.",
+                    "processed": 0
+                }), 500
+
+        for fname in files:
+            path = os.path.join(EXTRACTED_TEXT_DIR, fname)
+            print(f"Processing extracted text: {fname}")
+
+            try:
+                # Read extracted text
+                with open(path, "r", encoding="utf-8") as f:
+                    text = f.read()
+
+                # Process with VOFC engine
+                vofc_result = process_text_with_vofc_engine(text)
+
+                # Save JSON output to library
+                json_filename = fname.replace("_temp.txt", ".json")
+                json_path = os.path.join(LIBRARY_DIR, json_filename)
+                with open(json_path, "w", encoding="utf-8") as j:
+                    json.dump(vofc_result, j, indent=2)
+
+                # Move processed .txt file to library
+                library_txt_path = os.path.join(LIBRARY_DIR, fname)
+                shutil.move(path, library_txt_path)
+
+                # Create submission record
+                submission_id = str(uuid.uuid4())
+                vuln_count = len(vofc_result.get('vulnerabilities', []))
+                ofc_count = len(vofc_result.get('ofcs', []))
+
+                create_submission_record(
+                    submission_id=submission_id,
+                    filename=fname.replace('_temp.txt', '.pdf'),  # Original PDF name
+                    vuln_count=vuln_count,
+                    ofc_count=ofc_count,
+                    filepath=library_txt_path
+                )
+
+                print(f"SUCCESS: Processed {fname} - {vuln_count} vulnerabilities, {ofc_count} OFCs")
+                processed += 1
+                results.append({
+                    "file": fname,
+                    "success": True,
+                    "vulnerabilities": vuln_count,
+                    "ofcs": ofc_count,
+                    "submission_id": submission_id
+                })
+
+            except Exception as e:
+                error_msg = str(e)
+                error_type = type(e).__name__
+                print(f"Failed to process {fname}: {error_type}: {error_msg}")
+                import traceback
+                traceback.print_exc()
+
+                # Move to errors folder
+                try:
+                    error_path = os.path.join(ERRORS_DIR, fname)
+                    shutil.move(path, error_path)
+                    print(f"Moved {fname} to errors folder")
+                except Exception as move_error:
+                    print(f"WARNING: Failed to move file to errors folder: {move_error}")
+
+                errors += 1
+                results.append({
+                    "file": fname,
+                    "success": False,
+                    "error": f"{error_type}: {error_msg}",
+                    "error_type": error_type
+                })
+
+        return jsonify({
+            "success": True,
+            "message": f"Completed processing {processed} files, {errors} errors.",
+            "processed": processed,
+            "errors": errors,
+            "results": results
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "processed": 0,
+            "errors": 0
+        }), 500
+
 @app.route('/api/documents/process-batch', methods=['POST'])
 def process_batch():
     """Process a batch of files by filename using heuristic pipeline - Ollama server endpoint."""
