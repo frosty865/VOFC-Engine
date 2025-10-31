@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { readdir, rename, existsSync } from 'fs/promises';
+import { readdir, rename } from 'fs/promises';
+import { existsSync } from 'fs';
 import { join } from 'path';
-import { stat } from 'fs';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,9 +10,10 @@ export async function POST() {
     console.log('🔄 Starting batch document processing');
     
     const ollamaUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
-    const incomingDir = process.env.OLLAMA_INCOMING_PATH || 'C:/Users/frost/AppData/Local/Ollama/files/incoming';
-    const processedDir = process.env.OLLAMA_PROCESSED_PATH || 'C:/Users/frost/AppData/Local/Ollama/files/processed';
-    const errorDir = process.env.OLLAMA_ERROR_PATH || 'C:/Users/frost/AppData/Local/Ollama/files/errors';
+    const baseDir = process.env.OLLAMA_FILE_STORAGE || 'C:/Users/frost/AppData/Local/Ollama/data';
+    const incomingDir = process.env.OLLAMA_INCOMING_PATH || join(baseDir, 'incoming');
+    const processedDir = process.env.OLLAMA_PROCESSED_PATH || join(baseDir, 'processed');
+    const errorDir = process.env.OLLAMA_ERROR_PATH || join(baseDir, 'errors');
 
     if (!existsSync(incomingDir)) {
       return NextResponse.json({ 

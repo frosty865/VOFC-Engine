@@ -1,12 +1,39 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-client.js';
+import { createClient } from '@supabase/supabase-js';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error('❌ Missing Supabase environment variables in submit API');
+}
+
+const supabaseAdmin = supabaseUrl && supabaseServiceKey 
+  ? createClient(supabaseUrl, supabaseServiceKey)
+  : null;
+
 export async function POST(request) {
   try {
-    console.log('📄 Document submit API called (local storage mode)');
+    console.log('📄 Document submit API called (tunnel mode - no local save)');
+    
+    // Get user from authorization header
+    let userId = null;
+    try {
+      const authHeader = request.headers.get('authorization');
+      if (authHeader) {
+        const accessToken = authHeader.replace('Bearer ', '');
+        const { data: { user }, error } = await supabaseAdmin.auth.getUser(accessToken);
+        if (!error && user) {
+          userId = user.id;
+          console.log('✅ User authenticated:', user.email);
+        }
+      }
+    } catch (authError) {
+      console.warn('⚠️ Could not authenticate user:', authError.message);
+    }
     
     // Check content type
     const contentType = request.headers.get('content-type');
@@ -54,67 +81,13 @@ export async function POST(request) {
       );
     }
 
-             // Save document file to local Ollama storage
-             let savedFilePath = null;
-             try {
-               // Use local storage path from environment or default
-               // Handle both Windows (local dev) and Linux (production) paths
-               const incomingDir = process.env.OLLAMA_INCOMING_PATH || 
-                 (process.platform === 'win32' 
-                   ? 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\incoming'
-                   : '/tmp/ollama/files/incoming');
-      const timestamp = Date.now();
-      const fileExtension = document.name.split('.').pop();
-      const baseName = document.name.replace(/\.[^/.]+$/, '');
-      const fileName = `${baseName}_${timestamp}.${fileExtension}`;
-      const filePath = join(incomingDir, fileName);
-
-      console.log('📁 Local Ollama storage details:');
-      console.log('- Incoming directory:', incomingDir);
-      console.log('- File name:', fileName);
-      console.log('- File path:', filePath);
-      console.log('- File size:', document.size, 'bytes');
-
-      // Ensure upload directory exists
-      if (!existsSync(incomingDir)) {
-        await mkdir(incomingDir, { recursive: true });
-        console.log('✅ Created upload directory:', incomingDir);
-      }
-
-      // Convert file to buffer and save locally
-      const buffer = await document.arrayBuffer();
-      await writeFile(filePath, Buffer.from(buffer));
-      
-      savedFilePath = filePath;
-      console.log('📄 Document saved to local Ollama storage:', filePath);
-      
-               // Also archive to Library for historical backup
-               try {
-                 const libraryDir = process.env.OLLAMA_LIBRARY_PATH || 
-                   (process.platform === 'win32' 
-                     ? 'C:\\Users\\frost\\AppData\\Local\\Ollama\\files\\library'
-                     : '/tmp/ollama/files/library');
-        if (!existsSync(libraryDir)) {
-          await mkdir(libraryDir, { recursive: true });
-        }
-        const libraryPath = join(libraryDir, fileName);
-        await writeFile(libraryPath, Buffer.from(buffer));
-        console.log('📚 Document archived to Library:', libraryPath);
-      } catch (libraryError) {
-        console.warn('⚠️ Failed to archive to Library (non-critical):', libraryError.message);
-      }
-             } catch (fileError) {
-               console.error('❌ Error saving document to local storage:', fileError);
-               console.error('❌ Platform:', process.platform);
-               console.error('❌ Incoming dir:', incomingDir);
-               
-               return NextResponse.json({
-                 success: false,
-                 error: 'Failed to save document file locally: ' + fileError.message
-               }, { status: 500 });
-             }
-
-    console.log('✅ Document saved to local storage successfully');
+    // Do not write locally; forward-only via metadata
+    let savedFilePath = null;
+    const timestamp = Date.now();
+    const fileExtension = document.name.split('.').pop();
+    const baseName = document.name.replace(/\.[^/.]+$/, '');
+    const fileName = `${baseName}_${timestamp}.${fileExtension}`;
+    console.log('📡 Tunnel submission (no local save):', { fileName, size: document.size });
     
     // Create submission record in Supabase for tracking/review
     let submissionId = null;
@@ -122,6 +95,7 @@ export async function POST(request) {
       if (supabaseAdmin) {
                const submissionData = {
                  type: 'ofc', // Document submissions are treated as OFC submissions
+          user_id: userId,
           data: JSON.stringify({
             source_title,
             source_type: source_type || 'unknown',
@@ -133,10 +107,11 @@ export async function POST(request) {
             document_type: document.type,
             document_size: document.size,
             local_file_path: savedFilePath,
-            storage_type: 'local_filesystem'
+            storage_type: 'tunnel',
+            tunnel_forwarded: true
           }),
-          status: 'pending_review',
-          source: 'document_submission',
+          status: 'processing',
+          source: 'tunnel_submission',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -149,10 +124,14 @@ export async function POST(request) {
 
         if (error) {
           console.error('❌ Database insertion failed:', error);
-          console.log('⚠️ File saved locally but not tracked in database');
-        } else {
+          console.error('❌ Error details:', JSON.stringify(error, null, 2));
+          console.error('❌ Submission data:', JSON.stringify(submissionData, null, 2));
+          // Still continue, but log the error clearly
+        } else if (submission) {
           submissionId = submission.id;
           console.log('✅ Submission record created:', submissionId);
+        } else {
+          console.error('❌ No submission returned from insert, but no error either');
         }
       } else {
         console.warn('⚠️ Supabase admin client not available - file saved locally only');
@@ -162,38 +141,45 @@ export async function POST(request) {
       console.log('⚠️ File saved locally but database tracking failed');
     }
     
-    // Optional: Process document with Ollama (if enabled)
-    const autoProcess = process.env.AUTO_PROCESS_ON_UPLOAD === 'true';
+    // Auto-process document after upload (default behavior)
+    const autoProcess = process.env.AUTO_PROCESS_ON_UPLOAD !== 'false'; // Default to true
     if (autoProcess) {
       try {
-        console.log('🤖 Auto-processing document with Ollama...');
-        const ollamaUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
-        const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
+        console.log('🤖 Auto-processing document with VOFC parser...');
         
-        await fetch(`${ollamaUrl}/api/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: ollamaModel,
-            prompt: `Parse and extract vulnerabilities and OFCs from ${document.name}`
-          })
-        });
-        console.log('✅ Auto-processing completed');
+        // Trigger processing asynchronously (don't wait for it)
+        // Use relative URL for server-side calls
+        const baseUrl = process.env.VERCEL_URL 
+          ? `https://${process.env.VERCEL_URL}`
+          : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
+        
+        if (submissionId) {
+          fetch(`${baseUrl}/api/documents/process-one`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ submissionId })
+          }).catch(() => {});
+        }
+        
+        console.log('✅ Auto-processing triggered (running in background)');
       } catch (err) {
-        console.warn('⚠️ Auto-processing failed (non-critical):', err.message);
+        console.warn('⚠️ Auto-processing setup failed (non-critical):', err.message);
       }
     }
     
     return NextResponse.json({
       success: true,
       submission_id: submissionId || 'local-' + Date.now(),
-      status: 'pending_review',
-      message: 'Document submitted successfully to local storage',
+      status: submissionId ? 'processing' : 'pending_review',
+      message: submissionId 
+        ? 'Document submitted successfully and is being processed'
+        : 'Document submitted but database tracking failed. Check server logs.',
       file_path: savedFilePath,
       document_name: document.name,
       document_size: document.size,
-      storage_type: 'local_filesystem',
-      tracked_in_database: !!submissionId
+      storage_type: 'tunnel',
+      tracked_in_database: !!submissionId,
+      warning: !submissionId ? 'Submission not tracked in database - check server logs for details' : undefined
     });
 
   } catch (error) {

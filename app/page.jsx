@@ -148,6 +148,9 @@ export default function VOFCViewer() {
               <a href="/submit" className="btn btn-primary">
                 📝 Submit New Vulnerability
               </a>
+              <a href="/submit-psa" className="btn btn-secondary">
+                📤 Submit Documents
+              </a>
               <a href="/profile" className="btn btn-secondary">
                 👤 Profile
               </a>

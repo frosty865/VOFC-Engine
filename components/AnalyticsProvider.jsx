@@ -6,8 +6,18 @@ import { SpeedInsights } from '@vercel/speed-insights/next';
 /**
  * Analytics Provider Component
  * Provides Vercel Analytics and Speed Insights for the VOFC Engine
+ * Conditionally renders only if analytics is enabled
  */
 export default function AnalyticsProvider() {
+  // Only enable analytics in production and if explicitly enabled
+  const enableAnalytics = process.env.NODE_ENV === 'production' && 
+    (process.env.NEXT_PUBLIC_VERCEL_ANALYTICS_ENABLED === 'true' || 
+     process.env.NEXT_PUBLIC_ENABLE_ANALYTICS === 'true');
+
+  if (!enableAnalytics) {
+    return null;
+  }
+
   return (
     <>
       <Analytics />

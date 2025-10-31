@@ -20,7 +20,7 @@ export async function POST(req) {
     }
 
     // Paths
-    const baseDir = process.env.OLLAMA_FILE_STORAGE || 'C:/Users/frost/AppData/Local/Ollama/files';
+    const baseDir = process.env.OLLAMA_FILE_STORAGE || 'C:/Users/frost/AppData/Local/Ollama/data';
     const incomingDir = process.env.OLLAMA_INCOMING_PATH || join(baseDir, 'incoming');
     const libraryDir = process.env.OLLAMA_LIBRARY_PATH || join(baseDir, 'library');
 
@@ -42,14 +42,8 @@ export async function POST(req) {
     await writeFile(filePath, buffer);
     console.log('📄 File saved to incoming:', filePath);
 
-    // Also archive to library for historical backup
-    try {
-      const libraryPath = join(libraryDir, file.name);
-      await writeFile(libraryPath, buffer);
-      console.log('📚 File archived to library:', libraryPath);
-    } catch (libraryError) {
-      console.warn('⚠️ Failed to archive to library (non-critical):', libraryError.message);
-    }
+    // Note: File will be moved to library after successful processing
+    console.log('📝 File will be moved to library after successful processing');
 
     // Optional: trigger local parsing immediately
     const ollamaUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';

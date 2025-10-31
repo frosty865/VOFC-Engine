@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser, USER_ROLES, getRoleDisplayName, getRoleBadgeColor } from '../../lib/auth';
+import { fetchWithAuth } from '../../lib/fetchWithAuth';
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -63,9 +64,8 @@ export default function UserManagement() {
 
   const loadUsers = async () => {
     try {
-      const response = await fetch('/api/admin/users', {
+      const response = await fetchWithAuth('/api/admin/users', {
         method: 'GET',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -91,17 +91,17 @@ export default function UserManagement() {
   const handleCreateUser = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('/api/admin/users', {
+      const response = await fetchWithAuth('/api/admin/users', {
         method: 'POST',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username: formData.username,
+          email: formData.email, // API expects 'email', not 'username'
           password: formData.password,
-          full_name: `${formData.first_name} ${formData.last_name}`.trim(),
           role: formData.role,
+          first_name: formData.first_name || '',
+          last_name: formData.last_name || '',
           agency: formData.organization || 'CISA'
         }),
       });
@@ -136,9 +136,8 @@ export default function UserManagement() {
     if (!confirm('Are you sure you want to delete this user?')) return;
 
     try {
-      const response = await fetch(`/api/admin/users?user_id=${userId}`, {
+      const response = await fetchWithAuth(`/api/admin/users?user_id=${userId}`, {
         method: 'DELETE',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -160,9 +159,8 @@ export default function UserManagement() {
 
   const handleToggleActive = async (userId, isActive) => {
     try {
-      const response = await fetch('/api/admin/users', {
+      const response = await fetchWithAuth('/api/admin/users', {
         method: 'PUT',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -206,9 +204,8 @@ export default function UserManagement() {
   const handleUpdateUser = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('/api/admin/users', {
+      const response = await fetchWithAuth('/api/admin/users', {
         method: 'PUT',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -236,9 +233,8 @@ export default function UserManagement() {
     if (!newPassword) return;
 
     try {
-      const response = await fetch('/api/admin/users', {
+      const response = await fetchWithAuth('/api/admin/users', {
         method: 'PUT',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -264,9 +260,8 @@ export default function UserManagement() {
 
   const handleForcePasswordChange = async (userId, forceChange) => {
     try {
-      const response = await fetch('/api/admin/users', {
+      const response = await fetchWithAuth('/api/admin/users', {
         method: 'PUT',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },

@@ -1,7 +1,7 @@
 // /app/api/documents/process-vofc/route.ts
 import { NextResponse } from 'next/server'
 import { supabase, supabaseAdmin } from '@/lib/supabase-client.js'
-import { ollamaChatJSON } from '@/lib/ollama.js'
+import { ollamaChatJSON, resolveOllamaBase } from '@/lib/ollama.js'
 const pdfParse = require('pdf-parse')
 
 // ---- enhanced prompt helpers ----
@@ -32,15 +32,23 @@ const DISCIPLINE_CATEGORIES = [
   'Surveillance Systems', 'Intrusion Detection', 'Command and Control'
 ]
 
-// ---- GPU-optimized processing functions ----
-async function processBatchWithRetry(batch: {page:number; text:string}[], batchIndex: number): Promise<any[]> {
-  let lastError: Error | null = null
+// ---- Multi-model processing pipeline ----
+const MODELS = [
+  { name: 'vofc-engine:latest', weight: 0.6, role: 'primary' },
+  { name: 'mistral:latest', weight: 0.25, role: 'validation' },
+  { name: 'llama3:latest', weight: 0.15, role: 'cross-check' }
+]
+
+async function processWithMultipleModels(batch: {page:number; text:string}[]): Promise<any[]> {
+  console.log(`🔄 Processing with ${MODELS.length} models...`)
   
-  for (let attempt = 1; attempt <= GPU_CONFIG.retryAttempts; attempt++) {
+  // Process with all models in parallel
+  const modelPromises = MODELS.map(async (modelConfig) => {
     try {
-      console.log(`Processing batch ${batchIndex}, attempt ${attempt}/${GPU_CONFIG.retryAttempts}`)
+      console.log(`🤖 Processing with ${modelConfig.name} (${modelConfig.role})`)
       
       const result = await ollamaChatJSON({ 
+        model: modelConfig.name,
         prompt: buildPrompt(batch),
         temperature: GPU_CONFIG.temperature,
         top_p: GPU_CONFIG.topP,
@@ -48,9 +56,70 @@ async function processBatchWithRetry(batch: {page:number; text:string}[], batchI
         timeout: GPU_CONFIG.batchTimeout
       })
       
-      if (Array.isArray(result) && result.length > 0) {
-        console.log(`Batch ${batchIndex} completed successfully with ${result.length} items`)
-        return result
+      return {
+        model: modelConfig.name,
+        role: modelConfig.role,
+        weight: modelConfig.weight,
+        result: Array.isArray(result) ? result : []
+      }
+    } catch (error) {
+      console.warn(`⚠️ ${modelConfig.name} failed:`, error.message)
+      return {
+        model: modelConfig.name,
+        role: modelConfig.role,
+        weight: modelConfig.weight,
+        result: []
+      }
+    }
+  })
+  
+  const modelResults = await Promise.allSettled(modelPromises)
+  
+  // Combine results from all models
+  const allResults: any[] = []
+  const modelData = modelResults
+    .filter(result => result.status === 'fulfilled')
+    .map(result => (result as PromiseFulfilledResult<any>).value)
+  
+  // Primary model results (vofc-engine)
+  const primaryModel = modelData.find(m => m.role === 'primary')
+  if (primaryModel && primaryModel.result.length > 0) {
+    allResults.push(...primaryModel.result)
+  }
+  
+  // Validation and cross-check from other models
+  const validationModels = modelData.filter(m => m.role !== 'primary')
+  for (const validationModel of validationModels) {
+    if (validationModel.result.length > 0) {
+      // Add unique results that weren't found by primary model
+      for (const item of validationModel.result) {
+        const isDuplicate = allResults.some(existing => 
+          normalizeVulnerabilityText(existing.vulnerability) === normalizeVulnerabilityText(item.vulnerability)
+        )
+        if (!isDuplicate) {
+          allResults.push(item)
+        }
+      }
+    }
+  }
+  
+  console.log(`✅ Multi-model processing complete: ${allResults.length} total items`)
+  return allResults
+}
+
+async function processBatchWithRetry(batch: {page:number; text:string}[], batchIndex: number): Promise<any[]> {
+  let lastError: Error | null = null
+  
+  for (let attempt = 1; attempt <= GPU_CONFIG.retryAttempts; attempt++) {
+    try {
+      console.log(`Processing batch ${batchIndex}, attempt ${attempt}/${GPU_CONFIG.retryAttempts}`)
+      
+      // Use multi-model pipeline for better results
+      const results = await processWithMultipleModels(batch)
+      
+      if (Array.isArray(results) && results.length > 0) {
+        console.log(`Batch ${batchIndex} completed successfully with ${results.length} items`)
+        return results
       } else {
         console.warn(`Batch ${batchIndex} returned empty or invalid result`)
         return []
@@ -236,17 +305,85 @@ function splitIntoChunks(textByPages: string[]): {page:number; text:string}[] {
   })
 }
 
-export async function POST(req: Request) {
+// Helper function to move file using local Ollama server API
+async function moveFile(filename: string, source: string, target: string) {
+  const localOllamaUrl = 'http://127.0.0.1:5000'
   try {
-    const { fileName } = await req.json() as { fileName: string }
+    const response = await fetch(`${localOllamaUrl}/api/files/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, source, target })
+    })
+    if (!response.ok) {
+      throw new Error(`Local server returned ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error(`❌ Local Ollama server not available for file operations: ${error.message}`)
+    console.log('💡 Make sure to run: cd vofc-viewer/ollama && python server.py')
+    throw new Error(`File operation failed: ${error.message}`)
+  }
+}
+
+// Helper function to write processed JSON to processed folder using local Ollama server
+async function writeProcessedFile(filename: string, content: any) {
+  const localOllamaUrl = 'http://127.0.0.1:5000'
+  const jsonFilename = filename.replace(/\.pdf$/i, '.json')
+  try {
+    const response = await fetch(`${localOllamaUrl}/api/files/write`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        filename: jsonFilename, 
+        content, 
+        folder: 'processed' 
+      })
+    })
+    if (!response.ok) {
+      throw new Error(`Local server returned ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error(`❌ Local Ollama server not available for file operations: ${error.message}`)
+    console.log('💡 Make sure to run: cd vofc-viewer/ollama && python server.py')
+    throw new Error(`File write operation failed: ${error.message}`)
+  }
+}
+
+export async function POST(req: Request) {
+  let fileName: string = ''
+  let submissionId: string | undefined = undefined
+  try {
+    const body = await req.json() as { fileName: string; submissionId?: string }
+    fileName = body.fileName
+    submissionId = body.submissionId
     if (!fileName) throw new Error('fileName is required')
 
-    // 1) pull pdf from 'documents'
-    const { data, error } = await supabaseAdmin.storage.from('documents').download(fileName)
-    if (error) throw error
+    // 1) Get PDF from local Ollama server (Flask server running on localhost:5000)
+    console.log(`📥 Fetching ${fileName} from local Ollama server...`)
+    let arrayBuffer: ArrayBuffer
+    let buf: Buffer
+    
+    try {
+      const localOllamaUrl = 'http://127.0.0.1:5000'
+      const fileResponse = await fetch(`${localOllamaUrl}/api/files/get/${encodeURIComponent(fileName)}`, {
+        method: 'GET',
+      })
+      
+      if (!fileResponse.ok) {
+        throw new Error(`Local Ollama server returned ${fileResponse.status}`)
+      }
+      
+      arrayBuffer = await fileResponse.arrayBuffer()
+      buf = Buffer.from(arrayBuffer)
+      console.log(`✅ Retrieved ${fileName} from local Ollama server (${buf.length} bytes)`)
+    } catch (localError) {
+      console.error(`❌ Local Ollama server not available: ${localError.message}`)
+      console.log('💡 Make sure to run: cd vofc-viewer/ollama && python server.py')
+      throw new Error(`Local Ollama server not running: ${localError.message}`)
+    }
 
-    // 2) extract text per page
-    const buf = Buffer.from(await data.arrayBuffer())
+    // 2) Extract text per page
     const parsed = await pdfParse(buf)
     // pdf-parse usually returns a single string; split on form-feed when present
     const pages = parsed.text.split('\f')
@@ -257,8 +394,15 @@ export async function POST(req: Request) {
       // minimal second pass
       const chunks = splitIntoChunks(perPage)
       if (!chunks.length) throw new Error('No parsable clauses found')
-      const result = await ollamaChatJSON({ prompt: buildPrompt(chunks) })
-      return await uploadResult(fileName, result)
+      const result = await ollamaChatJSON({ 
+        model: process.env.OLLAMA_MODEL || 'vofc-engine:latest',
+        prompt: buildPrompt(chunks),
+        temperature: GPU_CONFIG.temperature,
+        top_p: GPU_CONFIG.topP,
+        maxTokens: GPU_CONFIG.maxTokensPerBatch,
+        timeout: GPU_CONFIG.batchTimeout
+      })
+      return await uploadResult(fileName, result, submissionId)
     }
 
     // 3) chunk and call Ollama with optimized batching
@@ -320,10 +464,41 @@ export async function POST(req: Request) {
     
     const consolidated = Object.values(grouped).map(consolidateVOFCItem)
 
-    return await uploadResult(fileName, consolidated)
+    // Success: Move original to library and save processed JSON to processed folder
+    try {
+      // Move original file from incoming to library
+      await moveFile(fileName, 'incoming', 'library')
+      console.log(`✅ Moved ${fileName} from incoming to library`)
+      
+      // Write processed JSON to processed folder
+      await writeProcessedFile(fileName, consolidated)
+      console.log(`✅ Saved processed JSON to processed folder`)
+      
+      return await uploadResult(fileName, consolidated, submissionId)
+    } catch (moveError: any) {
+      console.error('❌ Failed to move file or write processed output:', moveError)
+      // Still return results even if file movement fails
+      return await uploadResult(fileName, consolidated, submissionId)
+    }
+    
   } catch (e: any) {
-    console.error('process-vofc error:', e)
-    return NextResponse.json({ status: 'error', message: e.message }, { status: 500 })
+    console.error('❌ process-vofc error:', e)
+    
+    // On failure: Move document to errors folder
+    if (fileName) {
+      try {
+        await moveFile(fileName, 'incoming', 'errors')
+        console.log(`⚠️ Moved ${fileName} to errors folder for reprocessing`)
+      } catch (moveError: any) {
+        console.error('❌ Failed to move file to errors folder:', moveError)
+      }
+    }
+    
+    return NextResponse.json({ 
+      status: 'error', 
+      message: e.message,
+      file_moved_to_errors: fileName ? true : false
+    }, { status: 500 })
   }
 }
 
@@ -403,7 +578,7 @@ function consolidateVOFCItem(item: any): any {
   }
 }
 
-async function uploadResult(fileName: string, payload: any) {
+async function uploadResult(fileName: string, payload: any, submissionId?: string) {
   const startTime = Date.now()
   
   // Enhanced result with performance metrics
@@ -425,6 +600,115 @@ async function uploadResult(fileName: string, payload: any) {
       categories_used: [...new Set(payload?.map((item: any) => item.category) || [])],
       avg_vulnerability_length: payload?.length ? 
         payload.reduce((sum: number, item: any) => sum + (item.vulnerability?.length || 0), 0) / payload.length : 0
+    }
+  }
+  
+  // Update submission record with extracted vulnerabilities if submissionId is provided
+  if (submissionId && supabaseAdmin && Array.isArray(payload) && payload.length > 0) {
+    try {
+      // Find the submission by document_name or filename
+      const { data: existingSub } = await supabaseAdmin
+        .from('submissions')
+        .select('*')
+        .eq('id', submissionId)
+        .single();
+      
+      if (existingSub) {
+        // Parse existing data
+        const existingData = typeof existingSub.data === 'string' 
+          ? JSON.parse(existingSub.data) 
+          : existingSub.data || {};
+        
+        // Format vulnerabilities for SubmissionReview component
+        // SubmissionReview expects: data.enhanced_extraction array with content items
+        const enhancedExtraction = payload.map(item => ({
+          category: item.category,
+          content: [
+            {
+              type: 'vulnerability',
+              text: item.vulnerability,
+              discipline: item.category
+            },
+            ...(item.options_for_consideration || []).map((ofc: any) => ({
+              type: 'ofc',
+              text: ofc.option_text || ofc.text,
+              discipline: item.category
+            }))
+          ]
+        }));
+        
+        // Update submission data
+        const updatedData = {
+          ...existingData,
+          parsed_at: new Date().toISOString(),
+          enhanced_extraction: enhancedExtraction,
+          vulnerabilities_count: payload.length,
+          options_for_consideration_count: payload.reduce((sum: number, item: any) => 
+            sum + (item.options_for_consideration?.length || 0), 0)
+        };
+        
+        // Update submission record
+        const { error: updateError } = await supabaseAdmin
+          .from('submissions')
+          .update({
+            data: JSON.stringify(updatedData),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', submissionId);
+        
+        if (updateError) {
+          console.error('❌ Failed to update submission with vulnerabilities:', updateError);
+        } else {
+          console.log(`✅ Updated submission ${submissionId} with ${payload.length} vulnerabilities`);
+        }
+      } else {
+        // Try to find by filename
+        const { data: subsByFilename } = await supabaseAdmin
+          .from('submissions')
+          .select('*')
+          .contains('data', JSON.stringify({ document_name: fileName }));
+        
+        if (subsByFilename && subsByFilename.length > 0) {
+          const sub = subsByFilename[0];
+          const existingData = typeof sub.data === 'string' ? JSON.parse(sub.data) : sub.data || {};
+          
+          const enhancedExtraction = payload.map(item => ({
+            category: item.category,
+            content: [
+              {
+                type: 'vulnerability',
+                text: item.vulnerability,
+                discipline: item.category
+              },
+              ...(item.options_for_consideration || []).map((ofc: any) => ({
+                type: 'ofc',
+                text: ofc.option_text || ofc.text,
+                discipline: item.category
+              }))
+            ]
+          }));
+          
+          const updatedData = {
+            ...existingData,
+            parsed_at: new Date().toISOString(),
+            enhanced_extraction: enhancedExtraction,
+            vulnerabilities_count: payload.length
+          };
+          
+          await supabaseAdmin
+            .from('submissions')
+            .update({
+              data: JSON.stringify(updatedData),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', sub.id);
+          
+          console.log(`✅ Updated submission ${sub.id} with vulnerabilities by filename match`);
+        }
+      }
+    } catch (dbUpdateError) {
+      console.error('❌ Error updating submission with vulnerabilities:', dbUpdateError);
+      // Don't fail the whole process if DB update fails
     }
   }
   

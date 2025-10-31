@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { fetchWithAuth } from '../lib/fetchWithAuth';
 
 export default function LearningMonitor() {
   const [learningStatus, setLearningStatus] = useState(null);
@@ -24,7 +25,7 @@ export default function LearningMonitor() {
   const loadLearningStatus = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/learning/start', {
+      const response = await fetchWithAuth('/api/learning/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -50,7 +51,7 @@ export default function LearningMonitor() {
   const startLearning = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/learning/start', {
+      const response = await fetchWithAuth('/api/learning/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -76,7 +77,7 @@ export default function LearningMonitor() {
   const runLearningCycle = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/learning/start', {
+      const response = await fetchWithAuth('/api/learning/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

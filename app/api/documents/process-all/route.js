@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-client.js';
 import { ollamaChatJSON } from '@/lib/ollama.js';
 
+// Force server-side only execution
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export async function POST() {
   console.log('🚀 Processing all PDFs in documents bucket');
   try {

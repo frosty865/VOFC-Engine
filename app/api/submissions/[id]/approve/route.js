@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getProcessedByValue } from '../../../utils/get-user-id';
 
-// Use service role for API submissions to bypass RLS
+// Use service role for API routes to bypass RLS
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -10,269 +9,152 @@ const supabase = createClient(
 
 export async function POST(request, { params }) {
   try {
-    const { id } = await params;
+    const { id: submissionId } = await params;
     const body = await request.json();
-    const { action, comments, processedBy } = body; // action: 'approve' or 'reject'
+    const action = body.action;
+    const comments = body.comments || null;
 
-    if (!id) {
+    if (!submissionId || !action) {
       return NextResponse.json(
-        { error: 'Missing submission ID' },
+        { error: 'Missing submissionId or action' },
         { status: 400 }
       );
     }
 
-    if (!action || !['approve', 'reject'].includes(action)) {
+    // -----------------------------------------------------------------
+    // 1️⃣ Determine new status
+    // -----------------------------------------------------------------
+    let status;
+    if (action === 'approve') {
+      status = 'approved';
+    } else if (action === 'reject') {
+      status = 'rejected';
+    } else {
       return NextResponse.json(
-        { error: 'Action must be either "approve" or "reject"' },
+        { error: 'Invalid action: must be approve or reject' },
         { status: 400 }
       );
     }
 
-    // Get the submission first
-    const { data: submission, error: fetchError } = await supabase
+    // -----------------------------------------------------------------
+    // 2️⃣ Update submission record
+    // -----------------------------------------------------------------
+    const { data: updated, error: updateError } = await supabase
       .from('submissions')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (fetchError) {
-      return NextResponse.json(
-        { error: 'Submission not found' },
-        { status: 404 }
-      );
-    }
-
-    if (submission.status !== 'pending_review') {
-      return NextResponse.json(
-        { error: 'Submission has already been processed' },
-        { status: 400 }
-      );
-    }
-
-    // Update submission status
-    const newStatus = action === 'approve' ? 'approved' : 'rejected';
-    const updateData = {
-      status: newStatus,
-      processed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    
-    // Record learning event for continuous learning
-    try {
-      const learningEvent = {
-        event_type: newStatus === 'approved' ? 'submission_approved' : 'submission_rejected',
-        submission_id: id,
-        confidence: 1.0, // Human decision has full confidence
-        approved: newStatus === 'approved',
-        processed_by: processedBy,
-        comments: comments || null,
-        created_at: new Date().toISOString()
-      };
-      
-      // Insert learning event
-      const { error: learningError } = await supabase
-        .from('learning_events')
-        .insert([learningEvent]);
-      
-      if (learningError) {
-        console.warn('⚠️ Failed to record learning event:', learningError);
-      } else {
-        console.log('📚 Learning event recorded for continuous learning');
-      }
-    } catch (learningError) {
-      console.warn('⚠️ Error recording learning event:', learningError);
-    }
-    
-    // Get the correct processed_by value (convert email to UUID if needed)
-    const validProcessedBy = await getProcessedByValue(processedBy);
-    if (validProcessedBy) {
-      updateData.processed_by = validProcessedBy;
-    } else if (processedBy && processedBy.includes('@')) {
-      // If we can't convert email to UUID, store it in comments
-      updateData.comments = `Processed by: ${processedBy}`;
-    }
-    
-    const { data: updatedSubmission, error: updateError } = await supabase
-      .from('submissions')
-      .update(updateData)
-      .eq('id', id)
+      .update({
+        status,
+        reviewed_at: new Date().toISOString(),
+        comments
+      })
+      .eq('id', submissionId)
       .select()
       .single();
 
     if (updateError) {
-      console.error('Database error:', updateError);
-      return NextResponse.json(
-        { error: 'Failed to update submission', details: updateError.message },
-        { status: 500 }
-      );
+      console.error('Error updating submission:', updateError);
+      throw updateError;
     }
 
-    // If approved, add to the appropriate table (vulnerabilities or options_for_consideration)
-    if (action === 'approve') {
-      const submissionData = JSON.parse(submission.data);
-      
-      if (submission.type === 'vulnerability') {
-        const vulnerabilityId = crypto.randomUUID();
-        
-        // Insert vulnerability
-        const { error: vulnError } = await supabase
-          .from('vulnerabilities')
-          .insert([{
-            id: vulnerabilityId,
-            vulnerability: submissionData.vulnerability,
-            discipline: submissionData.discipline || 'General',
-            source: submissionData.sources || null,
-            id: submissionData.id || null,
-            id: submissionData.id || null
-          }]);
+    // -----------------------------------------------------------------
+    // 3️⃣ Optional: On APPROVE, promote data into production tables
+    // -----------------------------------------------------------------
+    if (status === 'approved') {
+      console.log(`🚀 Promoting submission ${submissionId} to production tables...`);
 
-        if (vulnError) {
-          console.error('Error adding vulnerability:', vulnError);
-          return NextResponse.json(
-            { error: 'Failed to add vulnerability to database', details: vulnError.message },
-            { status: 500 }
-          );
-        }
+      // Load submission data
+      const { data: submissionData, error: subErr } = await supabase
+        .from('submissions')
+        .select('data')
+        .eq('id', submissionId)
+        .single();
 
-        // Automatically generate multiple assessment assessment_questions for this vulnerability
-        try {
-          
-          // Generate 5-10 assessment_questions for each vulnerability
-          const numQuestions = Math.floor(Math.random() * 6) + 5; // 5-10 assessment_questions
-          const questionsToInsert = [];
-          
-          for (let i = 0; i < numQuestions; i++) {
-            try {
-              const { data: questionData, error: questionError } = await supabase.functions.invoke('generate-question-i18n', {
-                body: { text: submissionData.vulnerability }
-              });
+      if (subErr) {
+        console.error('Error loading submission data:', subErr);
+        throw subErr;
+      }
 
-              if (!questionError && questionData) {
-                questionsToInsert.push({
-                  id: vulnerabilityId,
-                  question_text: questionData.en,
-                  question_en: questionData.en,
-                  question_es: questionData.es,
-                  is_root: true
-                });
-              }
-            } catch (singleQuestionError) {
-              console.error(`Error generating question ${i+1}:`, singleQuestionError);
-            }
-          }
-          
-          // Insert all generated assessment_questions at once
-          if (questionsToInsert.length > 0) {
-            const { error: insertQuestionsError } = await supabase
-              .from('assessment_questions')
-              .insert(questionsToInsert);
+      if (!submissionData || !submissionData.data) {
+        console.warn(`⚠️ No data field found for submission ${submissionId}`);
+      } else {
+        // Parse stored JSON safely
+        const parsed = typeof submissionData.data === 'string'
+          ? JSON.parse(submissionData.data)
+          : submissionData.data;
 
-            if (insertQuestionsError) {
-              console.error('Error inserting generated assessment_questions:', insertQuestionsError);
-            } else {
-            }
-          }
-        } catch (questionGenError) {
-          console.error('Error in question generation process:', questionGenError);
-        }
+        // --- Vulnerabilities ---
+        if (parsed.vulnerabilities && parsed.vulnerabilities.length > 0) {
+          const vulnPayload = parsed.vulnerabilities.map(v => ({
+            submission_id: submissionId,
+            title: v.title,
+            description: v.description,
+            category: v.category,
+            severity: v.severity || 'Unspecified'
+          }));
 
-        // If this vulnerability has associated OFCs, create them and link them
-        if (submissionData.has_associated_ofcs && submissionData.associated_ofcs) {
-          for (const ofcText of submissionData.associated_ofcs) {
-            const ofcId = crypto.randomUUID();
-            
-            // Insert OFC
-            const { error: ofcError } = await supabase
-              .from('options_for_consideration')
-              .insert([{
-                id: ofcId,
-                option_text: ofcText,
-                discipline: submissionData.discipline || 'General',
-                source: submissionData.sources || null,
-                id: submissionData.id || null,
-                id: submissionData.id || null
-              }]);
+          const { error: vulnErr } = await supabase
+            .from('submission_vulnerabilities')
+            .insert(vulnPayload);
 
-            if (ofcError) {
-              console.error('Error adding OFC:', ofcError);
-              continue; // Continue with other OFCs even if one fails
-            }
-
-            // Create link between vulnerability and OFC
-            const { error: linkError } = await supabase
-              .from('vulnerability_ofc_links')
-              .insert([{
-                id: vulnerabilityId,
-                id: ofcId,
-                link_type: 'direct',
-                confidence_score: 1
-              }]);
-
-            if (linkError) {
-              console.error('Error creating vulnerability-OFC link:', linkError);
-            }
+          if (vulnErr) {
+            console.error('Error inserting vulnerabilities:', vulnErr);
+            throw vulnErr;
           }
         }
-      } else if (submission.type === 'ofc') {
-        const ofcId = crypto.randomUUID();
-        
-        // Insert OFC
-        const { error: ofcError } = await supabase
-          .from('options_for_consideration')
-          .insert([{
-            id: ofcId,
-            option_text: submissionData.option_text,
-            discipline: submissionData.discipline || 'General',
-            source: submissionData.sources || null,
-            id: submissionData.id || null,
-            id: submissionData.id || null
-          }]);
 
-        if (ofcError) {
-          console.error('Error adding OFC:', ofcError);
-          return NextResponse.json(
-            { error: 'Failed to add option for consideration to database', details: ofcError.message },
-            { status: 500 }
-          );
-        }
+        // --- OFCs ---
+        if (parsed.ofcs && parsed.ofcs.length > 0) {
+          const ofcPayload = parsed.ofcs.map(o => ({
+            submission_id: submissionId,
+            title: o.title,
+            description: o.description,
+            linked_vulnerability: o.linked_vulnerability || null
+          }));
 
-        // If this OFC is associated with a vulnerability, try to find and link it
-        if (submissionData.associated_vulnerability) {
-          // Find the vulnerability by text match
-          const { data: vulnerabilities, error: findError } = await supabase
-            .from('vulnerabilities')
-            .select('id')
-            .eq('vulnerability', submissionData.associated_vulnerability)
-            .limit(1);
+          const { error: ofcErr } = await supabase
+            .from('submission_options_for_consideration')
+            .insert(ofcPayload);
 
-          if (!findError && vulnerabilities && vulnerabilities.length > 0) {
-            const { error: linkError } = await supabase
-              .from('vulnerability_ofc_links')
-              .insert([{
-                id: vulnerabilities[0].id,
-                id: ofcId,
-                link_type: 'direct',
-                confidence_score: 1
-              }]);
-
-            if (linkError) {
-              console.error('Error creating vulnerability-OFC link:', linkError);
-            }
+          if (ofcErr) {
+            console.error('Error inserting OFCs:', ofcErr);
+            throw ofcErr;
           }
         }
+
+        // --- Sources (optional) ---
+        if (parsed.sources && parsed.sources.length > 0) {
+          const sourcePayload = parsed.sources.map(s => ({
+            submission_id: submissionId,
+            source_title: s.title || s.source_title || '',
+            source_url: s.url || s.source_url || '',
+            organization: s.organization || ''
+          }));
+
+          const { error: srcErr } = await supabase
+            .from('submission_sources')
+            .insert(sourcePayload);
+
+          if (srcErr) {
+            console.error('Error inserting sources:', srcErr);
+            throw srcErr;
+          }
+        }
+
+        console.log(`✅ Submission ${submissionId} promoted successfully.`);
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      submission: updatedSubmission,
-      message: `Submission ${action}d successfully`
-    });
-
-  } catch (error) {
-    console.error('API error:', error);
+    // -----------------------------------------------------------------
+    // 4️⃣ Respond to client
+    // -----------------------------------------------------------------
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { success: true, id: submissionId, status },
+      { status: 200 }
+    );
+
+  } catch (e) {
+    console.error('❌ Error in POST /api/submissions/[id]/approve:', e);
+    return NextResponse.json(
+      { error: e.message },
       { status: 500 }
     );
   }

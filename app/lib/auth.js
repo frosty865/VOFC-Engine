@@ -1,42 +1,36 @@
-// Simple auth functions for admin pages
+// Auth functions using Supabase authentication with server verification endpoint
+import { supabase } from './supabaseClient';
+
 export const getCurrentUser = async () => {
   try {
-    const response = await fetch('/api/auth/verify', {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    // If no session, treat as unauthenticated without calling server
+    if (!token) return null;
+    const res = await fetch('/api/auth/verify', {
       method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
       credentials: 'include'
     });
-    
-    if (response.ok) {
-      const result = await response.json();
-      if (result.success) {
-        return result.user;
-      }
-    }
-    return null;
+    if (!res.ok) return null;
+    const result = await res.json();
+    if (!result.success || !result.user) return null;
+    return {
+      id: result.user.id,
+      email: result.user.email,
+      role: result.user.role,
+      name: result.user.name,
+      full_name: result.user.name
+    };
   } catch (error) {
     console.error('Error getting current user:', error);
     return null;
   }
 };
 
-export const getUserProfile = async () => {
-  try {
-    const response = await fetch('/api/auth/verify', {
-      method: 'GET',
-      credentials: 'include'
-    });
-    
-    if (response.ok) {
-      const result = await response.json();
-      if (result.success) {
-        return result.user;
-      }
-    }
-    return null;
-  } catch (error) {
-    console.error('Error getting user profile:', error);
-    return null;
-  }
+export const getUserProfile = async (userId = null) => {
+  // For now, mirror getCurrentUser via server verification; ignore other IDs client-side
+  return await getCurrentUser();
 };
 
 export const canAccessAdmin = async () => {
@@ -44,7 +38,7 @@ export const canAccessAdmin = async () => {
     const user = await getCurrentUser();
     if (!user) return false;
     
-    return ['admin', 'spsa', 'psa', 'analyst'].includes(user.role);
+    return ['admin', 'spsa', 'analyst', 'psa'].includes(user.role);
   } catch (error) {
     console.error('Error checking admin access:', error);
     return false;
@@ -54,9 +48,8 @@ export const canAccessAdmin = async () => {
 export const canSubmitVOFC = async () => {
   try {
     const user = await getCurrentUser();
-    if (!user) return false;
-    
-    return ['admin', 'spsa', 'psa', 'analyst'].includes(user.role);
+    // Allow any authenticated user to submit documents (RLS will enforce specifics)
+    return !!user;
   } catch (error) {
     console.error('Error checking submit access:', error);
     return false;
@@ -65,15 +58,12 @@ export const canSubmitVOFC = async () => {
 
 export const logout = async () => {
   try {
-    const response = await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'include'
-    });
+    const { error } = await supabase.auth.signOut();
 
-    if (response.ok) {
-      window.location.href = '/splash';
+    if (error) {
+      console.error('Logout error:', error);
     } else {
-      console.error('Logout failed');
+      window.location.href = '/splash';
     }
   } catch (error) {
     console.error('Logout error:', error);

@@ -5,7 +5,11 @@ import { getServerClient } from '../../../lib/supabase-manager';
 // Admin vulnerabilities management with multi-agency RLS
 export async function GET(request) {
   const { user, error } = await requireAdmin(request);
-  if (error) return error;
+  if (error) {
+    const msg = String(error || 'Unauthorized');
+    const status = msg.includes('Authentication') ? 401 : 403;
+    return NextResponse.json({ success: false, error: msg }, { status });
+  }
   
   try {
     const supabaseServer = getServerClient();
@@ -75,7 +79,11 @@ export async function GET(request) {
 // Create new vulnerability
 export async function POST(request) {
   const { user, error } = await requireAdmin(request);
-  if (error) return error;
+  if (error) {
+    const msg = String(error || 'Unauthorized');
+    const status = msg.includes('Authentication') ? 401 : 403;
+    return NextResponse.json({ success: false, error: msg }, { status });
+  }
   
   try {
     const { vulnerability_name, description, discipline, sector_id, subsector_id } = await request.json();
@@ -155,7 +163,11 @@ export async function POST(request) {
 // Update vulnerability
 export async function PUT(request) {
   const { user, error } = await requireAdmin(request);
-  if (error) return error;
+  if (error) {
+    const msg = String(error || 'Unauthorized');
+    const status = msg.includes('Authentication') ? 401 : 403;
+    return NextResponse.json({ success: false, error: msg }, { status });
+  }
   
   try {
     const { id, vulnerability_name, description, discipline, sector_id, subsector_id } = await request.json();
@@ -233,7 +245,11 @@ export async function PUT(request) {
 // Delete vulnerability
 export async function DELETE(request) {
   const { user, error } = await requireAdmin(request);
-  if (error) return error;
+  if (error) {
+    const msg = String(error || 'Unauthorized');
+    const status = msg.includes('Authentication') ? 401 : 403;
+    return NextResponse.json({ success: false, error: msg }, { status });
+  }
   
   try {
     const { searchParams } = new URL(request.url);

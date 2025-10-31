@@ -35,6 +35,7 @@ export default function Login() {
           headers: {
             'Content-Type': 'application/json',
           },
+          credentials: 'include',
           body: JSON.stringify({ email, password }),
         });
         
@@ -47,10 +48,22 @@ export default function Login() {
         }
         
         console.log('Login successful:', result);
-        
-        // Wait a moment for the session to be established
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
+
+        // If API returned a Supabase session, hydrate client session to avoid redirect loops
+        if (result.session?.access_token && result.session?.refresh_token) {
+          try {
+            await supabase.auth.setSession({
+              access_token: result.session.access_token,
+              refresh_token: result.session.refresh_token
+            });
+          } catch (e) {
+            console.warn('Failed to set client session:', e);
+          }
+        }
+
+        // Small delay to ensure session availability, then refresh and navigate
+        await new Promise(resolve => setTimeout(resolve, 150));
+        try { router.refresh(); } catch {}
         console.log('Redirecting to home page...');
         router.push('/');
       }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { supabase } from '../app/lib/supabaseClient';
 
 export default function LoginForm() {
   const [formData, setFormData] = useState({
@@ -17,24 +18,47 @@ export default function LoginForm() {
     setError(null);
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData)
+      // Convert username to email if needed, or use email directly
+      const email = formData.username.includes('@') 
+        ? formData.username 
+        : `${formData.username}@vofc.gov`;
+
+      // Use Supabase authentication
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: formData.password
       });
 
-      const result = await response.json();
+      if (authError) {
+        setError(authError.message || 'Login failed');
+        return;
+      }
 
-      if (result.success) {
-        setUser(result.user);
-        // Store session token in localStorage
-        localStorage.setItem('session_token', result.session_token);
-        localStorage.setItem('user', JSON.stringify(result.user));
-        alert(`Welcome, ${result.user.full_name}!`);
-      } else {
-        setError(result.error || 'Login failed');
+      if (data?.user) {
+        // Get user profile to check role
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
+
+        const userRole = profile?.role || data.user.user_metadata?.role || 'user';
+        const userName = profile?.full_name || data.user.user_metadata?.name || data.user.email;
+
+        setUser({
+          id: data.user.id,
+          email: data.user.email,
+          role: userRole,
+          name: userName,
+          full_name: userName
+        });
+
+        // Redirect based on role
+        if (['admin', 'spsa', 'psa', 'analyst'].includes(userRole)) {
+          window.location.href = '/admin';
+        } else {
+          window.location.href = '/';
+        }
       }
     } catch (error) {
       setError(`Login failed: ${error.message}`);
@@ -43,11 +67,16 @@ export default function LoginForm() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('session_token');
-    localStorage.removeItem('user');
-    setUser(null);
-    setFormData({ username: '', password: '' });
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      localStorage.removeItem('user');
+      setUser(null);
+      setFormData({ username: '', password: '' });
+      window.location.href = '/splash';
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   const handleChange = (e) => {
@@ -132,12 +161,12 @@ export default function LoginForm() {
         </form>
 
         <div className="alert alert-info mt-3">
-          <h6>Test Users:</h6>
+          <h6>Available Users:</h6>
           <ul className="mb-0">
-            <li><strong>frosty865</strong> - System Administrator (God User)</li>
-            <li><strong>spsa_admin</strong> - Supervisory PSA Admin</li>
-            <li><strong>psa_field</strong> - Protective Security Advisor</li>
-            <li><strong>validator_user</strong> - Validator Analyst</li>
+            <li><strong>admin</strong> or <strong>admin@vofc.gov</strong> - Administrator (Password: Admin123!)</li>
+            <li><strong>spsa</strong> or <strong>spsa@vofc.gov</strong> - Senior PSA (Password: Admin123!)</li>
+            <li><strong>psa</strong> or <strong>psa@vofc.gov</strong> - PSA (Password: Admin123!)</li>
+            <li><strong>analyst</strong> or <strong>analyst@vofc.gov</strong> - Analyst (Password: Admin123!)</li>
           </ul>
         </div>
       </div>

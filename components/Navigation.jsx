@@ -2,6 +2,7 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
+import { supabase } from '../app/lib/supabaseClient';
 // Removed localStorage dependencies - now using secure server-side authentication
 import '../styles/cisa.css';
 import PropTypes from 'prop-types';
@@ -12,9 +13,22 @@ export default function Navigation({ simple = false }) {
   const [loading, setLoading] = useState(true);
   const [showSubmissionsDropdown, setShowSubmissionsDropdown] = useState(false);
 
+  // CRITICAL DEBUG: Multiple log types to ensure visibility
+  console.error('🔴 NAVIGATION COMPONENT MOUNTED 🔴', { simple, pathname });
+  console.warn('🟡 NAVIGATION COMPONENT MOUNTED 🟡', { simple, pathname });
+  console.log('🟢 NAVIGATION COMPONENT MOUNTED 🟢', { simple, pathname });
+  
+  // Also log to window for debugging
+  if (typeof window !== 'undefined') {
+    window.__navDebug = { mounted: true, simple, pathname, timestamp: Date.now() };
+  }
+
   useEffect(() => {
+    console.error('🔴 [Navigation] useEffect triggered', { simple, pathname });
+    // Always load user - we need to check auth even on simple pages to show admin menu
+    console.error('🔴 [Navigation] Calling loadUser balance always');
     loadUser();
-  }, []);
+  }, [simple, pathname]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -31,22 +45,59 @@ export default function Navigation({ simple = false }) {
   }, [showSubmissionsDropdown]);
 
   const loadUser = async () => {
+    console.log('[Navigation] loadUser() STARTED');
     try {
+      // Include Supabase access token so /api/auth/verify can validate
+      console.log('[Navigation] Getting Supabase session...');
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      console.log('[Navigation] Session retrieved', { hasToken: !!token, hasSession: !!session });
+      
+      if (!token) {
+        // No session token, user not authenticated
+        setCurrentUser(null);
+        setLoading(false);
+        return;
+      }
+
       const response = await fetch('/api/auth/verify', {
         method: 'GET',
-        credentials: 'include'
+        credentials: 'include',
+        headers: { Authorization: `Bearer ${token}` }
       });
       
       if (response.ok) {
         const result = await response.json();
-        if (result.success) {
-          setCurrentUser(result.user);
+        if (result.success && result.user) {
+          const rawRole = result.user.role || result.user.group || 'user';
+          const normalizedRole = String(rawRole).toLowerCase();
+          const userObj = { 
+            ...result.user, 
+            role: normalizedRole,
+            is_admin: result.user.is_admin || normalizedRole === 'admin' || normalizedRole === 'spsa'
+          };
+          console.log('[Navigation] User authenticated:', { email: userObj.email, role: userObj.role, is_admin: userObj.is_admin });
+          setCurrentUser(userObj);
+          setLoading(false);
+          return;
+        } else {
+          console.error('[Navigation] Invalid API response:', result);
+          setCurrentUser(null);
+          setLoading(false);
+          return;
         }
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('[Navigation] API verify failed:', response.status, errorData);
+        setCurrentUser(null);
+        setLoading(false);
+        return;
       }
-      // Silent failure for 401 - user just isn't logged in yet
+      
+      // No fallback - API must work correctly
     } catch (error) {
-      // Silently handle errors during auth check
-      // This is normal when user isn't authenticated
+      console.error('Error loading user:', error);
+      setCurrentUser(null);
     } finally {
       setLoading(false);
     }
@@ -54,19 +105,13 @@ export default function Navigation({ simple = false }) {
 
   const handleLogout = async () => {
     try {
-      const response = await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include'
-      });
-      
-      if (response.ok) {
-        setCurrentUser(null);
-        window.location.href = '/splash';
-      } else {
-        console.error('Logout failed');
-      }
+      await supabase.auth.signOut();
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     } catch (error) {
       console.error('Logout error:', error);
+    } finally {
+      setCurrentUser(null);
+      window.location.replace('/splash');
     }
   };
 
@@ -185,8 +230,8 @@ export default function Navigation({ simple = false }) {
                 padding: 'var(--spacing-sm) var(--spacing-md)',
                 borderRadius: 'var(--border-radius)',
                 textDecoration: 'none',
-                color: (pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/process' || pathname === '/submit-psa' || pathname === '/review') ? 'var(--cisa-white)' : 'rgba(255,255,255,0.8)',
-                backgroundColor: (pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/process' || pathname === '/submit-psa' || pathname === '/review') ? 'rgba(255,255,255,0.2)' : 'transparent',
+                color: (pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/submit-psa') ? 'var(--cisa-white)' : 'rgba(255,255,255,0.8)',
+                backgroundColor: (pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/submit-psa') ? 'rgba(255,255,255,0.2)' : 'transparent',
                 fontWeight: '600',
                 fontSize: 'var(--font-size-sm)',
                 transition: 'all 0.3s ease',
@@ -198,13 +243,13 @@ export default function Navigation({ simple = false }) {
                 fontFamily: 'var(--font-family)'
               }}
               onMouseEnter={(e) => {
-                if (!(pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/process' || pathname === '/submit-psa' || pathname === '/review')) {
+                if (!(pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/submit-psa')) {
                   e.target.style.backgroundColor = 'rgba(255,255,255,0.1)';
                   e.target.style.color = 'var(--cisa-white)';
                 }
               }}
               onMouseLeave={(e) => {
-                if (!(pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/process' || pathname === '/submit-psa' || pathname === '/review')) {
+                if (!(pathname === '/submit' || pathname === '/submit/bulk' || pathname === '/submit-psa')) {
                   e.target.style.backgroundColor = 'transparent';
                   e.target.style.color = 'rgba(255,255,255,0.8)';
                 }
@@ -240,6 +285,7 @@ export default function Navigation({ simple = false }) {
                     fontWeight: '500',
                     borderBottom: '1px solid var(--cisa-gray-light)'
                   }}
+                  onClick={(e) => { e.stopPropagation(); setShowSubmissionsDropdown(false); }}
                   onMouseEnter={(e) => {
                     e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
                     e.target.style.color = 'var(--cisa-blue-dark)';
@@ -262,6 +308,7 @@ export default function Navigation({ simple = false }) {
                     fontWeight: '500',
                     borderBottom: '1px solid var(--cisa-gray-light)'
                   }}
+                  onClick={(e) => { e.stopPropagation(); setShowSubmissionsDropdown(false); }}
                   onMouseEnter={(e) => {
                     e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
                     e.target.style.color = 'var(--cisa-blue-dark)';
@@ -281,9 +328,9 @@ export default function Navigation({ simple = false }) {
                     color: pathname === '/submit-psa' ? 'var(--cisa-blue)' : 'var(--cisa-blue)',
                     textDecoration: 'none',
                     fontSize: 'var(--font-size-sm)',
-                    fontWeight: '500',
-                    borderBottom: '1px solid var(--cisa-gray-light)'
+                    fontWeight: '500'
                   }}
+                  onClick={(e) => { e.stopPropagation(); setShowSubmissionsDropdown(false); }}
                   onMouseEnter={(e) => {
                     e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
                     e.target.style.color = 'var(--cisa-blue-dark)';
@@ -294,49 +341,6 @@ export default function Navigation({ simple = false }) {
                   }}
                 >
                   📤 Submit Documents
-                </Link>
-                <Link
-                  href="/process"
-                  style={{
-                    display: 'block',
-                    padding: 'var(--spacing-sm) var(--spacing-md)',
-                    color: pathname === '/process' ? 'var(--cisa-blue)' : 'var(--cisa-blue)',
-                    textDecoration: 'none',
-                    fontSize: 'var(--font-size-sm)',
-                    fontWeight: '500',
-                    borderBottom: '1px solid var(--cisa-gray-light)'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
-                    e.target.style.color = 'var(--cisa-blue-dark)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.backgroundColor = 'transparent';
-                    e.target.style.color = 'var(--cisa-blue)';
-                  }}
-                >
-                  🔄 Process Documents
-                </Link>
-                <Link
-                  href="/review"
-                  style={{
-                    display: 'block',
-                    padding: 'var(--spacing-sm) var(--spacing-md)',
-                    color: pathname === '/review' ? 'var(--cisa-blue)' : 'var(--cisa-blue)',
-                    textDecoration: 'none',
-                    fontSize: 'var(--font-size-sm)',
-                    fontWeight: '500'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.target.style.backgroundColor = 'var(--cisa-gray-lighter)';
-                    e.target.style.color = 'var(--cisa-blue-dark)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.backgroundColor = 'transparent';
-                    e.target.style.color = 'var(--cisa-blue)';
-                  }}
-                >
-                  📋 Review Submissions
                 </Link>
               </div>
             )}
@@ -369,7 +373,7 @@ export default function Navigation({ simple = false }) {
           >
             📊 Generate Assessment
           </Link>
-          {currentUser && (currentUser.role === 'admin' || currentUser.role === 'spsa' || currentUser.role === 'psa' || currentUser.role === 'analyst') && (
+          {!loading && currentUser && (['admin', 'spsa'].includes(String(currentUser.role || '').toLowerCase()) || currentUser.is_admin === true) && (
             <>
               <Link
                 href="/admin"

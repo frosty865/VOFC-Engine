@@ -1,82 +1,47 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js'
+import { requireAdmin } from '../../../lib/auth-middleware'
 
-// Use service role for admin operations to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+export const dynamic = 'force-dynamic'
 
 export async function GET(request) {
+  const { user, error } = await requireAdmin(request)
+  if (error) {
+    return Response.json({ error: String(error) }, { status: 403 })
+  }
+
   try {
-    console.log('🔍 Admin API: Loading submissions...');
-    
-    // Load pending vulnerability submissions
-    const { data: vulnerabilitySubmissions, error: vulnError } = await supabase
-      .from('submissions')
-      .select('*')
-      .eq('type', 'vulnerability')
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    if (vulnError) {
-      console.error('Error loading vulnerability submissions:', vulnError);
-      return NextResponse.json({ error: 'Failed to load vulnerability submissions' }, { status: 500 });
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return Response.json({ error: 'Missing Supabase configuration' }, { status: 500 })
     }
 
-    // Load pending OFC submissions
-    const { data: ofcSubmissions, error: ofcError } = await supabase
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    )
+
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status') || 'pending_review'
+
+    let query = supabase
       .from('submissions')
       .select('*')
-      .eq('type', 'ofc')
       .order('created_at', { ascending: false })
-      .limit(10);
+      .limit(100)
 
-    if (ofcError) {
-      console.error('Error loading OFC submissions:', ofcError);
-      return NextResponse.json({ error: 'Failed to load OFC submissions' }, { status: 500 });
+    if (status) {
+      query = query.eq('status', status)
     }
 
-    // Load document submissions
-    const { data: documentSubmissions, error: docError } = await supabase
-      .from('submissions')
-      .select('*')
-      .eq('type', 'document')
-      .order('created_at', { ascending: false })
-      .limit(10);
+    const { data, error: dbError } = await query
 
-    if (docError) {
-      console.error('Error loading document submissions:', docError);
+    if (dbError) {
+      console.error('Database error:', dbError)
+      return Response.json({ error: dbError.message }, { status: 500 })
     }
 
-    // Load all submissions for debugging
-    const { data: allSubmissions, error: allError } = await supabase
-      .from('submissions')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(20);
-
-    console.log('🔍 Admin API: Found submissions:', {
-      vulnerabilities: vulnerabilitySubmissions?.length || 0,
-      ofcs: ofcSubmissions?.length || 0,
-      documents: documentSubmissions?.length || 0,
-      total: allSubmissions?.length || 0
-    });
-
-    return NextResponse.json({
-      success: true,
-      vulnerabilitySubmissions: vulnerabilitySubmissions || [],
-      ofcSubmissions: ofcSubmissions || [],
-      documentSubmissions: documentSubmissions || [],
-      allSubmissions: allSubmissions || []
-    });
-
-  } catch (error) {
-    console.error('Admin API error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return Response.json(Array.isArray(data) ? data : [])
+  } catch (e) {
+    console.error('Admin submissions API error:', e)
+    return Response.json({ error: e.message }, { status: 500 })
   }
 }
-

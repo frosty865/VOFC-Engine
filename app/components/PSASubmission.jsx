@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from 'next/navigation';
 import { getCurrentUser, canSubmitVOFC } from '../lib/auth';
+import { fetchWithAuth } from '../lib/fetchWithAuth';
 
 export default function PSASubmission() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -38,7 +39,7 @@ export default function PSASubmission() {
 
       const canSubmit = await canSubmitVOFC();
       if (!canSubmit) {
-        router.push('/');
+        router.push('/login');
         return;
       }
 
@@ -173,7 +174,8 @@ export default function PSASubmission() {
       formDataToSend.append('publication_year', formData.publication_year.toString());
       formDataToSend.append('content_restriction', formData.content_restriction);
       
-      const response = await fetch('/api/documents/submit', {
+      // New pipeline: submit via tunnel endpoint which creates a submission and triggers process-one
+      const response = await fetchWithAuth('/api/documents/submit', {
         method: 'POST',
         body: formDataToSend
       });
@@ -181,7 +183,8 @@ export default function PSASubmission() {
       const result = await response.json();
       
       if (result.success) {
-        setMessage("✅ Document submitted successfully! It will be processed and reviewed.");
+        const submissionId = result.submission_id;
+        setMessage(`✅ Document submitted! Submission ID: ${submissionId}. Processing has been triggered and results will appear after completion.`);
         setFormData({
           source_title: "",
           source_type: "unknown",

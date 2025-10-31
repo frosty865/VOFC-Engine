@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { getOllamaUrl } from '../lib/ollama-client';
 
 export default function DocumentProcessor() {
   const [documents, setDocuments] = useState([]);
@@ -12,7 +13,7 @@ export default function DocumentProcessor() {
   const [previewData, setPreviewData] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(null);
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
   const [mounted, setMounted] = useState(false);
 
   // Fetch documents from consolidated API
@@ -64,16 +65,12 @@ export default function DocumentProcessor() {
   }, [mounted]);
 
   useEffect(() => {
-    if (mounted && autoRefresh) {
-      const interval = setInterval(() => {
-        // Only refresh if there are files being processed
-        if (processing.length > 0) {
-          fetchDocuments();
-        }
-      }, 30000); // 30 seconds
-      return () => clearInterval(interval);
-    }
-  }, [mounted, autoRefresh, processing.length]);
+    if (!mounted || !autoRefresh) return;
+    const interval = setInterval(() => {
+      fetchDocuments();
+    }, 15000); // 15 seconds continuous refresh
+    return () => clearInterval(interval);
+  }, [mounted, autoRefresh]);
 
   // Clear completed documents
   const clearCompletedDocuments = async () => {
@@ -124,13 +121,33 @@ export default function DocumentProcessor() {
     }
   };
 
-  // Process single document
-  const processDocument = async (filename) => {
+  // Process single document - keep using Next.js API for Supabase submissions
+  const processDocument = async (filename, docId) => {
     try {
-      const response = await fetch('/api/documents/process', {
+      // process-one works with Supabase submissions, so keep using Next.js API
+      // If docId is null, try Ollama server directly for file-only processing
+      if (!docId) {
+        const ollamaUrl = getOllamaUrl();
+        const response = await fetch(`${ollamaUrl}/api/documents/process-batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filenames: [filename] })
+        });
+        const result = await response.json();
+        if (result.success) {
+          await fetchDocuments();
+          alert(`Document processed successfully!`);
+        } else {
+          alert(`Error: ${result.error || 'Unknown error'}`);
+        }
+        return;
+      }
+      
+      // Prefer server-side single-submission processor (no local files needed)
+      const response = await fetch('/api/documents/process-one', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename })
+        body: JSON.stringify({ submissionId: docId })
       });
 
       const result = await response.json();
@@ -138,11 +155,10 @@ export default function DocumentProcessor() {
       if (result.success) {
         await fetchDocuments();
         // Show processing results
-        if (result.data) {
-          alert(`Document processed successfully!\n\nTitle: ${result.data.title}\nVulnerabilities found: ${result.data.vulnerabilities.length}\nOFCs found: ${result.data.ofcs.length}\nSectors: ${result.data.sectors.length}`);
-        }
+        const count = result.count || 0;
+        alert(`Document processed successfully!\n\nVulnerabilities extracted: ${count}\n\nVulnerabilities have been saved to the submission and will appear in Submission Review.`);
       } else {
-        alert(`Error: ${result.error}`);
+        alert(`Error: ${result.error || result.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error processing document:', error);
@@ -150,7 +166,7 @@ export default function DocumentProcessor() {
     }
   };
 
-  // Process selected documents
+  // Process selected documents - call Ollama server directly
   const processSelected = async () => {
     if (selectedFiles.length === 0) {
       alert('Please select documents to process');
@@ -158,7 +174,8 @@ export default function DocumentProcessor() {
     }
 
     try {
-      const response = await fetch('/api/documents/process-batch', {
+      const ollamaUrl = getOllamaUrl();
+      const response = await fetch(`${ollamaUrl}/api/documents/process-batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filenames: selectedFiles })
@@ -178,15 +195,43 @@ export default function DocumentProcessor() {
     }
   };
 
-  // Process all documents
-  const processAll = async () => {
-    if (!confirm('Process all documents in the docs folder?')) return;
+  // Process all pending documents - keep using Next.js API (works with Supabase)
+  const processAllPending = async () => {
+    if (!confirm('Process all pending unparsed documents? This may take several minutes.')) return;
 
     try {
-      const response = await fetch('/api/documents/process-all', {
+      setLoading(true);
+      // process-pending works with Supabase submissions, keep using Next.js API
+      const response = await fetch('/api/documents/process-pending', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        alert(`Processing complete!\n\nProcessed: ${result.processed}\nFailed: ${result.failed}\n\nDocuments will appear in Submission Review after processing.`);
+        await fetchDocuments();
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error processing pending documents:', error);
+      alert('Error processing pending documents');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Process all documents (legacy) - use Ollama              server
+  const processAll = async () => {
+    if (!confirm('Process all documents in the incoming folder?')) return;
+
+    try {
+      const ollamaUrl = getOllamaUrl();
+      const response = await fetch(`${ollamaUrl}/api/files/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
       });
 
       const result = await response.json();
@@ -295,11 +340,18 @@ export default function DocumentProcessor() {
       {/* Action Buttons */}
       <div className="mb-6 flex flex-wrap gap-4">
         <button
+          onClick={processAllPending}
+          disabled={loading || documents.length === 0}
+          className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50"
+        >
+          Process All Pending ({documents.length})
+        </button>
+        <button
           onClick={processAll}
           disabled={loading || documents.length === 0}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
         >
-          Process All ({documents.length})
+          Process All (Legacy)
         </button>
         
         {selectedFiles.length > 0 && (
@@ -376,6 +428,9 @@ export default function DocumentProcessor() {
                       Modified
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Submitted By
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -400,6 +455,12 @@ export default function DocumentProcessor() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatDate(doc.modified)}
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {doc.submitted_by || 'System'}
+                        {doc.submitted_by_email && doc.submitted_by_email !== doc.submitted_by && (
+                          <div className="text-xs text-gray-400">{doc.submitted_by_email}</div>
+                        )}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex space-x-2">
                           <button
@@ -409,7 +470,7 @@ export default function DocumentProcessor() {
                             Preview
                           </button>
                           <button
-                            onClick={() => processDocument(doc.filename)}
+                            onClick={() => processDocument(doc.filename, doc.id)}
                             className="text-blue-600 hover:text-blue-900"
                           >
                             Process

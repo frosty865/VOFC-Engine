@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser } from '../../lib/auth';
+import { fetchWithAuth } from '../../lib/fetchWithAuth';
 
 export default function OFCManagement() {
   const router = useRouter();
@@ -41,9 +42,8 @@ export default function OFCManagement() {
       setDataLoading(true);
       
       // Fetch OFCs from the API
-      const response = await fetch('/api/admin/ofcs', {
-        method: 'GET',
-        credentials: 'include'
+      const response = await fetchWithAuth('/api/admin/ofcs', {
+        method: 'GET'
       });
 
       if (!response.ok) {
@@ -75,12 +75,11 @@ export default function OFCManagement() {
     if (!editingOFC || !editText.trim()) return;
     
     try {
-      const response = await fetch('/api/admin/ofcs', {
+      const response = await fetchWithAuth('/api/admin/ofcs', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify({
           id: editingOFC.id,
           option_text: editText.trim()
@@ -115,12 +114,11 @@ export default function OFCManagement() {
     if (!confirm('Are you sure you want to delete this OFC?')) return;
     
     try {
-      const response = await fetch('/api/admin/ofcs', {
+      const response = await fetchWithAuth('/api/admin/ofcs', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify({ id: ofcId })
       });
 

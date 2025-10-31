@@ -1,63 +1,44 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-client.js';
 
 export async function GET() {
   try {
-    // Check processing folder in storage
-    const { data: processingFiles, error: processingError } = await supabaseAdmin.storage
-      .from('vofc_seed')
-      .list('processing', {
-        limit: 100
-      });
+    console.log('🔍 /api/documents/status called - using Ollama server');
     
-    // Check parsed folder in storage
-    const { data: parsedFiles, error: parsedError } = await supabaseAdmin.storage
-      .from('vofc_seed')
-      .list('parsed', {
-        limit: 100
-      });
+    const ollamaUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || 'https://ollama.frostech.site';
     
-    // Check failed folder in storage
-    const { data: failedFiles, error: failedError } = await supabaseAdmin.storage
-      .from('vofc_seed')
-      .list('failed', {
-        limit: 100
-      });
+    // Create timeout controller for fetch
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
     
-    const statuses = [];
+    const filesResponse = await fetch(`${ollamaUrl}/api/files/list`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal
+    });
     
-    // Add processing files
-    if (processingFiles && !processingError) {
-      processingFiles.forEach(file => {
-        statuses.push({
-          filename: file.name,
-          status: 'processing',
-          timestamp: file.updated_at || file.created_at
-        });
-      });
+    clearTimeout(timeoutId);
+    
+    if (!filesResponse.ok) {
+      console.error('❌ Error fetching files from Ollama server:', filesResponse.status);
+      return NextResponse.json(
+        { success: false, error: 'Failed to fetch files from Ollama server' },
+        { status: filesResponse.status }
+      );
     }
     
-    // Add parsed files
-    if (parsedFiles && !parsedError) {
-      parsedFiles.forEach(file => {
-        statuses.push({
-          filename: file.name,
-          status: 'parsed',
-          timestamp: file.updated_at || file.created_at
-        });
-      });
-    }
+    const ollamaData = await filesResponse.json();
+    const ollamaFiles = ollamaData.files || [];
     
-    // Add failed files
-    if (failedFiles && !failedError) {
-      failedFiles.forEach(file => {
-        statuses.push({
-          filename: file.name,
-          status: 'failed',
-          timestamp: file.updated_at || file.created_at
-        });
-      });
-    }
+    // Format files with status (all are pending_review by default since we don't track processing state)
+    const statuses = ollamaFiles.map(file => ({
+      filename: file.filename,
+      status: 'pending_review',
+      timestamp: file.modified || file.created,
+      size: file.size,
+      path: file.path
+    }));
+    
+    console.log(`📊 Found ${statuses.length} files on Ollama server`);
     
     return NextResponse.json({
       success: true,
@@ -67,7 +48,7 @@ export async function GET() {
   } catch (error) {
     console.error('Error getting processing status:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to get processing status' },
+      { success: false, error: `Failed to get processing status: ${error.message}` },
       { status: 500 }
     );
   }

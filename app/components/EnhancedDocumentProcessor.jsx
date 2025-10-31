@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import '../../styles/cisa.css';
+import { getOllamaUrl } from '../lib/ollama-client';
 
 export default function EnhancedDocumentProcessor() {
   const [documents, setDocuments] = useState([]);
@@ -90,16 +91,12 @@ export default function EnhancedDocumentProcessor() {
     try {
       setProcessingWithAI(true);
       
-      const response = await fetch('/api/documents/process-batch-enhanced', {
+      const ollamaUrl = getOllamaUrl();
+      const response = await fetch(`${ollamaUrl}/api/documents/process-batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          filenames, 
-          options: {
-            maxConcurrent: 3,
-            priority: 'normal',
-            ...options
-          }
+          filenames
         })
       });
 

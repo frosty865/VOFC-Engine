@@ -1,4 +1,8 @@
 import { NextResponse } from 'next/server';
+
+// Force server-side only execution
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 import { getServerClient } from '../../../lib/supabase-manager';
 import crypto from 'crypto';
 
