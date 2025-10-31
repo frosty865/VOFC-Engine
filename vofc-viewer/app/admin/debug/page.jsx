@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { getCurrentUser } from '../../lib/auth';
+import { fetchWithAuth } from '../../lib/fetchWithAuth';
 
 export default function DebugPage() {
   const [debugInfo, setDebugInfo] = useState({});
@@ -12,9 +13,8 @@ export default function DebugPage() {
         const user = await getCurrentUser();
         
         // Test API endpoints
-        const ofcsResponse = await fetch('/api/admin/ofcs', {
-          method: 'GET',
-          credentials: 'include'
+        const ofcsResponse = await fetchWithAuth('/api/admin/ofcs', {
+          method: 'GET'
         });
         
         const ofcsData = await ofcsResponse.json();

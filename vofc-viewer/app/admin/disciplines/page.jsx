@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser } from '../../lib/auth';
+import { fetchWithAuth } from '../../lib/fetchWithAuth';
 
 export default function DisciplineManagement() {
   const [disciplines, setDisciplines] = useState([]);
@@ -50,7 +51,7 @@ export default function DisciplineManagement() {
   const loadDisciplines = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/disciplines');
+      const response = await fetchWithAuth('/api/disciplines');
       const result = await response.json();
       
       if (result.success) {
@@ -75,7 +76,7 @@ export default function DisciplineManagement() {
       
       const method = editingDiscipline ? 'PUT' : 'POST';
       
-      const response = await fetch(url, {
+      const response = await fetchWithAuth(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -117,7 +118,7 @@ export default function DisciplineManagement() {
     }
     
     try {
-      const response = await fetch(`/api/disciplines/${disciplineId}`, {
+      const response = await fetchWithAuth(`/api/disciplines/${disciplineId}`, {
         method: 'DELETE',
       });
       

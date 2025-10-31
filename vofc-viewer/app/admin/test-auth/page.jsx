@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
+import { fetchWithAuth } from '../../lib/fetchWithAuth'
 
 export default function TestAuthPage() {
   const [sessionData, setSessionData] = useState(null)
@@ -27,10 +28,8 @@ export default function TestAuthPage() {
         }
 
         // Test verify endpoint
-        const res = await fetch('/api/auth/verify', {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${session.access_token}` },
-          credentials: 'include'
+        const res = await fetchWithAuth('/api/auth/verify', {
+          method: 'GET'
         })
 
         const data = await res.json()

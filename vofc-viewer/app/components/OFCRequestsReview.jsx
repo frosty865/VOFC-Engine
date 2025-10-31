@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import SafeHTML from './SafeHTML';
+import { fetchWithAuth } from '../../lib/fetchWithAuth';
 
 export default function OFCRequestsReview() {
   const [ofcRequests, setOFCRequests] = useState([]);
@@ -25,7 +26,7 @@ export default function OFCRequestsReview() {
   const loadOFCRequests = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/admin/ofc-requests');
+      const response = await fetchWithAuth('/api/admin/ofc-requests');
       const data = await response.json();
       
       if (data.success) {
@@ -58,7 +59,7 @@ export default function OFCRequestsReview() {
   const approveRequest = async (requestId) => {
     try {
       setProcessingRequest(requestId);
-      const response = await fetch(`/api/admin/ofc-requests/${requestId}/approve`, {
+      const response = await fetchWithAuth(`/api/admin/ofc-requests/${requestId}/approve`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -118,7 +119,7 @@ export default function OFCRequestsReview() {
   const markImplemented = async (requestId) => {
     try {
       setProcessingRequest(requestId);
-      const response = await fetch(`/api/admin/ofc-requests/${requestId}/implement`, {
+      const response = await fetchWithAuth(`/api/admin/ofc-requests/${requestId}/implement`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
