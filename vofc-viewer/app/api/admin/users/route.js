@@ -1,8 +1,16 @@
 // Handles admin user CRUD. All endpoints require admin authentication.
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../lib/auth-middleware';
-import { supabaseAdmin } from '@/lib/supabase-client.js';
-import bcrypt from 'bcryptjs';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error('Missing Supabase environment variables in admin users API');
+}
+
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 // Get all users (admin only)
 function authErrorResponse(error) {
@@ -82,17 +90,45 @@ export async function POST(request) {
     const newUser = created?.user;
     if (!newUser) throw new Error('Auth user creation failed');
 
-    // 2) Upsert profile
+    // 2) Upsert profile - include all required fields
+    const profileData = {
+      user_id: newUser.id,
+      username: email.split('@')[0], // Use email prefix as username
+      role: role,
+      first_name: first_name || null,
+      last_name: last_name || null,
+      organization: body.agency || 'CISA',
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
     const { error: profErr } = await supabaseAdmin
       .from('user_profiles')
-      .upsert({ user_id: newUser.id, role, first_name: first_name || null, last_name: last_name || null, is_active: true }, { onConflict: 'user_id' });
-    if (profErr) throw profErr;
+      .upsert(profileData, { onConflict: 'user_id' });
+    
+    if (profErr) {
+      console.error('Profile creation error:', profErr);
+      // Try to delete auth user if profile creation fails
+      await supabaseAdmin.auth.admin.deleteUser(newUser.id).catch(() => {});
+      throw new Error(`Failed to create user profile: ${profErr.message}`);
+    }
 
-    return NextResponse.json({ success: true, user: { id: newUser.id, email: newUser.email, role } });
+    return NextResponse.json({ 
+      success: true, 
+      user: { 
+        id: newUser.id, 
+        email: newUser.email, 
+        role,
+        user_id: newUser.id,
+        username: profileData.username,
+        full_name: (first_name || '') + (last_name ? ' ' + last_name : '')
+      } 
+    });
   } catch (error) {
     console.error('Error creating user:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to create user' },
+      { success: false, error: error.message || 'Failed to create user' },
       { status: 500 }
     );
   }
