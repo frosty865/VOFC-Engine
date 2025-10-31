@@ -17,9 +17,24 @@ const path = require('path');
 const fs = require('fs').promises;
 
 // Configuration - HARDCODED to use /data folder, not /files
-const BASE_DIR = process.env.OLLAMA_FILE_STORAGE || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\data';
-const INCOMING_DIR = process.env.OLLAMA_INCOMING_PATH || 
-  path.join(BASE_DIR, 'incoming');
+// Check if env var is set to old /files path and override it
+let envBaseDir = process.env.OLLAMA_FILE_STORAGE;
+let envIncomingDir = process.env.OLLAMA_INCOMING_PATH;
+
+if (envBaseDir && (envBaseDir.includes('\\Ollama\\files') || envBaseDir.includes('/Ollama/files'))) {
+  console.warn('⚠️  OLLAMA_FILE_STORAGE in .env.local points to /files folder');
+  console.warn('   Overriding to use /data folder instead');
+  envBaseDir = null; // Force use of default
+}
+
+if (envIncomingDir && (envIncomingDir.includes('\\Ollama\\files') || envIncomingDir.includes('/Ollama/files'))) {
+  console.warn('⚠️  OLLAMA_INCOMING_PATH in .env.local points to /files folder');
+  console.warn('   Overriding to use /data folder instead');
+  envIncomingDir = null; // Force use of default
+}
+
+const BASE_DIR = envBaseDir || 'C:\\Users\\frost\\AppData\\Local\\Ollama\\data';
+const INCOMING_DIR = envIncomingDir || path.join(BASE_DIR, 'incoming');
 
 // Ensure we're using /data, not /files
 if (INCOMING_DIR.includes('\\Ollama\\files') || INCOMING_DIR.includes('/Ollama/files')) {
