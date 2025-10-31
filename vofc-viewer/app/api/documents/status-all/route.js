@@ -117,10 +117,11 @@ export async function GET() {
       try {
         // Get all submissions related to documents
         // Include both 'ofc' type and any with document_name in data
+        // Also include tunnel_submission source (from submit API) and document_submission
         const { data: subs, error } = await supabaseAdmin
           .from('submissions')
           .select('*, user_id')
-          .or('type.eq.ofc,source.eq.document_submission')
+          .or('type.eq.ofc,source.eq.document_submission,source.eq.tunnel_submission')
           .order('created_at', { ascending: false });
         
         if (!error && subs) {
@@ -129,19 +130,41 @@ export async function GET() {
           // Get user information for submissions
           const userIds = [...new Set(subs.map(s => s.user_id).filter(Boolean))];
           if (userIds.length > 0) {
-            const { data: users } = await supabaseAdmin
-              .from('users')
-              .select('id, email, full_name')
-              .in('id', userIds);
+            // Try user_profiles first, fallback to auth.users
+            const { data: profiles } = await supabaseAdmin
+              .from('user_profiles')
+              .select('user_id, first_name, last_name')
+              .in('user_id', userIds);
             
-            if (users) {
-              users.forEach(user => {
-                userMap[user.id] = {
-                  email: user.email,
-                  name: user.full_name || user.email
+            // Get emails from auth.users
+            const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers();
+            const authUserMap = new Map();
+            if (authUsers?.users) {
+              authUsers.users.forEach(u => {
+                authUserMap.set(u.id, u.email || 'Unknown');
+              });
+            }
+            
+            if (profiles && profiles.length > 0) {
+              profiles.forEach(profile => {
+                const email = authUserMap.get(profile.user_id) || 'Unknown';
+                userMap[profile.user_id] = {
+                  email: email,
+                  name: [profile.first_name, profile.last_name].filter(Boolean).join(' ') || email
                 };
               });
             }
+            
+            // Fill in any missing users from auth directly
+            userIds.forEach(userId => {
+              if (!userMap[userId]) {
+                const email = authUserMap.get(userId) || 'Unknown';
+                userMap[userId] = {
+                  email: email,
+                  name: email
+                };
+              }
+            });
           }
         }
       } catch (dbError) {

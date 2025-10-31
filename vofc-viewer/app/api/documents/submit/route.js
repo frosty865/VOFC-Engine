@@ -99,7 +99,7 @@ export async function POST(request) {
             storage_type: 'tunnel',
             tunnel_forwarded: true
           }),
-          status: 'pending_review',
+          status: 'processing',
           source: 'tunnel_submission',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()

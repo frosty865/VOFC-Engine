@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from 'next/navigation';
 import { getCurrentUser, canSubmitVOFC } from '../lib/auth';
+import { fetchWithAuth } from '../lib/fetchWithAuth';
 
 export default function PSASubmission() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -174,7 +175,7 @@ export default function PSASubmission() {
       formDataToSend.append('content_restriction', formData.content_restriction);
       
       // New pipeline: submit via tunnel endpoint which creates a submission and triggers process-one
-      const response = await fetch('/api/documents/submit', {
+      const response = await fetchWithAuth('/api/documents/submit', {
         method: 'POST',
         body: formDataToSend
       });
