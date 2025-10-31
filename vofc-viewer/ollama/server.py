@@ -326,7 +326,7 @@ def extract_text_from_pdf(pdf_path):
     except ImportError:
         pass
     except Exception as e:
-        print(f"⚠️  PyPDF2 extraction error: {e}")
+        print(f"WARNING:  PyPDF2 extraction error: {e}")
     
     # Try pypdf (newer alternative)
     try:
@@ -341,7 +341,7 @@ def extract_text_from_pdf(pdf_path):
     except ImportError:
         pass
     except Exception as e:
-        print(f"⚠️  pypdf extraction error: {e}")
+        print(f"WARNING:  pypdf extraction error: {e}")
     
     # Try Node.js pdf-parse via subprocess (if node is available)
     try:
@@ -370,7 +370,7 @@ def extract_text_from_pdf(pdf_path):
             if result.returncode == 0 and result.stdout.strip():
                 return result.stdout.strip()
     except Exception as e:
-        print(f"⚠️  Node.js pdf-parse extraction error: {e}")
+        print(f"WARNING:  Node.js pdf-parse extraction error: {e}")
     
     # Fallback to pdftotext command if available
     try:
@@ -385,7 +385,7 @@ def extract_text_from_pdf(pdf_path):
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
     except Exception as e:
-        print(f"⚠️  pdftotext extraction error: {e}")
+        print(f"WARNING:  pdftotext extraction error: {e}")
     
     # If all else fails, try OCR (Optical Character Recognition) for scanned PDFs
     try:
@@ -444,13 +444,13 @@ def process_file_with_heuristic_pipeline(filepath, filename):
             'AppData', 'Local', 'Ollama', 'pipeline', 'heuristic_pipeline.py'
         )
         
-        print(f"📄 Processing {filename}...")
+        print(f"Processing {filename}...")
         print(f"   Pipeline script: {pipeline_script}")
         
         if not os.path.exists(pipeline_script):
             error_msg = f"Heuristic pipeline not found at: {pipeline_script}"
             error_details.append(error_msg)
-            print(f"❌ {error_msg}")
+            print(f"ERROR: {error_msg}")
             raise FileNotFoundError(error_msg)
         
         # Extract text from PDF if needed
@@ -463,7 +463,7 @@ def process_file_with_heuristic_pipeline(filepath, filename):
             if not text_content or len(text_content.strip()) < 10:
                 error_msg = f"Could not extract text from PDF (got {len(text_content) if text_content else 0} characters)"
                 error_details.append(error_msg)
-                print(f"❌ {error_msg}")
+                print(f"ERROR: {error_msg}")
                 raise ValueError(error_msg)
             print(f"   Extracted {len(text_content)} characters from PDF")
             # Write text to temporary file
@@ -489,7 +489,7 @@ def process_file_with_heuristic_pipeline(filepath, filename):
         else:
             error_msg = f"Unsupported file type: {file_ext}. Supported: .pdf, .txt, .md"
             error_details.append(error_msg)
-            print(f"❌ {error_msg}")
+            print(f"ERROR: {error_msg}")
             raise ValueError(error_msg)
         
         # Generate submission ID
@@ -508,34 +508,59 @@ def process_file_with_heuristic_pipeline(filepath, filename):
             cmd,
             capture_output=True,
             text=True,
-            timeout=300,  # 5 minute timeout
-            cwd=os.path.dirname(pipeline_script) if os.path.exists(pipeline_script) else None
+            timeout=600,  # 10 minute timeout (OCR can take longer)
+            cwd=os.path.dirname(pipeline_script) if os.path.exists(pipeline_script) else None,
+            encoding='utf-8',
+            errors='replace'  # Handle encoding errors gracefully
         )
         
         print(f"   Pipeline return code: {result.returncode}")
         if result.stdout:
-            print(f"   Pipeline stdout (first 200 chars): {result.stdout[:200]}")
+            stdout_preview = result.stdout[:500] if len(result.stdout) > 500 else result.stdout
+            print(f"   Pipeline stdout ({len(result.stdout)} chars, preview): {stdout_preview}")
         if result.stderr:
-            print(f"   Pipeline stderr: {result.stderr}")
+            stderr_preview = result.stderr[:500] if len(result.stderr) > 500 else result.stderr
+            Les print(f"   Pipeline stderr ({len(result.stderr)} chars, preview): {stderr_preview}")
         
         if result.returncode != 0:
             error_msg = f"Pipeline failed with return code {result.returncode}"
             if result.stderr:
-                error_msg += f": {result.stderr}"
+                error_msg += f": {result.stderr[:1000]}"
             if result.stdout:
-                error_msg += f" Output: {result.stdout[:500]}"
+                error_msg += f" Output: {result.stdout[:1000]}"
             error_details.append(error_msg)
-            print(f"❌ {error_msg}")
+            print(f"ERROR: {error_msg}")
             raise RuntimeError(error_msg)
         
         # Parse JSON output
         try:
-            output_json = json.loads(result.stdout)
-            print(f"   ✅ Pipeline succeeded, extracted {len(output_json.get('vulnerabilities', []))} vulnerabilities, {len(output_json.get('ofcs', []))} OFCs")
+            # Try to find JSON in stdout (might have logging before it)
+            stdout_lines = result.stdout.split('\n')
+            json_start = None
+            for i, line in enumerate(stdout_lines):
+                if line.strip().startswith('{'):
+                    json_start = i
+                    break
+            
+            if json_start is not None:
+                json_text = '\n'.join(stdout_lines[json_start:])
+            else:
+                json_text = result.stdout
+            
+            output_json = json.loads(json_text)
+            vuln_count = len(output_json.get('vulnerabilities', []))
+            ofc_count = len(output_json.get('ofcs', []))
+            print(f"   SUCCESS: Pipeline succeeded, extracted {vuln_count} vulnerabilities, {ofc_count} OFCs")
+            
+            if vuln_count == 0 and ofc_count == 0:
+                print(f"   WARNING: No vulnerabilities or OFCs found. This might indicate:")
+                print(f"   - Document doesn't match expected format (Category/Vulnerability/Options for Consideration)")
+                print(f"   - Text extraction may not have captured structured content")
+                print(f"   - Document may need manual review")
         except json.JSONDecodeError as e:
-            error_msg = f"Failed to parse pipeline JSON output: {e}. Output was: {result.stdout[:500]}"
+            error_msg = f"Failed to parse pipeline JSON output: {e}. Output was: {result.stdout[:1000]}"
             error_details.append(error_msg)
-            print(f"❌ {error_msg}")
+            print(f"ERROR: {error_msg}")
             raise ValueError(error_msg)
         
         # Clean up temp file if created
@@ -555,7 +580,7 @@ def process_file_with_heuristic_pipeline(filepath, filename):
         error_msg = f"Error processing {filename}: {type(e).__name__}: {str(e)}"
         if error_details:
             error_msg += f" Details: {'; '.join(error_details)}"
-        print(f"❌ {error_msg}")
+        print(f"ERROR: {error_msg}")
         print(f"   Full traceback:")
         import traceback
         traceback.print_exc()
@@ -607,7 +632,7 @@ def process_files():
             filename = os.path.basename(filepath)
             
             if not os.path.exists(filepath):
-                print(f"⚠️  File not found: {filepath}")
+                print(f"WARNING:  File not found: {filepath}")
                 errors += 1
                 results.append({
                     "file": filename,
@@ -649,7 +674,7 @@ def process_files():
             except Exception as e:
                 error_msg = str(e)
                 error_type = type(e).__name__
-                print(f"❌ Failed to process {filename}: {error_type}: {error_msg}")
+                print(f"ERROR: Failed to process {filename}: {error_type}: {error_msg}")
                 import traceback
                 traceback.print_exc()
 
@@ -659,7 +684,7 @@ def process_files():
                     shutil.move(filepath, error_path)
                     print(f"   Moved {filename} to errors folder: {error_path}")
                 except Exception as move_error:
-                    print(f"   ⚠️  Failed to move file to errors folder: {move_error}")
+                    print(f"   WARNING:  Failed to move file to errors folder: {move_error}")
                 
                 results.append({
                     "file": filename,
@@ -707,7 +732,7 @@ def process_batch():
             filepath = os.path.join(UPLOAD_DIR, filename)
             
             if not os.path.exists(filepath):
-                print(f"⚠️  File not found: {filepath}")
+                print(f"WARNING:  File not found: {filepath}")
                 results.append({
                     "filename": filename,
                     "status": "error",
@@ -730,7 +755,7 @@ def process_batch():
                 library_filepath = os.path.join(LIBRARY_DIR, filename)
                 shutil.move(filepath, library_filepath)
                 
-                print(f"✅ Processed: {filename} - {process_result['vulnerabilities_count']} vulnerabilities, {process_result['ofcs_count']} OFCs")
+                print(f"SUCCESS: Processed: {filename} - {process_result['vulnerabilities_count']} vulnerabilities, {process_result['ofcs_count']} OFCs")
                 results.append({
                     "filename": filename,
                     "status": "success",
@@ -745,7 +770,7 @@ def process_batch():
                 # Log detailed error
                 error_msg = str(e)
                 error_type = type(e).__name__
-                print(f"❌ Failed to process {filename}: {error_type}: {error_msg}")
+                print(f"ERROR: Failed to process {filename}: {error_type}: {error_msg}")
                 import traceback
                 traceback.print_exc()
                 
@@ -755,7 +780,7 @@ def process_batch():
                     shutil.move(filepath, error_path)
                     print(f"   Moved {filename} to errors folder: {error_path}")
                 except Exception as move_error:
-                    print(f"   ⚠️  Failed to move file to errors folder: {move_error}")
+                    print(f"   WARNING:  Failed to move file to errors folder: {move_error}")
                 
                 results.append({
                     "filename": filename,
