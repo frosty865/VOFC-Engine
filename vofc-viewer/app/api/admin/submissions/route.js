@@ -1,82 +1,107 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js'
+import { NextResponse } from 'next/server'
 
-// Use service role for admin operations to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+export const dynamic = 'force-dynamic'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 export async function GET(request) {
+  // Check admin authentication using Supabase token
   try {
-    console.log('🔍 Admin API: Loading submissions...');
+    // Get token from Authorization header
+    const authHeader = request.headers.get('authorization')
+    let accessToken = null
     
-    // Load pending vulnerability submissions
-    const { data: vulnerabilitySubmissions, error: vulnError } = await supabase
-      .from('submissions')
-      .select('*')
-      .eq('type', 'vulnerability')
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    if (vulnError) {
-      console.error('Error loading vulnerability submissions:', vulnError);
-      return NextResponse.json({ error: 'Failed to load vulnerability submissions' }, { status: 500 });
+    if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+      accessToken = authHeader.slice(7).trim()
     }
-
-    // Load pending OFC submissions
-    const { data: ofcSubmissions, error: ofcError } = await supabase
-      .from('submissions')
-      .select('*')
-      .eq('type', 'ofc')
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    if (ofcError) {
-      console.error('Error loading OFC submissions:', ofcError);
-      return NextResponse.json({ error: 'Failed to load OFC submissions' }, { status: 500 });
+    
+    if (!accessToken) {
+      return NextResponse.json(
+        { error: 'No authentication token provided' },
+        { status: 401 }
+      )
     }
-
-    // Load document submissions
-    const { data: documentSubmissions, error: docError } = await supabase
-      .from('submissions')
-      .select('*')
-      .eq('type', 'document')
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    if (docError) {
-      console.error('Error loading document submissions:', docError);
+    
+    // Verify token and check admin role
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      )
     }
-
-    // Load all submissions for debugging
-    const { data: allSubmissions, error: allError } = await supabase
-      .from('submissions')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(20);
-
-    console.log('🔍 Admin API: Found submissions:', {
-      vulnerabilities: vulnerabilitySubmissions?.length || 0,
-      ofcs: ofcSubmissions?.length || 0,
-      documents: documentSubmissions?.length || 0,
-      total: allSubmissions?.length || 0
-    });
-
-    return NextResponse.json({
-      success: true,
-      vulnerabilitySubmissions: vulnerabilitySubmissions || [],
-      ofcSubmissions: ofcSubmissions || [],
-      documentSubmissions: documentSubmissions || [],
-      allSubmissions: allSubmissions || []
-    });
-
-  } catch (error) {
-    console.error('Admin API error:', error);
+    
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(accessToken)
+    
+    if (userError || !user) {
+      return NextResponse.json(
+        { error: 'Invalid authentication token' },
+        { status: 401 }
+      )
+    }
+    
+    // Check user role
+    const { data: profile } = await supabaseAdmin
+      .from('user_profiles')
+      .select('role')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    
+    const derivedRole = String(
+      profile?.role || user.user_metadata?.role || 'user'
+    ).toLowerCase()
+    
+    // Check if admin via role or email allowlist
+    const isAdmin = ['admin', 'spsa'].includes(derivedRole)
+    const allowlist = (process.env.ADMIN_EMAILS || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean)
+    const isEmailAdmin = allowlist.includes(String(user.email).toLowerCase())
+    
+    if (!isAdmin && !isEmailAdmin) {
+      return NextResponse.json(
+        { error: 'Admin access required' },
+        { status: 403 }
+      )
+    }
+  } catch (authException) {
+    console.error('Auth check error:', authException)
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+      { error: 'Authentication failed' },
+      { status: 401 }
+    )
+  }
+
+  try {
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return NextResponse.json({ error: 'Missing Supabase configuration' }, { status: 500 })
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status') || 'pending_review'
+
+    let query = supabase
+      .from('submissions')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100)
+
+    if (status) {
+      query = query.eq('status', status)
+    }
+
+    const { data, error: dbError } = await query
+
+    if (dbError) {
+      console.error('Database error:', dbError)
+      return NextResponse.json({ error: dbError.message }, { status: 500 })
+    }
+
+    return NextResponse.json(Array.isArray(data) ? data : [])
+  } catch (e) {
+    console.error('Admin submissions API error:', e)
+    return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }
-
