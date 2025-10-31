@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import SafeHTML from './SafeHTML';
+import { fetchWithAuth } from '../lib/fetchWithAuth';
 
 export default function SubmissionReview() {
   const [submissions, setSubmissions] = useState([]);
@@ -21,7 +22,7 @@ export default function SubmissionReview() {
   const loadSubmissions = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/admin/submissions');
+      const response = await fetchWithAuth('/api/admin/submissions');
       const data = await response.json();
       
       if (data.success) {
@@ -143,7 +144,7 @@ export default function SubmissionReview() {
     try {
       setReprocessing(submissionId);
       // process-one works with Supabase submissions, keep using Next.js API
-      const response = await fetch('/api/documents/process-one', {
+      const response = await fetchWithAuth('/api/documents/process-one', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ submissionId })
@@ -176,7 +177,7 @@ export default function SubmissionReview() {
   const approveSubmission = async (submissionId) => {
     try {
       setProcessingSubmission(submissionId);
-      const response = await fetch(`/api/submissions/${submissionId}/approve`, {
+      const response = await fetchWithAuth(`/api/submissions/${submissionId}/approve`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -208,7 +209,7 @@ export default function SubmissionReview() {
 
     try {
       setProcessingSubmission(submissionId);
-      const response = await fetch(`/api/submissions/${submissionId}/reject`, {
+      const response = await fetchWithAuth(`/api/submissions/${submissionId}/reject`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -240,7 +241,7 @@ export default function SubmissionReview() {
 
     try {
       setProcessingSubmission(submissionId);
-      const response = await fetch(`/api/submissions/${submissionId}/delete`, {
+      const response = await fetchWithAuth(`/api/submissions/${submissionId}/delete`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
