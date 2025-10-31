@@ -99,6 +99,8 @@ export async function GET(request) {
       return NextResponse.json({ error: dbError.message }, { status: 500 })
     }
 
+    console.log(`[Admin Submissions API] Found ${data?.length || 0} submissions with status="${status}"`)
+    
     return NextResponse.json(Array.isArray(data) ? data : [])
   } catch (e) {
     console.error('Admin submissions API error:', e)
