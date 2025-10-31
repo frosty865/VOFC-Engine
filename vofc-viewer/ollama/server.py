@@ -387,8 +387,36 @@ def extract_text_from_pdf(pdf_path):
     except Exception as e:
         print(f"⚠️  pdftotext extraction error: {e}")
     
+    # If all else fails, try OCR (Optical Character Recognition) for scanned PDFs
+    try:
+        print(f"⚠️  Standard text extraction failed, trying OCR...")
+        from pdf2image import convert_from_path
+        import pytesseract
+        
+        # Convert PDF pages to images
+        images = convert_from_path(pdf_path, dpi=200)
+        
+        # Extract text from each page using OCR
+        ocr_text = ""
+        for i, image in enumerate(images):
+            print(f"   OCR processing page {i+1}/{len(images)}...")
+            page_text = pytesseract.image_to_string(image, lang='eng')
+            ocr_text += page_text + "\n"
+        
+        if ocr_text.strip():
+            print(f"✅ OCR extracted {len(ocr_text)} characters from {len(images)} page(s)")
+            return ocr_text
+        else:
+            print(f"⚠️  OCR returned empty text")
+    except ImportError as e:
+        print(f"⚠️  OCR libraries not available: {e}")
+    except FileNotFoundError:
+        print(f"⚠️  Tesseract OCR engine not found. Install from: https://github.com/UB-Mannheim/tesseract/wiki")
+    except Exception as e:
+        print(f"⚠️  OCR extraction error: {e}")
+    
     # If all else fails, return empty string (heuristic parser might still work with metadata)
-    print(f"⚠️  Could not extract text from PDF: {pdf_path}")
+    print(f"❌ Could not extract text from PDF using any method: {pdf_path}")
     return ""
 
 def process_file_with_heuristic_pipeline(filepath, filename):
