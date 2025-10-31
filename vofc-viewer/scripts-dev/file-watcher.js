@@ -80,16 +80,18 @@ function log(message, color = 'reset') {
 async function processPendingDocuments() {
   try {
     log('🔍 Checking for pending documents to process...', 'cyan');
+    log(`🔗 Calling API: ${PROCESS_ENDPOINT}`, 'cyan');
     
     const response = await fetch(PROCESS_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
-      }
+      },
+      signal: AbortSignal.timeout(60000) // 60 second timeout
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = await response.text().catch(() => 'Unknown error');
       log(`❌ Processing API error (${response.status}): ${errorText}`, 'red');
       return;
     }
@@ -109,7 +111,18 @@ async function processPendingDocuments() {
       log(`❌ Processing failed: ${result.error}`, 'red');
     }
   } catch (error) {
-    log(`❌ Error calling processing API: ${error.message}`, 'red');
+    if (error.name === 'AbortError') {
+      log(`❌ Processing request timed out after 60 seconds`, 'red');
+    } else if (error.code === 'ECONNREFUSED') {
+      log(`❌ Cannot connect to processing API at ${PROCESS_ENDPOINT}`, 'red');
+      log(`   Make sure your Next.js server is running at ${PROCESSING_URL}!`, 'yellow');
+    } else {
+      log(`❌ Error calling processing API: ${error.message}`, 'red');
+      log(`   Endpoint: ${PROCESS_ENDPOINT}`, 'yellow');
+      if (error.code) {
+        log(`   Error code: ${error.code}`, 'yellow');
+      }
+    }
   }
 }
 
