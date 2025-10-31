@@ -235,7 +235,6 @@ function startWatcher() {
     
     // Set up periodic processing check (in case files are added when watcher misses them)
     setInterval(async () => {
-      await processPendingDocuments();
       await processFilesInFolder();
     }, PROCESS_INTERVAL_MS);
     
