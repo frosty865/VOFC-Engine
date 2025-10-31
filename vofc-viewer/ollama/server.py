@@ -8,7 +8,7 @@ from pathlib import Path
 app = Flask(__name__)
 
 # Configuration - can be overridden via environment variables
-BASE_DIR = os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'Ollama', 'files')
+BASE_DIR = os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'Ollama', 'data')
 UPLOAD_DIR = os.getenv(
     'OLLAMA_UPLOAD_DIR',
     os.path.join(BASE_DIR, 'incoming')

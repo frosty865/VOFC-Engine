@@ -21,7 +21,7 @@ export async function GET() {
     // Define local folder paths
     const baseDir = process.env.OLLAMA_FILE_STORAGE || 
       (process.platform === 'win32' 
-        ? 'C:\\Users\\frost\\AppData\\Local\\Ollama\\automation'
+        ? 'C:\\Users\\frost\\AppData\\Local\\Ollama\\data'
         : '/var/ollama/uploads');
     
     const folders = {
