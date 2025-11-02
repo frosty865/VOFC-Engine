@@ -82,6 +82,19 @@ export async function GET(request) {
   // Continue with request (auth passed - supabaseAdmin is now available)
 
   try {
+    // 1. Setup URLs first (needed for status initialization)
+    // Priority: OLLAMA_SERVER_URL > OLLAMA_LOCAL_URL > derived from OLLAMA_URL > default
+    const ollamaApiUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
+    // Derive Flask server URL from Ollama URL if not explicitly set (use same domain, port 5000)
+    let defaultFlaskUrl = 'https://ollama.frostech.site:5000';
+    try {
+      const url = new URL(ollamaApiUrl);
+      defaultFlaskUrl = `${url.protocol}//${url.hostname}:5000`;
+    } catch {
+      // If URL parsing fails, use default
+    }
+    const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || defaultFlaskUrl;
+
     const status = {
       timestamp: new Date().toISOString(),
       services: {
@@ -113,18 +126,7 @@ export async function GET(request) {
       }
     };
 
-    // 1. Check Flask Server (Python backend) - Production only
-    // Priority: OLLAMA_SERVER_URL > OLLAMA_LOCAL_URL > derived from OLLAMA_URL > default
-    const ollamaApiUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
-    // Derive Flask server URL from Ollama URL if not explicitly set (use same domain, port 5000)
-    let defaultFlaskUrl = 'https://ollama.frostech.site:5000';
-    try {
-      const url = new URL(ollamaApiUrl);
-      defaultFlaskUrl = `${url.protocol}//${url.hostname}:5000`;
-    } catch {
-      // If URL parsing fails, use default
-    }
-    const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || defaultFlaskUrl;
+    // 2. Check Flask Server (Python backend) - Production only
     
     // Always check Flask server - production must have it configured and accessible
     try {
@@ -191,7 +193,7 @@ export async function GET(request) {
       };
     }
 
-    // 2. Check Ollama API (ollamaApiUrl already declared above)
+    // 3. Check Ollama API
     try {
       const ollamaResponse = await fetch(`${ollamaApiUrl}/api/tags`, {
         signal: AbortSignal.timeout(5000)
