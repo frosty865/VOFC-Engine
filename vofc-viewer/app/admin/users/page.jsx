@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser, USER_ROLES, getRoleDisplayName, getRoleBadgeColor } from '../../lib/auth';
 import { fetchWithAuth } from '../../lib/fetchWithAuth';
+import '../../../styles/cisa.css';
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
