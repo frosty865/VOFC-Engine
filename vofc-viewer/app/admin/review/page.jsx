@@ -250,16 +250,20 @@ export default function ReviewSubmissionsPage() {
                       {needsDataLoad && (
                         <button
                           onClick={async () => {
+                            if (!confirm('This submission only has metadata counts but not the full data. Load from JSON file?')) {
+                              return;
+                            }
                             try {
                               const res = await fetchWithAuth(`/api/admin/submissions/${submission.id}/update-data`, {
                                 method: 'POST'
                               });
                               if (res.ok) {
-                                alert('✅ Submission data loaded from JSON file successfully!');
+                                const result = await res.json();
+                                alert(`✅ Loaded ${result.vulnerabilities || 0} vulnerabilities and ${result.ofcs || 0} OFCs from JSON file!`);
                                 loadSubmissions();
                               } else {
                                 const error = await res.json();
-                                alert('❌ Error: ' + (error.error || 'Failed to load data'));
+                                alert('❌ Error: ' + (error.error || 'Failed to load data') + '\n\n' + (error.message || '') + '\n' + (error.note || ''));
                               }
                             } catch (e) {
                               alert('❌ Error: ' + e.message);
