@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { fetchWithAuth } from '../lib/fetchWithAuth'
+import '../../styles/cisa.css'
+import Link from 'next/link'
 
 export default function AdminOverviewPage() {
   const [stats, setStats] = useState([])
@@ -31,70 +33,136 @@ export default function AdminOverviewPage() {
     return () => { isMounted = false; clearInterval(id) }
   }, [])
 
-  if (error) return <div className="text-red-600 p-4">Error: {error}</div>
+  if (error) return (
+    <div className="alert alert-danger">
+      <p style={{ margin: 0 }}>Error: {error}</p>
+    </div>
+  )
 
   return (
-    <div className="space-y-8">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)' }}>
       <section>
-        <h2 className="text-lg font-semibold mb-2">Model Performance Summary</h2>
-        <div className="grid md:grid-cols-3 gap-4">
+        <h2 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-md)' }}>Model Performance Summary</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--spacing-lg)' }}>
           {stats?.map((s) => (
-            <div key={s.model_version} className="bg-white shadow p-4 rounded-xl">
-              <div className="font-medium">{s.model_version}</div>
-              <div className="text-sm text-gray-500">Last updated {new Date(s.updated_at).toLocaleString()}</div>
-              <div className="mt-3 text-sm">
-                <p>Accept rate: <strong>{(s.accept_rate * 100).toFixed(1)}%</strong></p>
-                <p>Softmatch ratio: <strong>{(s.softmatch_ratio * 100).toFixed(1)}%</strong></p>
+            <div key={s.model_version} className="card">
+              <div style={{ fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-xs)' }}>{s.model_version}</div>
+              <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginBottom: 'var(--spacing-md)' }}>
+                Last updated {new Date(s.updated_at).toLocaleString()}
+              </div>
+              <div style={{ fontSize: 'var(--font-size-sm)' }}>
+                <p style={{ margin: 'var(--spacing-xs) 0' }}>Accept rate: <strong>{(s.accept_rate * 100).toFixed(1)}%</strong></p>
+                <p style={{ margin: 'var(--spacing-xs) 0' }}>Softmatch ratio: <strong>{(s.softmatch_ratio * 100).toFixed(1)}%</strong></p>
               </div>
             </div>
-          )) || <p className="text-gray-500">No data available</p>}
-          {loading && <p className="text-gray-500">Loading...</p>}
+          )) || <p style={{ color: 'var(--cisa-gray)' }}>No data available</p>}
+          {loading && <p style={{ color: 'var(--cisa-gray)' }}>Loading...</p>}
         </div>
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold mb-2">Admin Actions</h2>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <a href="/admin/users" className="bg-white shadow rounded-xl p-4 hover:bg-gray-50">
-            <div className="font-medium">User Management</div>
-            <div className="text-sm text-gray-500">Add, activate, and manage users</div>
-          </a>
-          <a href="/admin/review" className="bg-white shadow rounded-xl p-4 hover:bg-gray-50">
-            <div className="font-medium">Review Submissions</div>
-            <div className="text-sm text-gray-500">Moderate new content</div>
-          </a>
-          <a href="/admin/models" className="bg-white shadow rounded-xl p-4 hover:bg-gray-50">
-            <div className="font-medium">Model Analytics</div>
-            <div className="text-sm text-gray-500">Accept rate, edits, softmatch ratio</div>
-          </a>
-          <a href="/admin/softmatches" className="bg-white shadow rounded-xl p-4 hover:bg-gray-50">
-            <div className="font-medium">Soft Match Audit</div>
-            <div className="text-sm text-gray-500">Near-duplicate detections</div>
-          </a>
-          <a href="/admin/system" className="bg-white shadow rounded-xl p-4 hover:bg-gray-50">
-            <div className="font-medium">System Health</div>
-            <div className="text-sm text-gray-500">Backend and Ollama status</div>
-          </a>
-          <a href="/learning" className="bg-white shadow rounded-xl p-4 hover:bg-gray-50">
-            <div className="font-medium">Learning Monitor</div>
-            <div className="text-sm text-gray-500">Continuous learning overview</div>
-          </a>
+        <h2 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-md)' }}>Admin Actions</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 'var(--spacing-md)' }}>
+          <Link href="/admin/users" className="card" style={{ textDecoration: 'none', transition: 'all 0.3s ease' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
+            }}
+          >
+            <div style={{ fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-xs)' }}>User Management</div>
+            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>Add, activate, and manage users</div>
+          </Link>
+          <Link href="/admin/review" className="card" style={{ textDecoration: 'none', transition: 'all 0.3s ease' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
+            }}
+          >
+            <div style={{ fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-xs)' }}>Review Submissions</div>
+            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>Moderate new content</div>
+          </Link>
+          <Link href="/admin/models" className="card" style={{ textDecoration: 'none', transition: 'all 0.3s ease' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
+            }}
+          >
+            <div style={{ fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-xs)' }}>Model Analytics</div>
+            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>Accept rate, edits, softmatch ratio</div>
+          </Link>
+          <Link href="/admin/softmatches" className="card" style={{ textDecoration: 'none', transition: 'all 0.3s ease' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
+            }}
+          >
+            <div style={{ fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-xs)' }}>Soft Match Audit</div>
+            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>Near-duplicate detections</div>
+          </Link>
+          <Link href="/admin/system" className="card" style={{ textDecoration: 'none', transition: 'all 0.3s ease' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
+            }}
+          >
+            <div style={{ fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-xs)' }}>System Health</div>
+            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>Backend and Ollama status</div>
+          </Link>
+          <Link href="/learning" className="card" style={{ textDecoration: 'none', transition: 'all 0.3s ease' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
+            }}
+          >
+            <div style={{ fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-xs)' }}>Learning Monitor</div>
+            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>Continuous learning overview</div>
+          </Link>
         </div>
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold mb-2">Recent Soft Matches</h2>
-        <ul className="bg-white shadow rounded-xl divide-y">
-          {soft?.map((r, i) => (
-            <li key={i} className="p-3 text-sm">
-              <div>{r.new_text}</div>
-              <div className="text-gray-500 text-xs">
-                sim {r.similarity?.toFixed(3)} • {r.source_doc}
-              </div>
-            </li>
-          )) || <p className="p-3 text-gray-500">No soft matches yet</p>}
-          {loading && <li className="p-3 text-sm text-gray-500">Loading...</li>}
-        </ul>
+        <h2 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-md)' }}>Recent Soft Matches</h2>
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+            {soft?.map((r, i) => (
+              <li key={i} style={{
+                padding: 'var(--spacing-md)',
+                borderBottom: i < soft.length - 1 ? '1px solid var(--cisa-gray-light)' : 'none',
+                fontSize: 'var(--font-size-sm)'
+              }}>
+                <div style={{ color: 'var(--cisa-black)', marginBottom: 'var(--spacing-xs)' }}>{r.new_text}</div>
+                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)' }}>
+                  sim {r.similarity?.toFixed(3)} • {r.source_doc}
+                </div>
+              </li>
+            )) || <li style={{ padding: 'var(--spacing-md)', color: 'var(--cisa-gray)' }}>No soft matches yet</li>}
+            {loading && <li style={{ padding: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>Loading...</li>}
+          </ul>
+        </div>
       </section>
     </div>
   )

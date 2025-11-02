@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { fetchWithAuth } from '../../lib/fetchWithAuth'
+import '../../../styles/cisa.css'
 
 export default function SystemStatusPage() {
   const [status, setStatus] = useState(null)
@@ -29,52 +30,65 @@ export default function SystemStatusPage() {
       }
     }
     load()
-    const id = setInterval(load, 30000) // Refresh every 30 seconds
+    const id = setInterval(load, 30000)
     return () => { isMounted = false; clearInterval(id) }
   }, [])
 
   const getStatusColor = (serviceStatus) => {
     switch (serviceStatus) {
-      case 'online': return 'bg-green-500'
-      case 'active': return 'bg-green-500'
-      case 'running': return 'bg-green-500'
-      case 'warning': return 'bg-yellow-500'
-      case 'error': return 'bg-red-500'
-      case 'offline': return 'bg-red-500'
-      case 'unavailable': return 'bg-gray-400'
-      default: return 'bg-gray-400'
+      case 'online':
+      case 'active':
+      case 'running': return 'var(--cisa-success)'
+      case 'warning': return 'var(--cisa-warning)'
+      case 'error':
+      case 'offline': return 'var(--cisa-red)'
+      case 'unavailable': return 'var(--cisa-gray)'
+      default: return 'var(--cisa-gray)'
     }
   }
 
-  const getStatusBadge = (serviceStatus) => {
+  const getStatusBadgeStyle = (serviceStatus) => {
     switch (serviceStatus) {
       case 'online':
       case 'active':
-      case 'running': return 'text-green-700 bg-green-100'
-      case 'warning': return 'text-yellow-700 bg-yellow-100'
+      case 'running': 
+        return { backgroundColor: 'rgba(40, 167, 69, 0.1)', color: '#155724' }
+      case 'warning': 
+        return { backgroundColor: 'rgba(255, 193, 7, 0.1)', color: '#856404' }
       case 'error':
-      case 'offline': return 'text-red-700 bg-red-100'
-      case 'unavailable': return 'text-gray-700 bg-gray-100'
-      default: return 'text-gray-700 bg-gray-100'
+      case 'offline': 
+        return { backgroundColor: 'var(--cisa-red-light)', color: 'var(--cisa-red-dark)' }
+      case 'unavailable': 
+        return { backgroundColor: 'var(--cisa-gray-lighter)', color: 'var(--cisa-gray)' }
+      default: 
+        return { backgroundColor: 'var(--cisa-gray-lighter)', color: 'var(--cisa-gray)' }
     }
   }
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <p className="ml-4 text-gray-600">Loading system status...</p>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '256px' }}>
+        <div style={{
+          width: '48px',
+          height: '48px',
+          border: '3px solid var(--cisa-gray-light)',
+          borderTopColor: 'var(--cisa-blue)',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }}></div>
+        <p style={{ marginLeft: 'var(--spacing-md)', color: 'var(--cisa-gray)' }}>Loading system status...</p>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-        <p className="font-medium">Error loading system status: {error}</p>
+      <div className="alert alert-danger">
+        <p style={{ fontWeight: 600, margin: 0, marginBottom: 'var(--spacing-sm)' }}>Error loading system status: {error}</p>
         <button 
           onClick={() => window.location.reload()}
-          className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          className="btn btn-danger btn-sm"
+          style={{ marginTop: 'var(--spacing-sm)' }}
         >
           Retry
         </button>
@@ -83,63 +97,96 @@ export default function SystemStatusPage() {
   }
 
   if (!status) {
-    return <div className="p-4 text-gray-600">No system status data available</div>
+    return <div style={{ padding: 'var(--spacing-lg)', color: 'var(--cisa-gray)' }}>No system status data available</div>
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-900">System Health</h2>
-        <p className="text-sm text-gray-500">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h2 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: 'var(--cisa-blue)', margin: 0 }}>System Health</h2>
+        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>
           Last updated: {status.timestamp ? new Date(status.timestamp).toLocaleTimeString() : 'Never'}
         </p>
       </div>
 
       {/* Service Status Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--spacing-lg)' }}>
         {/* Flask Server */}
-        <div className="bg-white rounded-lg shadow p-4 border border-gray-200">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-semibold text-gray-900">Flask Server (Python)</h3>
-            <span className={`w-3 h-3 rounded-full ${getStatusColor(status.services?.flask?.status)}`}></span>
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)' }}>
+            <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', margin: 0 }}>Flask Server (Python)</h3>
+            <span style={{
+              width: '12px',
+              height: '12px',
+              borderRadius: '50%',
+              backgroundColor: getStatusColor(status.services?.flask?.status)
+            }}></span>
           </div>
-          <p className="text-sm text-gray-600 mb-1">
-            Status: <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusBadge(status.services?.flask?.status)}`}>
+          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginBottom: 'var(--spacing-xs)' }}>
+            Status: <span style={{
+              padding: 'var(--spacing-xs) var(--spacing-sm)',
+              borderRadius: 'var(--border-radius)',
+              fontSize: 'var(--font-size-xs)',
+              fontWeight: 600,
+              ...getStatusBadgeStyle(status.services?.flask?.status)
+            }}>
               {status.services?.flask?.status || 'Unknown'}
             </span>
           </p>
           {status.services?.flask?.error && (
-            <p className="text-xs text-red-600 mt-1">{status.services.flask.error}</p>
+            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-red)', marginTop: 'var(--spacing-xs)' }}>{status.services.flask.error}</p>
           )}
           {status.python?.model && status.python.model !== 'unknown' && (
-            <p className="text-xs text-gray-500 mt-1">Model: {status.python.model}</p>
+            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Model: {status.python.model}</p>
           )}
         </div>
 
         {/* Ollama API */}
-        <div className="bg-white rounded-lg shadow p-4 border border-gray-200">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-semibold text-gray-900">Ollama API</h3>
-            <span className={`w-3 h-3 rounded-full ${getStatusColor(status.services?.ollama?.status)}`}></span>
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)' }}>
+            <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', margin: 0 }}>Ollama API</h3>
+            <span style={{
+              width: '12px',
+              height: '12px',
+              borderRadius: '50%',
+              backgroundColor: getStatusColor(status.services?.ollama?.status)
+            }}></span>
           </div>
-          <p className="text-sm text-gray-600 mb-1">
-            Status: <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusBadge(status.services?.ollama?.status)}`}>
+          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginBottom: 'var(--spacing-xs)' }}>
+            Status: <span style={{
+              padding: 'var(--spacing-xs) var(--spacing-sm)',
+              borderRadius: 'var(--border-radius)',
+              fontSize: 'var(--font-size-xs)',
+              fontWeight: 600,
+              ...getStatusBadgeStyle(status.services?.ollama?.status)
+            }}>
               {status.services?.ollama?.status || 'Unknown'}
             </span>
           </p>
           {status.services?.ollama?.models_count && (
-            <p className="text-xs text-gray-500 mt-1">{status.services.ollama.models_count} model(s) available</p>
+            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>{status.services.ollama.models_count} model(s) available</p>
           )}
         </div>
 
         {/* Supabase */}
-        <div className="bg-white rounded-lg shadow p-4 border border-gray-200">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-semibold text-gray-900">Supabase</h3>
-            <span className={`w-3 h-3 rounded-full ${getStatusColor(status.services?.supabase?.status)}`}></span>
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)' }}>
+            <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', margin: 0 }}>Supabase</h3>
+            <span style={{
+              width: '12px',
+              height: '12px',
+              borderRadius: '50%',
+              backgroundColor: getStatusColor(status.services?.supabase?.status)
+            }}></span>
           </div>
-          <p className="text-sm text-gray-600 mb-1">
-            Status: <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusBadge(status.services?.supabase?.status)}`}>
+          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginBottom: 'var(--spacing-xs)' }}>
+            Status: <span style={{
+              padding: 'var(--spacing-xs) var(--spacing-sm)',
+              borderRadius: 'var(--border-radius)',
+              fontSize: 'var(--font-size-xs)',
+              fontWeight: 600,
+              ...getStatusBadgeStyle(status.services?.supabase?.status)
+            }}>
               {status.services?.supabase?.status || 'Unknown'}
             </span>
           </p>
@@ -147,42 +194,80 @@ export default function SystemStatusPage() {
       </div>
 
       {/* File Processing Status */}
-      <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">File Processing Pipeline</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="text-center p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-            <p className="text-3xl font-bold text-yellow-700">{status.files?.incoming || 0}</p>
-            <p className="text-sm text-gray-600 mt-1">Incoming Files</p>
-            <p className="text-xs text-gray-500">Awaiting processing</p>
+      <div className="card">
+        <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-lg)' }}>File Processing Pipeline</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-lg)' }}>
+          <div style={{
+            textAlign: 'center',
+            padding: 'var(--spacing-lg)',
+            backgroundColor: 'rgba(255, 193, 7, 0.1)',
+            borderRadius: 'var(--border-radius-lg)',
+            border: '1px solid rgba(255, 193, 7, 0.3)'
+          }}>
+            <p style={{ fontSize: 'var(--font-size-xxl)', fontWeight: 700, color: '#856404', margin: 0 }}>{status.files?.incoming || 0}</p>
+            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Incoming Files</p>
+            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7 }}>Awaiting processing</p>
           </div>
-          <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-3xl font-bold text-blue-700">{status.files?.library || 0}</p>
-            <p className="text-sm text-gray-600 mt-1">Processed Files</p>
-            <p className="text-xs text-gray-500">In library</p>
+          <div style={{
+            textAlign: 'center',
+            padding: 'var(--spacing-lg)',
+            backgroundColor: 'var(--cisa-blue-lightest)',
+            borderRadius: 'var(--border-radius-lg)',
+            border: '1px solid var(--cisa-blue-lighter)'
+          }}>
+            <p style={{ fontSize: 'var(--font-size-xxl)', fontWeight: 700, color: 'var(--cisa-blue)', margin: 0 }}>{status.files?.library || 0}</p>
+            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Processed Files</p>
+            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7 }}>In library</p>
           </div>
-          <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
-            <p className="text-3xl font-bold text-green-700">{status.files?.extracted_text || 0}</p>
-            <p className="text-sm text-gray-600 mt-1">Extracted Text</p>
-            <p className="text-xs text-gray-500">Ready for analysis</p>
+          <div style={{
+            textAlign: 'center',
+            padding: 'var(--spacing-lg)',
+            backgroundColor: 'rgba(40, 167, 69, 0.1)',
+            borderRadius: 'var(--border-radius-lg)',
+            border: '1px solid rgba(40, 167, 69, 0.3)'
+          }}>
+            <p style={{ fontSize: 'var(--font-size-xxl)', fontWeight: 700, color: '#155724', margin: 0 }}>{status.files?.extracted_text || 0}</p>
+            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Extracted Text</p>
+            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7 }}>Ready for analysis</p>
           </div>
-          <div className="text-center p-4 bg-red-50 rounded-lg border border-red-200">
-            <p className="text-3xl font-bold text-red-700">{status.files?.errors || 0}</p>
-            <p className="text-sm text-gray-600 mt-1">Errors</p>
-            <p className="text-xs text-gray-500">Failed processing</p>
+          <div style={{
+            textAlign: 'center',
+            padding: 'var(--spacing-lg)',
+            backgroundColor: 'var(--cisa-red-light)',
+            borderRadius: 'var(--border-radius-lg)',
+            border: '1px solid var(--cisa-red)'
+          }}>
+            <p style={{ fontSize: 'var(--font-size-xxl)', fontWeight: 700, color: 'var(--cisa-red-dark)', margin: 0 }}>{status.files?.errors || 0}</p>
+            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Errors</p>
+            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7 }}>Failed processing</p>
           </div>
         </div>
         
         {/* Processing Status */}
-        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-          <div className="flex items-center justify-between">
+        <div style={{
+          marginTop: 'var(--spacing-lg)',
+          padding: 'var(--spacing-lg)',
+          backgroundColor: 'var(--cisa-gray-lighter)',
+          borderRadius: 'var(--border-radius-lg)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <p className="text-sm font-medium text-gray-700">Processing Status</p>
-              <p className="text-xs text-gray-500">
+              <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--cisa-gray)', margin: 0 }}>Processing Status</p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7, marginTop: 'var(--spacing-xs)' }}>
                 Active Jobs: {status.processing?.active_jobs || 0} | 
                 Ready: {status.processing?.ready ? 'Yes' : 'No'}
               </p>
             </div>
-            <span className={`px-3 py-1 rounded-full text-xs font-medium ${status.processing?.ready ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
+            <span style={{
+              padding: 'var(--spacing-xs) var(--spacing-md)',
+              borderRadius: '999px',
+              fontSize: 'var(--font-size-xs)',
+              fontWeight: 600,
+              ...(status.processing?.ready ? 
+                { backgroundColor: 'rgba(40, 167, 69, 0.1)', color: '#155724' } : 
+                { backgroundColor: 'var(--cisa-gray-light)', color: 'var(--cisa-gray)' }
+              )
+            }}>
               {status.processing?.ready ? 'Ready' : 'Idle'}
             </span>
           </div>
@@ -191,60 +276,75 @@ export default function SystemStatusPage() {
 
       {/* Parsing & Processing Statistics */}
       {status.parsing && (
-        <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Parsing & Processing Statistics</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <div className="text-center p-4 bg-blue-50 rounded-lg">
-              <p className="text-2xl font-bold text-blue-700">{status.parsing.total_submissions || 0}</p>
-              <p className="text-xs text-gray-600 mt-1">Total Submissions</p>
+        <div className="card">
+          <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-lg)' }}>Parsing & Processing Statistics</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--spacing-lg)' }}>
+            <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)', backgroundColor: 'var(--cisa-blue-lightest)', borderRadius: 'var(--border-radius-lg)' }}>
+              <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: 'var(--cisa-blue)', margin: 0 }}>{status.parsing.total_submissions || 0}</p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Total Submissions</p>
             </div>
-            <div className="text-center p-4 bg-yellow-50 rounded-lg">
-              <p className="text-2xl font-bold text-yellow-700">{status.parsing.pending_review || 0}</p>
-              <p className="text-xs text-gray-600 mt-1">Pending Review</p>
+            <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)', backgroundColor: 'rgba(255, 193, 7, 0.1)', borderRadius: 'var(--border-radius-lg)' }}>
+              <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: '#856404', margin: 0 }}>{status.parsing.pending_review || 0}</p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Pending Review</p>
             </div>
-            <div className="text-center p-4 bg-green-50 rounded-lg">
-              <p className="text-2xl font-bold text-green-700">{status.parsing.approved || 0}</p>
-              <p className="text-xs text-gray-600 mt-1">Approved</p>
+            <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)', backgroundColor: 'rgba(40, 167, 69, 0.1)', borderRadius: 'var(--border-radius-lg)' }}>
+              <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: '#155724', margin: 0 }}>{status.parsing.approved || 0}</p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Approved</p>
             </div>
-            <div className="text-center p-4 bg-red-50 rounded-lg">
-              <p className="text-2xl font-bold text-red-700">{status.parsing.rejected || 0}</p>
-              <p className="text-xs text-gray-600 mt-1">Rejected</p>
+            <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)', backgroundColor: 'var(--cisa-red-light)', borderRadius: 'var(--border-radius-lg)' }}>
+              <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: 'var(--cisa-red-dark)', margin: 0 }}>{status.parsing.rejected || 0}</p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Rejected</p>
             </div>
-            <div className="text-center p-4 bg-purple-50 rounded-lg">
-              <p className="text-2xl font-bold text-purple-700">{status.parsing.total_vulnerabilities || 0}</p>
-              <p className="text-xs text-gray-600 mt-1">Vulnerabilities</p>
+            <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)', backgroundColor: 'rgba(138, 43, 226, 0.1)', borderRadius: 'var(--border-radius-lg)' }}>
+              <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: '#6f42c1', margin: 0 }}>{status.parsing.total_vulnerabilities || 0}</p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Vulnerabilities</p>
             </div>
-            <div className="text-center p-4 bg-indigo-50 rounded-lg">
-              <p className="text-2xl font-bold text-indigo-700">{status.parsing.total_ofcs || 0}</p>
-              <p className="text-xs text-gray-600 mt-1">Options for Consideration</p>
+            <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)', backgroundColor: 'rgba(75, 0, 130, 0.1)', borderRadius: 'var(--border-radius-lg)' }}>
+              <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: '#4b0082', margin: 0 }}>{status.parsing.total_ofcs || 0}</p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Options for Consideration</p>
             </div>
           </div>
 
           {/* Recent Processing Activity */}
           {status.parsing.recent_submissions && status.parsing.recent_submissions.length > 0 && (
-            <div className="mt-6">
-              <h4 className="text-sm font-semibold text-gray-700 mb-3">Recent Processing Activity</h4>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+            <div style={{ marginTop: 'var(--spacing-xl)' }}>
+              <h4 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--cisa-gray)', marginBottom: 'var(--spacing-md)' }}>Recent Processing Activity</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)', maxHeight: '256px', overflowY: 'auto' }}>
                 {status.parsing.recent_submissions.map((sub) => (
-                  <div key={sub.id} className="flex items-center justify-between p-2 bg-gray-50 rounded text-sm">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${
-                        sub.status === 'approved' ? 'bg-green-500' :
-                        sub.status === 'rejected' ? 'bg-red-500' :
-                        sub.status === 'pending_review' ? 'bg-yellow-500' :
-                        'bg-gray-400'
-                      }`}></span>
-                      <span className="font-mono text-xs">{sub.id.slice(0, 8)}...</span>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        sub.status === 'approved' ? 'bg-green-100 text-green-700' :
-                        sub.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                        sub.status === 'pending_review' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
+                  <div key={sub.id} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: 'var(--spacing-sm)',
+                    backgroundColor: 'var(--cisa-gray-lighter)',
+                    borderRadius: 'var(--border-radius)',
+                    fontSize: 'var(--font-size-sm)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                      <span style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        backgroundColor: sub.status === 'approved' ? 'var(--cisa-success)' :
+                                        sub.status === 'rejected' ? 'var(--cisa-red)' :
+                                        sub.status === 'pending_review' ? 'var(--cisa-warning)' :
+                                        'var(--cisa-gray)'
+                      }}></span>
+                      <span style={{ fontFamily: 'monospace', fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)' }}>{sub.id.slice(0, 8)}...</span>
+                      <span style={{
+                        padding: 'var(--spacing-xs) var(--spacing-sm)',
+                        borderRadius: 'var(--border-radius)',
+                        fontSize: 'var(--font-size-xs)',
+                        fontWeight: 600,
+                        ...(sub.status === 'approved' ? { backgroundColor: 'rgba(40, 167, 69, 0.1)', color: '#155724' } :
+                            sub.status === 'rejected' ? { backgroundColor: 'var(--cisa-red-light)', color: 'var(--cisa-red-dark)' } :
+                            sub.status === 'pending_review' ? { backgroundColor: 'rgba(255, 193, 7, 0.1)', color: '#856404' } :
+                            { backgroundColor: 'var(--cisa-gray-lighter)', color: 'var(--cisa-gray)' })
+                      }}>
                         {sub.status}
                       </span>
                     </div>
-                    <span className="text-xs text-gray-500">
+                    <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7 }}>
                       {new Date(sub.created_at).toLocaleString()}
                     </span>
                   </div>
@@ -257,16 +357,16 @@ export default function SystemStatusPage() {
 
       {/* Learning Statistics */}
       {status.learning && (
-        <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Learning System</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="text-center p-4 bg-purple-50 rounded-lg">
-              <p className="text-2xl font-bold text-purple-700">{status.learning.total_events || 0}</p>
-              <p className="text-xs text-gray-600 mt-1">Total Learning Events</p>
+        <div className="card">
+          <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-lg)' }}>Learning System</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-lg)' }}>
+            <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)', backgroundColor: 'rgba(138, 43, 226, 0.1)', borderRadius: 'var(--border-radius-lg)' }}>
+              <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: '#6f42c1', margin: 0 }}>{status.learning.total_events || 0}</p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Total Learning Events</p>
             </div>
-            <div className="text-center p-4 bg-green-50 rounded-lg">
-              <p className="text-2xl font-bold text-green-700">{status.learning.approved_events || 0}</p>
-              <p className="text-xs text-gray-600 mt-1">Approved Events</p>
+            <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)', backgroundColor: 'rgba(40, 167, 69, 0.1)', borderRadius: 'var(--border-radius-lg)' }}>
+              <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: '#155724', margin: 0 }}>{status.learning.approved_events || 0}</p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Approved Events</p>
             </div>
           </div>
         </div>
@@ -274,20 +374,24 @@ export default function SystemStatusPage() {
 
       {/* Python Runtime Info */}
       {status.python && (
-        <div className="bg-white rounded-lg shadow p-4 border border-gray-200">
-          <h3 className="text-sm font-semibold text-gray-900 mb-2">Python Runtime</h3>
-          <div className="grid grid-cols-3 gap-4 text-sm">
+        <div className="card">
+          <h3 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-sm)' }}>Python Runtime</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--spacing-lg)', fontSize: 'var(--font-size-sm)' }}>
             <div>
-              <p className="text-gray-600">Model:</p>
-              <p className="font-medium">{status.python.model || 'N/A'}</p>
+              <p style={{ color: 'var(--cisa-gray)', margin: 0, marginBottom: 'var(--spacing-xs)' }}>Model:</p>
+              <p style={{ fontWeight: 600, margin: 0 }}>{status.python.model || 'N/A'}</p>
             </div>
             <div>
-              <p className="text-gray-600">Version:</p>
-              <p className="font-medium">{status.python.version || 'N/A'}</p>
+              <p style={{ color: 'var(--cisa-gray)', margin: 0, marginBottom: 'var(--spacing-xs)' }}>Version:</p>
+              <p style={{ fontWeight: 600, margin: 0 }}>{status.python.version || 'N/A'}</p>
             </div>
             <div>
-              <p className="text-gray-600">Runtime:</p>
-              <p className={`font-medium ${status.python.runtime_status === 'running' ? 'text-green-600' : 'text-gray-600'}`}>
+              <p style={{ color: 'var(--cisa-gray)', margin: 0, marginBottom: 'var(--spacing-xs)' }}>Runtime:</p>
+              <p style={{ 
+                fontWeight: 600, 
+                margin: 0,
+                color: status.python.runtime_status === 'running' ? 'var(--cisa-success)' : 'var(--cisa-gray)'
+              }}>
                 {status.python.runtime_status || 'Unknown'}
               </p>
             </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { fetchWithAuth } from '../../lib/fetchWithAuth'
+import '../../../styles/cisa.css'
 
 export default function SoftmatchesPage() {
   const [rows, setRows] = useState([])
@@ -27,42 +28,46 @@ export default function SoftmatchesPage() {
     return () => { isMounted = false; clearInterval(id) }
   }, [])
 
-  if (error) return <div className="text-red-600 p-4">Error loading soft matches: {error}</div>
+  if (error) return (
+    <div className="alert alert-danger">
+      <p style={{ margin: 0 }}>Error loading soft matches: {error}</p>
+    </div>
+  )
 
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-4">Recent Soft Matches</h2>
-      <div className="bg-white shadow rounded-xl overflow-y-auto max-h-[75vh]">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-100 text-gray-600 sticky top-0">
+      <h2 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-lg)' }}>Recent Soft Matches</h2>
+      <div className="card" style={{ padding: 0, overflow: 'hidden', maxHeight: '75vh', overflowY: 'auto' }}>
+        <table className="table">
+          <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
             <tr>
-              <th className="p-3 text-left">Text</th>
-              <th className="p-3 text-right">Similarity</th>
-              <th className="p-3 text-left">Source Doc</th>
-              <th className="p-3 text-right">Date</th>
+              <th style={{ textAlign: 'left' }}>Text</th>
+              <th style={{ textAlign: 'right' }}>Similarity</th>
+              <th style={{ textAlign: 'left' }}>Source Doc</th>
+              <th style={{ textAlign: 'right' }}>Date</th>
             </tr>
           </thead>
           <tbody>
             {rows?.map((r, i) => (
-              <tr key={i} className="border-t hover:bg-gray-50">
-                <td className="p-3 max-w-md text-gray-800">{r.new_text}</td>
-                <td className="p-3 text-right">{r.similarity?.toFixed(3)}</td>
-                <td className="p-3">{r.source_doc}</td>
-                <td className="p-3 text-right text-gray-500">
+              <tr key={i}>
+                <td style={{ maxWidth: '400px', color: 'var(--cisa-black)' }}>{r.new_text}</td>
+                <td style={{ textAlign: 'right' }}>{r.similarity?.toFixed(3)}</td>
+                <td>{r.source_doc}</td>
+                <td style={{ textAlign: 'right', color: 'var(--cisa-gray)' }}>
                   {new Date(r.created_at).toLocaleString()}
                 </td>
               </tr>
             )) || (
               <tr>
-                <td className="p-3" colSpan="4">
-                  <p className="text-gray-500">No soft match data yet.</p>
+                <td style={{ padding: 'var(--spacing-md)' }} colSpan="4">
+                  <p style={{ color: 'var(--cisa-gray)' }}>No soft match data yet.</p>
                 </td>
               </tr>
             )}
             {loading && (
               <tr>
-                <td className="p-3" colSpan={4}>
-                  <p className="text-gray-500">Loading...</p>
+                <td style={{ padding: 'var(--spacing-md)' }} colSpan={4}>
+                  <p style={{ color: 'var(--cisa-gray)' }}>Loading...</p>
                 </td>
               </tr>
             )}
@@ -72,5 +77,3 @@ export default function SoftmatchesPage() {
     </div>
   )
 }
-
-
