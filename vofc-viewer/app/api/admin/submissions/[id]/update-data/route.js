@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import fs from 'fs';
-import path from 'path';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -71,26 +69,55 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'No document name found in submission' }, { status: 400 });
     }
 
-    // Try to find the JSON file in the library folder
-    // The file path should be relative to the library directory
-    const baseDir = process.env.OLLAMA_LIBRARY_DIR || 
-                    path.join(process.env.HOME || process.env.USERPROFILE, 'AppData', 'Local', 'Ollama', 'data', 'library');
-    
+    // Try to load JSON from Flask server's library endpoint
     // Extract base filename (without extension)
     const baseName = documentName.replace('.pdf', '').replace('.txt', '');
-    const jsonPath = path.join(baseDir, `${baseName}.json`);
-
-    if (!fs.existsSync(jsonPath)) {
+    const jsonFilename = `${baseName}.json`;
+    
+    const flaskUrl = process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
+    
+    let vofcData = null;
+    try {
+      // Try to read the JSON file from Flask server
+      const jsonResponse = await fetch(`${flaskUrl}/api/files/read?folder=library&filename=${encodeURIComponent(jsonFilename)}`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000)
+      });
+      
+      if (jsonResponse.ok) {
+        const jsonContent = await jsonResponse.json();
+        vofcData = typeof jsonContent === 'string' ? JSON.parse(jsonContent) : jsonContent;
+      } else {
+        // Try alternative: read directly as text
+        const textResponse = await fetch(`${flaskUrl}/api/files/read?folder=library&filename=${encodeURIComponent(jsonFilename)}`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(5000)
+        });
+        
+        if (textResponse.ok) {
+          const text = await textResponse.text();
+          vofcData = JSON.parse(text);
+        } else {
+          return NextResponse.json({ 
+            error: 'JSON file not found on Flask server', 
+            filename: jsonFilename,
+            message: 'The JSON file may have been moved or deleted. Flask server may not be accessible.' 
+          }, { status: 404 });
+        }
+      }
+    } catch (fetchError) {
       return NextResponse.json({ 
-        error: 'JSON file not found', 
-        path: jsonPath,
-        message: 'The JSON file may have been moved or deleted' 
-      }, { status: 404 });
+        error: 'Failed to fetch JSON from Flask server', 
+        message: fetchError.message,
+        note: 'Make sure Flask server is running and accessible' 
+      }, { status: 503 });
     }
 
-    // Read and parse the JSON file
-    const jsonContent = fs.readFileSync(jsonPath, 'utf-8');
-    const vofcData = JSON.parse(jsonContent);
+    if (!vofcData || (!vofcData.vulnerabilities && !vofcData.ofcs)) {
+      return NextResponse.json({ 
+        error: 'Invalid or empty VOFC data in JSON file' 
+      }, { status: 400 });
+    }
 
     // Merge the VOFC data with existing metadata
     const updatedData = {
