@@ -12,7 +12,23 @@ export async function POST(request, { params }) {
     const { id: submissionId } = await params;
     const body = await request.json();
     const action = body.action;
-    const comments = body.comments || null;
+    const comments = body.comments || body.rejection_reason || null;
+    const reviewedBy = body.reviewed_by || null; // User ID from auth token
+
+    // Get user from auth token if available
+    let reviewerId = reviewedBy;
+    try {
+      const authHeader = request.headers.get('authorization');
+      if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+        const accessToken = authHeader.slice(7).trim();
+        const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
+        if (!userError && user) {
+          reviewerId = user.id;
+        }
+      }
+    } catch (authError) {
+      console.warn('Could not get reviewer from token:', authError);
+    }
 
     if (!submissionId || !action) {
       return NextResponse.json(
@@ -37,18 +53,53 @@ export async function POST(request, { params }) {
     }
 
     // -----------------------------------------------------------------
-    // 2️⃣ Update submission record
+    // 2️⃣ Update submission record with proper columns
     // -----------------------------------------------------------------
     const updatePayload = {
       status,
-      reviewed_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
     
-    // Only include comments if the column exists (store in data JSON if needed)
-    // Check if we should store comments in data field instead
-    if (comments) {
-      // Store comments in the data JSON field since comments column may not exist
+    // Add reviewed_at timestamp
+    updatePayload.reviewed_at = new Date().toISOString();
+    
+    // Add reviewed_by if we have a reviewer ID
+    if (reviewerId) {
+      updatePayload.reviewed_by = reviewerId;
+    }
+    
+    // For rejections, store reason in rejection_reason column
+    if (status === 'rejected' && comments) {
+      updatePayload.rejection_reason = comments;
+    }
+    
+    // For approvals, store comments in review_comments column
+    if (status === 'approved' && comments) {
+      updatePayload.review_comments = comments;
+    }
+    
+    // Try to update with all columns, fallback to data JSON if columns don't exist
+    let updated;
+    let updateError;
+    
+    try {
+      const { data, error } = await supabase
+        .from('submissions')
+        .update(updatePayload)
+        .eq('id', submissionId)
+        .select()
+        .single();
+      
+      updated = data;
+      updateError = error;
+    } catch (e) {
+      updateError = e;
+    }
+    
+    // If update failed due to missing columns, store in data JSON as fallback
+    if (updateError) {
+      console.warn('Primary update failed, trying fallback to data JSON:', updateError.message);
+      
       const { data: currentSubmission } = await supabase
         .from('submissions')
         .select('data')
@@ -60,24 +111,38 @@ export async function POST(request, { params }) {
           ? JSON.parse(currentSubmission.data)
           : currentSubmission.data;
         
-        updatePayload.data = JSON.stringify({
-          ...currentData,
-          review_comments: comments,
-          reviewed_at: new Date().toISOString()
-        });
+        const fallbackPayload = {
+          status,
+          updated_at: new Date().toISOString(),
+          data: JSON.stringify({
+            ...currentData,
+            reviewed_at: new Date().toISOString(),
+            reviewed_by: reviewerId,
+            rejection_reason: status === 'rejected' ? comments : undefined,
+            review_comments: status === 'approved' ? comments : undefined
+          })
+        };
+        
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('submissions')
+          .update(fallbackPayload)
+          .eq('id', submissionId)
+          .select()
+          .single();
+        
+        if (fallbackError) {
+          console.error('Fallback update also failed:', fallbackError);
+          throw fallbackError;
+        }
+        
+        updated = fallbackData;
+      } else {
+        throw updateError;
       }
     }
-    
-    const { data: updated, error: updateError } = await supabase
-      .from('submissions')
-      .update(updatePayload)
-      .eq('id', submissionId)
-      .select()
-      .single();
 
-    if (updateError) {
-      console.error('Error updating submission:', updateError);
-      throw updateError;
+    if (!updated) {
+      throw new Error('Failed to update submission');
     }
 
     // -----------------------------------------------------------------
