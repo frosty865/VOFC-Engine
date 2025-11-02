@@ -114,35 +114,37 @@ async function runLiveMode(send) {
     if (heartbeatCount % 60 === 0) {
       send("🔍 Checking for new processing activity...", "info");
       
-      // Check local Flask server status
-      const localOllamaUrl = process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
-      try {
-        const healthResponse = await fetch(`${localOllamaUrl}/health`, {
-          method: 'GET',
-          signal: AbortSignal.timeout(5000)
-        });
-        
-        if (healthResponse.ok) {
-          const health = await healthResponse.json();
-          const incomingCount = health.directories?.incoming?.file_count || 0;
-          const libraryCount = health.directories?.library?.file_count || 0;
-          const errorsCount = health.directories?.errors?.file_count || 0;
+      // Check local Flask server status (async IIFE)
+      (async () => {
+        const localOllamaUrl = process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
+        try {
+          const healthResponse = await fetch(`${localOllamaUrl}/health`, {
+            method: 'GET',
+            signal: AbortSignal.timeout(5000)
+          });
           
-          send(`📊 Processing Status:`, "info");
-          send(`   📥 Incoming: ${incomingCount} file(s)`, "info");
-          send(`   📚 Library: ${libraryCount} file(s)`, "info");
-          send(`   ❌ Errors: ${errorsCount} file(s)`, errorsCount > 0 ? "warning" : "info");
-          
-          if (incomingCount > 0) {
-            send(`⚠️ ${incomingCount} file(s) waiting to be processed`, "warning");
-          } else {
-            send("✅ No files waiting - Ready for new submissions", "success");
+          if (healthResponse.ok) {
+            const health = await healthResponse.json();
+            const incomingCount = health.directories?.incoming?.file_count || 0;
+            const libraryCount = health.directories?.library?.file_count || 0;
+            const errorsCount = health.directories?.errors?.file_count || 0;
+            
+            send(`📊 Processing Status:`, "info");
+            send(`   📥 Incoming: ${incomingCount} file(s)`, "info");
+            send(`   📚 Library: ${libraryCount} file(s)`, "info");
+            send(`   ❌ Errors: ${errorsCount} file(s)`, errorsCount > 0 ? "warning" : "info");
+            
+            if (incomingCount > 0) {
+              send(`⚠️ ${incomingCount} file(s) waiting to be processed`, "warning");
+            } else {
+              send("✅ No files waiting - Ready for new submissions", "success");
+            }
           }
+        } catch (healthError) {
+          send(`⚠️ Could not check Flask server status: ${healthError.message}`, "warning");
+          send(`💡 Make sure Flask server is running at ${localOllamaUrl}`, "tip");
         }
-      } catch (healthError) {
-        send(`⚠️ Could not check Flask server status: ${healthError.message}`, "warning");
-        send(`💡 Make sure Flask server is running at ${localOllamaUrl}`, "tip");
-      }
+      })();
     }
       }, 1000);
       
