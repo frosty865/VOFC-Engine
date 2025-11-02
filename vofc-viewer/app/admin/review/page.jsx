@@ -180,38 +180,43 @@ export default function ReviewSubmissionsPage() {
                   </div>
                 </div>
 
-                {submission.data && (
+                {(submission.data || data.document_name) && (
                     <div className="mt-4 space-y-4">
                       {/* Summary */}
                       <div className="p-4 bg-blue-50 rounded-lg">
                         <h4 className="font-medium text-gray-900 mb-2">Extraction Summary</h4>
                         <div className="grid grid-cols-2 gap-4 text-sm">
                           <div>
-                            <span className="font-medium">Vulnerabilities:</span> {vulnerabilities.length}
+                            <span className="font-medium">Vulnerabilities:</span> {vulnerabilities?.length || 0}
                           </div>
                           <div>
-                            <span className="font-medium">OFCs:</span> {ofcs.length}
+                            <span className="font-medium">OFCs:</span> {ofcs?.length || 0}
                           </div>
-                          {data.document_name && (
+                          {data?.document_name && (
                             <div className="col-span-2">
                               <span className="font-medium">Document:</span> {data.document_name}
+                            </div>
+                          )}
+                          {(data?.vulnerabilities_count || data?.ofcs_count) && (
+                            <div className="col-span-2 text-xs text-gray-500">
+                              Metadata counts: {data.vulnerabilities_count || 0} vulnerabilities, {data.ofcs_count || 0} OFCs
                             </div>
                           )}
                         </div>
                       </div>
                       
                       {/* Vulnerabilities */}
-                      {vulnerabilities.length > 0 && (
+                      {vulnerabilities && vulnerabilities.length > 0 ? (
                         <div className="p-4 bg-gray-50 rounded-lg">
                           <h4 className="font-medium text-gray-900 mb-3">Vulnerabilities ({vulnerabilities.length})</h4>
                           <div className="space-y-2 max-h-96 overflow-y-auto">
                             {vulnerabilities.slice(0, 20).map((vuln, idx) => (
-                              <div key={vuln.id || idx} className="p-3 bg-white rounded border border-gray-200">
-                                <div className="font-medium text-sm text-gray-900">{vuln.title || vuln.vulnerability}</div>
-                                {vuln.category && (
+                              <div key={vuln?.id || idx} className="p-3 bg-white rounded border border-gray-200">
+                                <div className="font-medium text-sm text-gray-900">{vuln?.title || vuln?.vulnerability || 'Unknown'}</div>
+                                {vuln?.category && (
                                   <div className="text-xs text-gray-500 mt-1">Category: {vuln.category}</div>
                                 )}
-                                {vuln.description && (
+                                {vuln?.description && (
                                   <div className="text-xs text-gray-600 mt-1">{vuln.description}</div>
                                 )}
                               </div>
@@ -223,17 +228,23 @@ export default function ReviewSubmissionsPage() {
                             )}
                           </div>
                         </div>
-                      )}
+                      ) : needsDataLoad ? (
+                        <div className="p-4 bg-yellow-50 rounded-lg">
+                          <p className="text-sm text-yellow-800">
+                            ⚠️ Full extraction data not loaded. Click "Load Data" button above to load vulnerabilities and OFCs from the JSON file.
+                          </p>
+                        </div>
+                      ) : null}
                       
                       {/* OFCs */}
-                      {ofcs.length > 0 && (
+                      {ofcs && ofcs.length > 0 ? (
                         <div className="p-4 bg-gray-50 rounded-lg">
                           <h4 className="font-medium text-gray-900 mb-3">Options for Consideration ({ofcs.length})</h4>
                           <div className="space-y-2 max-h-96 overflow-y-auto">
                             {ofcs.slice(0, 20).map((ofc, idx) => (
-                              <div key={ofc.id || idx} className="p-3 bg-white rounded border border-gray-200">
-                                <div className="font-medium text-sm text-gray-900">{ofc.title || ofc.option}</div>
-                                {ofc.description && (
+                              <div key={ofc?.id || idx} className="p-3 bg-white rounded border border-gray-200">
+                                <div className="font-medium text-sm text-gray-900">{ofc?.title || ofc?.option || 'Unknown'}</div>
+                                {ofc?.description && (
                                   <div className="text-xs text-gray-600 mt-1">{ofc.description}</div>
                                 )}
                               </div>
@@ -245,7 +256,7 @@ export default function ReviewSubmissionsPage() {
                             )}
                           </div>
                         </div>
-                      )}
+                      ) : null}
                       
                       {/* Raw Data (collapsible) */}
                       <details className="p-4 bg-gray-50 rounded-lg">
