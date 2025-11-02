@@ -172,12 +172,17 @@ export default function ReviewSubmissionsPage() {
               }
 
               const hasData = vulnerabilities.length > 0 || ofcs.length > 0;
-              const needsDataLoad = !hasData && ((data.vulnerabilities_count > 0) || (data.ofcs_count > 0));
+              // Only show "Load Data" if we have counts but no actual data (indicates old submission or missing data)
+              // New submissions should already have full data stored
+              const needsDataLoad = !hasData && 
+                ((data.vulnerabilities_count > 0) || (data.ofcs_count > 0)) &&
+                (data.vulnerabilities_count > 0 || data.ofcs_count > 0);
 
               console.log('Extracted data:', {
                 vulnerabilities: vulnerabilities.length,
                 ofcs: ofcs.length,
-                needsDataLoad
+                needsDataLoad,
+                reason: needsDataLoad ? 'Has counts but no full data - likely old submission' : 'Full data present or no data at all'
               });
 
               // Group OFCs by their linked vulnerability
@@ -302,11 +307,16 @@ export default function ReviewSubmissionsPage() {
                     </div>
                   </div>
 
-                  {/* Warning if data needs loading */}
+                  {/* Warning if data needs loading (only for legacy submissions) */}
                   {needsDataLoad && (
                     <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <p className="text-sm text-yellow-800">
-                        ⚠️ Full extraction data not loaded. Click "Load Data" button to load vulnerabilities and OFCs from the JSON file.
+                      <p className="text-sm text-yellow-800 font-medium mb-1">
+                        ⚠️ Legacy Submission Detected
+                      </p>
+                      <p className="text-xs text-yellow-700">
+                        This submission was created before we started storing full extraction data in the database. 
+                        The submission has {data.vulnerabilities_count || 0} vulnerabilities and {data.ofcs_count || 0} OFCs according to metadata, 
+                        but the full details are stored in the JSON file. Click "Load Data (Legacy)" above to fetch the complete data.
                       </p>
                     </div>
                   )}
