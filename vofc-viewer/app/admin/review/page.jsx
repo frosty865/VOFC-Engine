@@ -8,12 +8,92 @@ export default function ReviewSubmissionsPage() {
   const [submissions, setSubmissions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [vulnDuplicates, setVulnDuplicates] = useState({}) // Map of vuln index -> duplicate info
+  const [ofcDuplicates, setOfcDuplicates] = useState({}) // Map of ofc index -> duplicate info
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false)
 
   useEffect(() => {
     loadSubmissions()
     const interval = setInterval(loadSubmissions, 30000)
     return () => clearInterval(interval)
   }, [])
+
+  // Check for duplicates when submissions load
+  useEffect(() => {
+    if (submissions.length > 0) {
+      checkDuplicates()
+    }
+  }, [submissions])
+
+  const checkDuplicates = async () => {
+    setCheckingDuplicates(true)
+    try {
+      // Collect all vulnerabilities and OFCs from all submissions
+      const allVulns = []
+      const allOfcs = []
+      
+      submissions.forEach((submission, subIdx) => {
+        let data = {}
+        try {
+          if (submission.data) {
+            data = typeof submission.data === 'string' ? JSON.parse(submission.data) : submission.data
+          }
+        } catch {}
+        
+        const vulns = Array.isArray(data.vulnerabilities) ? data.vulnerabilities : []
+        const ofcs = Array.isArray(data.ofcs) ? data.ofcs : []
+        
+        vulns.forEach((v, vIdx) => {
+          allVulns.push({ submission_idx: subIdx, vuln_idx: vIdx, ...v })
+        })
+        
+        ofcs.forEach((o, oIdx) => {
+          allOfcs.push({ submission_idx: subIdx, ofc_idx: oIdx, ...o })
+        })
+      })
+      
+      if (allVulns.length === 0 && allOfcs.length === 0) {
+        setCheckingDuplicates(false)
+        return
+      }
+      
+      const res = await fetchWithAuth('/api/admin/check-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vulnerabilities: allVulns.map(v => ({ title: v.title || v.vulnerability, description: v.description })),
+          ofcs: allOfcs.map(o => ({ title: o.title || o.option, description: o.description }))
+        })
+      })
+      
+      if (res.ok) {
+        const result = await res.json()
+        // Map duplicates back to submission/vuln indices
+        const vulnDupMap = {}
+        result.duplicates.vulnerabilities.forEach((dup, idx) => {
+          if (dup.is_duplicate && allVulns[idx]) {
+            const key = `${allVulns[idx].submission_idx}-${allVulns[idx].vuln_idx}`
+            vulnDupMap[key] = dup
+          }
+        })
+        
+        const ofcDupMap = {}
+        result.duplicates.ofcs.forEach((dup, idx) => {
+          if (dup.is_duplicate && allOfcs[idx]) {
+            const key = `${allOfcs[idx].submission_idx}-${allOfcs[idx].ofc_idx}`
+            ofcDupMap[key] = dup
+          }
+        })
+        
+        setVulnDuplicates(vulnDupMap)
+        setOfcDuplicates(ofcDupMap)
+      }
+    } catch (e) {
+      console.error('Error checking duplicates:', e)
+    } finally {
+      setCheckingDuplicates(false)
+    }
+  }
 
   const loadSubmissions = async () => {
     try {
@@ -404,10 +484,104 @@ export default function ReviewSubmissionsPage() {
                                       <p className="text-sm text-gray-600 mt-2">{vuln.description}</p>
                                     )}
                                   </div>
-                                  <div className="text-xs text-gray-500 ml-4">
-                                    {uniqueLinkedOfcs.length} OFC{uniqueLinkedOfcs.length !== 1 ? 's' : ''}
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-xs text-gray-500">
+                                      {uniqueLinkedOfcs.length} OFC{uniqueLinkedOfcs.length !== 1 ? 's' : ''}
+                                    </div>
                                   </div>
                                 </div>
+                              </div>
+                              
+                              {/* Duplicate Warning */}
+                              {(() => {
+                                const vulnKey = `${submissions.findIndex(s => s.id === submission.id)}-${idx}`
+                                const isDuplicate = vulnDuplicates[vulnKey]
+                                if (isDuplicate) {
+                                  return (
+                                    <div className="mb-3 p-3 bg-red-100 border border-red-300 rounded-lg">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className="px-2 py-1 bg-red-600 text-white rounded text-xs font-bold">
+                                          DUPLICATE
+                                        </span>
+                                        <span className="text-xs text-red-800 font-medium">
+                                          This vulnerability already exists in the database
+                                        </span>
+                                      </div>
+                                      <div className="text-xs text-red-700 mt-1">
+                                        Similar to: {isDuplicate.existing_vuln?.title || 'Existing vulnerability'}
+                                        {(isDuplicate.similarity * 100).toFixed(0)}% similarity
+                                      </div>
+                                      <div className="text-xs text-red-600 mt-2 italic">
+                                        This will be automatically skipped if approved.
+                                      </div>
+                                    </div>
+                                  )
+                                }
+                                return null
+                              })()}
+
+                              {/* Action Buttons for this vulnerability */}
+                              <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-gray-300">
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm(`Approve this vulnerability?\n\n"${vuln.title || vuln.vulnerability}"\n\nThis will check for duplicates and only add if unique.`)) {
+                                      return
+                                    }
+                                    try {
+                                      const res = await fetchWithAuth(`/api/submissions/${submission.id}/approve-vulnerability`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                          action: 'approve',
+                                          vulnerability: vuln,
+                                          linkedOfcs: uniqueLinkedOfcs
+                                        })
+                                      })
+                                      if (!res.ok) {
+                                        const errorData = await res.json().catch(() => ({ error: 'Failed to approve' }))
+                                        throw new Error(errorData.error || 'Failed to approve')
+                                      }
+                                      const result = await res.json()
+                                      if (result.duplicate) {
+                                        alert(`⚠️ DUPLICATE: This vulnerability already exists in the database. It has been skipped.`)
+                                      } else {
+                                        alert(`✅ Vulnerability approved!\n${result.ofcs_inserted || 0} OFCs added\n${result.ofcs_duplicates || 0} duplicate OFCs skipped`)
+                                      }
+                                      await loadSubmissions()
+                                    } catch (e) {
+                                      alert('❌ Error: ' + e.message)
+                                    }
+                                  }}
+                                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium text-sm"
+                                >
+                                  ✅ Approve
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    const reason = prompt('Rejection reason (optional):')
+                                    if (reason === null) return
+                                    try {
+                                      const res = await fetchWithAuth(`/api/submissions/${submission.id}/approve-vulnerability`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                          action: 'reject',
+                                          vulnerability: vuln
+                                        })
+                                      })
+                                      if (!res.ok) {
+                                        throw new Error('Failed to reject')
+                                      }
+                                      alert('✅ Vulnerability rejected')
+                                      await loadSubmissions()
+                                    } catch (e) {
+                                      alert('❌ Error: ' + e.message)
+                                    }
+                                  }}
+                                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium text-sm"
+                                >
+                                  ❌ Reject
+                                </button>
                               </div>
 
                               {/* Associated OFCs */}
