@@ -173,17 +173,28 @@ export async function POST(request, { params }) {
 
         // --- Vulnerabilities ---
         if (parsed.vulnerabilities && parsed.vulnerabilities.length > 0) {
-          const vulnPayload = parsed.vulnerabilities.map(v => ({
-            submission_id: submissionId,
-            title: v.title || v.vulnerability,
-            description: v.description || '',
-            question: v.question || null,
-            what: v.what || null,
-            so_what: v.so_what || null,
-            sector: v.sector || null,
-            subsector: v.subsector || null,
-            discipline: v.discipline || null
-          }));
+          const vulnPayload = parsed.vulnerabilities.map(v => {
+            // Build vulnerability_text from structured fields if available
+            let vulnerabilityText = v.vulnerability_text || v.vulnerability || '';
+            if (!vulnerabilityText && (v.question || v.what || v.so_what)) {
+              const parts = [];
+              if (v.question) parts.push(`Question: ${v.question}`);
+              if (v.what) parts.push(`What: ${v.what}`);
+              if (v.so_what) parts.push(`So What: ${v.so_what}`);
+              vulnerabilityText = parts.join('\n\n');
+            }
+            
+            return {
+              submission_id: submissionId,
+              vulnerability_text: vulnerabilityText || '',
+              question: v.question || null,
+              what: v.what || null,
+              so_what: v.so_what || null,
+              sector: v.sector || null,
+              subsector: v.subsector || null,
+              discipline: v.discipline || null
+            };
+          });
 
           const { error: vulnErr } = await supabase
             .from('submission_vulnerabilities')
