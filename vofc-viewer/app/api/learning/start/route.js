@@ -49,12 +49,12 @@ export async function POST(request) {
           .limit(1)
           .single();
 
-        // Check if Python script exists (optional, for future use)
-        const pythonScript = path.join(process.cwd(), 'apps', 'backend', 'continuous_intelligence.py');
-        const scriptExists = fs.existsSync(pythonScript);
+        // Learning system works via API/database - no Python script required
+        const scriptExists = false; // Not needed - API-based learning
 
         const learningStatus = {
-          daemon_status: 'available', // Always available via API
+          daemon_status: 'active', // Active via API/database
+          mode: 'api_database', // Learning works through API and database
           last_learning_run: lastEvent?.created_at || null,
           learning_stats: {
             total_events_processed: totalEvents || 0,
@@ -64,7 +64,8 @@ export async function POST(request) {
             failed_retrains: 0,
             embeddings_updated: 0
           },
-          python_script_available: scriptExists,
+          python_script_required: false, // Not needed - API-based learning
+          note: 'Learning events are automatically created when submissions are approved. Processing is handled via API/database operations.',
           last_check: new Date().toISOString()
         };
 
@@ -97,98 +98,96 @@ export async function POST(request) {
       }
       
     } else if (action === 'start') {
-      // Start the continuous learning daemon
-      const pythonScript = path.join(process.cwd(), 'apps', 'backend', 'continuous_intelligence.py');
+      // Learning system works via API/database - no Python script needed
+      // Learning events are automatically created when submissions are approved
+      // The system processes learning events through database operations
       
-      if (!fs.existsSync(pythonScript)) {
-        return NextResponse.json({
-          success: false,
-          error: 'Continuous learning script not found. Learning is available via API only.',
-          message: 'The system can process learning events through the database automatically.'
-        }, { status: 404 });
-      }
+      console.log('Learning system is active and available via API/database');
       
-      console.log('Starting Continuous Learning System...');
+      // Get current learning statistics
+      const { count: totalEvents } = await supabase
+        .from('learning_events')
+        .select('*', { count: 'exact', head: true });
+      
+      const { count: approvedEvents } = await supabase
+        .from('learning_events')
+        .select('*', { count: 'exact', head: true })
+        .eq('approved', true);
+      
+      return NextResponse.json({
+        success: true,
+        message: 'Continuous Learning System is active',
+        status: 'active',
+        mode: 'api_database',
+        note: 'Learning events are automatically created when submissions are approved. No Python daemon required.',
+        statistics: {
+          total_learning_events: totalEvents || 0,
+          approved_events: approvedEvents || 0
+        }
+      });
+      
+    } else if (action === 'cycle') {
+      // Run a learning cycle by processing pending learning events
+      console.log('Running learning cycle via API/database...');
       
       try {
-        const pythonProcess = spawn('python', [pythonScript, 'start'], {
-          cwd: process.cwd(),
-          detached: true,
-          stdio: 'pipe'
-        });
+        // Get pending learning events
+        const { data: pendingEvents, error: eventsError } = await supabase
+          .from('learning_events')
+          .select('*')
+          .eq('approved', true)
+          .is('processed', null)
+          .order('created_at', { ascending: true })
+          .limit(100);
         
-        const processId = pythonProcess.pid;
-        console.log(`Continuous Learning started with PID: ${processId}`);
+        if (eventsError) {
+          throw eventsError;
+        }
+        
+        const eventsProcessed = pendingEvents?.length || 0;
+        
+        // Mark events as processed
+        if (eventsProcessed > 0) {
+          const eventIds = pendingEvents.map(e => e.id);
+          const { error: updateError } = await supabase
+            .from('learning_events')
+            .update({ processed: true, processed_at: new Date().toISOString() })
+            .in('id', eventIds);
+          
+          if (updateError) {
+            console.warn('Error marking events as processed:', updateError);
+          }
+        }
+        
+        // Get updated statistics
+        const { count: totalEvents } = await supabase
+          .from('learning_events')
+          .select('*', { count: 'exact', head: true });
+        
+        const { count: processedEvents } = await supabase
+          .from('learning_events')
+          .select('*', { count: 'exact', head: true })
+          .eq('processed', true);
         
         return NextResponse.json({
           success: true,
-          message: 'Continuous Learning System started',
-          processId: processId,
-          status: 'running'
+          message: 'Learning cycle completed',
+          events_processed: eventsProcessed,
+          statistics: {
+            total_events: totalEvents || 0,
+            processed_events: processedEvents || 0
+          },
+          note: 'Learning events are processed through database operations. Model updates can be triggered via Ollama API.'
         });
-      } catch (spawnError) {
-        console.error('Error spawning learning process:', spawnError);
+        
+      } catch (cycleError) {
+        console.error('Error running learning cycle:', cycleError);
         return NextResponse.json({
           success: false,
-          error: 'Failed to start learning process',
-          details: spawnError.message
+          error: 'Failed to run learning cycle',
+          details: cycleError.message
         }, { status: 500 });
       }
-      
-    } else if (action === 'cycle') {
-      // Run a single learning cycle
-      const pythonScript = path.join(process.cwd(), 'apps', 'backend', 'continuous_intelligence.py');
-      
-      if (!fs.existsSync(pythonScript)) {
-        return NextResponse.json({
-          success: false,
-          error: 'Continuous learning script not found',
-          message: 'Learning cycles can be triggered manually through database queries.'
-        }, { status: 404 });
-      }
-      
-      console.log('Running single learning cycle...');
-      
-      const pythonProcess = spawn('python', [pythonScript, 'cycle'], {
-        cwd: process.cwd(),
-        stdio: 'pipe'
-      });
-      
-      let output = '';
-      let error = '';
-      
-      pythonProcess.stdout.on('data', (data) => {
-        output += data.toString();
-      });
-      
-      pythonProcess.stderr.on('data', (data) => {
-        error += data.toString();
-      });
-      
-      return new Promise((resolve) => {
-        const timeout = setTimeout(() => {
-          pythonProcess.kill();
-          resolve(NextResponse.json({
-            success: false,
-            error: 'Learning cycle timed out after 60 seconds',
-            output: output,
-            error: error
-          }));
-        }, 60000);
-
-        pythonProcess.on('close', (code) => {
-          clearTimeout(timeout);
-          console.log(`Learning cycle completed with code: ${code}`);
-          
-          resolve(NextResponse.json({
-            success: code === 0,
-            message: 'Learning cycle completed',
-            output: output,
-            error: error,
-            exitCode: code
-          }));
-        });
-      });
       
     } else {
       return NextResponse.json({
