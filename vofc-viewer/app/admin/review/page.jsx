@@ -36,6 +36,10 @@ export default function ReviewSubmissionsPage() {
   }
 
   const handleApprove = async (submissionId) => {
+    if (!confirm('Approve this submission? This will:\n- Add data to production tables\n- Feed the learning algorithm\n- Mark as approved')) {
+      return
+    }
+    
     try {
       const res = await fetchWithAuth(`/api/submissions/${submissionId}/approve`, {
         method: 'POST',
@@ -47,20 +51,27 @@ export default function ReviewSubmissionsPage() {
         throw new Error(errorData.error || 'Failed to approve')
       }
       await loadSubmissions()
-      alert('Submission approved successfully!')
+      alert('✅ Submission approved! Data moved to production and learning algorithm notified.')
     } catch (e) {
-      alert('Error approving submission: ' + e.message)
+      alert('❌ Error approving submission: ' + e.message)
     }
   }
 
   const handleReject = async (submissionId, reason) => {
+    const rejectionReason = reason || prompt('Reason for rejection (optional):')
+    if (rejectionReason === null && !reason) return // User cancelled prompt
+    
+    if (!confirm(`Reject this submission?\nReason: ${rejectionReason || 'None provided'}\n\nThis will mark the submission as rejected and remove it from the review queue.`)) {
+      return
+    }
+    
     try {
       const res = await fetchWithAuth(`/api/submissions/${submissionId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           action: 'reject',
-          comments: reason || 'Rejected by admin' 
+          comments: rejectionReason || 'Rejected by admin' 
         })
       })
       if (!res.ok) {
@@ -68,9 +79,9 @@ export default function ReviewSubmissionsPage() {
         throw new Error(errorData.error || 'Failed to reject')
       }
       await loadSubmissions()
-      alert('Submission rejected successfully!')
+      alert('✅ Submission rejected and removed from review queue.')
     } catch (e) {
-      alert('Error rejecting submission: ' + e.message)
+      alert('❌ Error rejecting submission: ' + e.message)
     }
   }
 
@@ -79,7 +90,7 @@ export default function ReviewSubmissionsPage() {
       <div className="space-y-4">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Review Submissions</h1>
-          <p className="text-gray-600 mt-2">Moderate and approve pending submissions</p>
+          <p className="text-gray-600 mt-2">Review vulnerabilities and their associated OFCs. Approve to feed learning algorithm and move to production.</p>
         </div>
 
         {error && (
@@ -98,7 +109,7 @@ export default function ReviewSubmissionsPage() {
             <p className="text-gray-500 text-lg">No pending submissions to review</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-6">
             {submissions.map((submission) => {
               // Parse submission data once for the entire component
               let data = {};
@@ -118,155 +129,226 @@ export default function ReviewSubmissionsPage() {
               const hasData = vulnerabilities.length > 0 || ofcs.length > 0;
               const needsDataLoad = !hasData && ((data.vulnerabilities_count > 0) || (data.ofcs_count > 0));
 
+              // Group OFCs by their linked vulnerability
+              const ofcsByVuln = {};
+              ofcs.forEach(ofc => {
+                const vulnId = ofc.linked_vulnerability || 'unlinked';
+                if (!ofcsByVuln[vulnId]) {
+                  ofcsByVuln[vulnId] = [];
+                }
+                ofcsByVuln[vulnId].push(ofc);
+              });
+
               return (
-              <div key={submission.id} className="bg-white rounded-lg shadow p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      Submission {submission.id.slice(0, 8)}...
-                    </h3>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Created: {new Date(submission.created_at).toLocaleString()}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Type: <span className="font-medium">{submission.type}</span>
-                    </p>
-                    {data.document_name && (
-                      <p className="text-sm text-gray-500">
-                        Document: <span className="font-medium">{data.document_name}</span>
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex space-x-2">
-                    {needsDataLoad && (
-                      <button
-                        onClick={async () => {
-                          try {
-                            const res = await fetchWithAuth(`/api/admin/submissions/${submission.id}/update-data`, {
-                              method: 'POST'
-                            });
-                            if (res.ok) {
-                              alert('Submission data loaded from JSON file successfully!');
-                              loadSubmissions();
-                            } else {
-                              const error = await res.json();
-                              alert('Error: ' + (error.error || 'Failed to load data'));
+              <div key={submission.id} className="bg-white rounded-lg shadow-lg border border-gray-200">
+                {/* Header */}
+                <div className="bg-gradient-to-r from-blue-50 to-gray-50 px-6 py-4 border-b border-gray-200">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900 mb-2">
+                        Submission: {submission.id.slice(0, 8)}...
+                      </h3>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-600">
+                        <div>
+                          <span className="font-medium">Document:</span> {data?.document_name || 'Unknown'}
+                        </div>
+                        <div>
+                          <span className="font-medium">Created:</span> {new Date(submission.created_at).toLocaleString()}
+                        </div>
+                        <div>
+                          <span className="font-medium">Type:</span> <span className="capitalize">{submission.type}</span>
+                        </div>
+                        <div>
+                          <span className="font-medium">Status:</span> <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs font-medium">Pending Review</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      {needsDataLoad && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetchWithAuth(`/api/admin/submissions/${submission.id}/update-data`, {
+                                method: 'POST'
+                              });
+                              if (res.ok) {
+                                alert('✅ Submission data loaded from JSON file successfully!');
+                                loadSubmissions();
+                              } else {
+                                const error = await res.json();
+                                alert('❌ Error: ' + (error.error || 'Failed to load data'));
+                              }
+                            } catch (e) {
+                              alert('❌ Error: ' + e.message);
                             }
-                          } catch (e) {
-                            alert('Error: ' + e.message);
-                          }
-                        }}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm"
-                        title="Load full VOFC data from JSON file"
+                          }}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm"
+                          title="Load full VOFC data from JSON file"
+                        >
+                          📥 Load Data
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleApprove(submission.id)}
+                        className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold shadow-md"
+                        title="Approve submission - moves to production and feeds learning algorithm"
                       >
-                        Load Data
+                        ✅ Approve
                       </button>
-                    )}
-                    <button
-                      onClick={() => handleApprove(submission.id)}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => {
-                        const reason = prompt('Rejection reason (optional):')
-                        if (reason !== null) handleReject(submission.id, reason)
-                      }}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
-                    >
-                      Reject
-                    </button>
+                      <button
+                        onClick={() => handleReject(submission.id)}
+                        className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold shadow-md"
+                        title="Reject submission - marks as rejected and removes from queue"
+                      >
+                        ❌ Reject
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                {(submission.data || data.document_name) && (
-                    <div className="mt-4 space-y-4">
-                      {/* Summary */}
-                      <div className="p-4 bg-blue-50 rounded-lg">
-                        <h4 className="font-medium text-gray-900 mb-2">Extraction Summary</h4>
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <span className="font-medium">Vulnerabilities:</span> {vulnerabilities?.length || 0}
-                          </div>
-                          <div>
-                            <span className="font-medium">OFCs:</span> {ofcs?.length || 0}
-                          </div>
-                          {data?.document_name && (
-                            <div className="col-span-2">
-                              <span className="font-medium">Document:</span> {data.document_name}
-                            </div>
-                          )}
-                          {(data?.vulnerabilities_count || data?.ofcs_count) && (
-                            <div className="col-span-2 text-xs text-gray-500">
-                              Metadata counts: {data.vulnerabilities_count || 0} vulnerabilities, {data.ofcs_count || 0} OFCs
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {/* Vulnerabilities */}
-                      {vulnerabilities && vulnerabilities.length > 0 ? (
-                        <div className="p-4 bg-gray-50 rounded-lg">
-                          <h4 className="font-medium text-gray-900 mb-3">Vulnerabilities ({vulnerabilities.length})</h4>
-                          <div className="space-y-2 max-h-96 overflow-y-auto">
-                            {vulnerabilities.slice(0, 20).map((vuln, idx) => (
-                              <div key={vuln?.id || idx} className="p-3 bg-white rounded border border-gray-200">
-                                <div className="font-medium text-sm text-gray-900">{vuln?.title || vuln?.vulnerability || 'Unknown'}</div>
-                                {vuln?.category && (
-                                  <div className="text-xs text-gray-500 mt-1">Category: {vuln.category}</div>
-                                )}
-                                {vuln?.description && (
-                                  <div className="text-xs text-gray-600 mt-1">{vuln.description}</div>
-                                )}
-                              </div>
-                            ))}
-                            {vulnerabilities.length > 20 && (
-                              <div className="text-xs text-gray-500 italic">
-                                ... and {vulnerabilities.length - 20} more vulnerabilities
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ) : needsDataLoad ? (
-                        <div className="p-4 bg-yellow-50 rounded-lg">
-                          <p className="text-sm text-yellow-800">
-                            ⚠️ Full extraction data not loaded. Click "Load Data" button above to load vulnerabilities and OFCs from the JSON file.
-                          </p>
-                        </div>
-                      ) : null}
-                      
-                      {/* OFCs */}
-                      {ofcs && ofcs.length > 0 ? (
-                        <div className="p-4 bg-gray-50 rounded-lg">
-                          <h4 className="font-medium text-gray-900 mb-3">Options for Consideration ({ofcs.length})</h4>
-                          <div className="space-y-2 max-h-96 overflow-y-auto">
-                            {ofcs.slice(0, 20).map((ofc, idx) => (
-                              <div key={ofc?.id || idx} className="p-3 bg-white rounded border border-gray-200">
-                                <div className="font-medium text-sm text-gray-900">{ofc?.title || ofc?.option || 'Unknown'}</div>
-                                {ofc?.description && (
-                                  <div className="text-xs text-gray-600 mt-1">{ofc.description}</div>
-                                )}
-                              </div>
-                            ))}
-                            {ofcs.length > 20 && (
-                              <div className="text-xs text-gray-500 italic">
-                                ... and {ofcs.length - 20} more OFCs
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ) : null}
-                      
-                      {/* Raw Data (collapsible) */}
-                      <details className="p-4 bg-gray-50 rounded-lg">
-                        <summary className="font-medium text-gray-900 cursor-pointer">View Raw Data</summary>
-                        <pre className="text-xs text-gray-700 overflow-x-auto mt-2">
-                          {JSON.stringify(data, null, 2)}
-                        </pre>
-                      </details>
+                {/* Content */}
+                <div className="p-6">
+                  {/* Summary Stats */}
+                  <div className="mb-6 grid grid-cols-3 gap-4">
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                      <div className="text-sm text-blue-600 font-medium mb-1">Vulnerabilities</div>
+                      <div className="text-2xl font-bold text-blue-900">{vulnerabilities.length || data?.vulnerabilities_count || 0}</div>
+                    </div>
+                    <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                      <div className="text-sm text-purple-600 font-medium mb-1">Options for Consideration</div>
+                      <div className="text-2xl font-bold text-purple-900">{ofcs.length || data?.ofcs_count || 0}</div>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                      <div className="text-sm text-green-600 font-medium mb-1">Linked OFCs</div>
+                      <div className="text-2xl font-bold text-green-900">{Object.keys(ofcsByVuln).filter(k => k !== 'unlinked').length}</div>
+                    </div>
+                  </div>
+
+                  {/* Warning if data needs loading */}
+                  {needsDataLoad && (
+                    <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <p className="text-sm text-yellow-800">
+                        ⚠️ Full extraction data not loaded. Click "Load Data" button to load vulnerabilities and OFCs from the JSON file.
+                      </p>
                     </div>
                   )}
+
+                  {/* Vulnerabilities with their OFCs */}
+                  {vulnerabilities && vulnerabilities.length > 0 ? (
+                    <div className="space-y-4">
+                      <h4 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2">
+                        Vulnerabilities and Associated OFCs
+                      </h4>
+                      <div className="space-y-6 max-h-[600px] overflow-y-auto">
+                        {vulnerabilities.map((vuln, idx) => {
+                          const vulnId = vuln.id || `vuln-${idx}`;
+                          const linkedOfcs = ofcsByVuln[vulnId] || [];
+                          
+                          return (
+                            <div key={vulnId} className="border border-gray-300 rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors">
+                              {/* Vulnerability Header */}
+                              <div className="mb-3 pb-3 border-b border-gray-300">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-semibold">
+                                        VULNERABILITY #{idx + 1}
+                                      </span>
+                                      {vuln.category && (
+                                        <span className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs">
+                                          {vuln.category}
+                                        </span>
+                                      )}
+                                      {vuln.severity && (
+                                        <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded text-xs">
+                                          {vuln.severity}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <h5 className="text-base font-bold text-gray-900 mt-2">
+                                      {vuln.title || vuln.vulnerability || 'Untitled Vulnerability'}
+                                    </h5>
+                                    {vuln.description && (
+                                      <p className="text-sm text-gray-600 mt-2">{vuln.description}</p>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-gray-500 ml-4">
+                                    {linkedOfcs.length} OFC{linkedOfcs.length !== 1 ? 's' : ''}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Associated OFCs */}
+                              {linkedOfcs.length > 0 ? (
+                                <div className="ml-4 pl-4 border-l-2 border-blue-400">
+                                  <div className="text-xs font-semibold text-blue-700 mb-2 uppercase tracking-wide">
+                                    Options for Consideration
+                                  </div>
+                                  <div className="space-y-2">
+                                    {linkedOfcs.map((ofc, ofcIdx) => (
+                                      <div key={ofc.id || `ofc-${idx}-${ofcIdx}`} className="bg-white rounded p-3 border border-blue-200">
+                                        <div className="font-medium text-sm text-gray-900">
+                                          {ofc.title || ofc.option || 'Untitled OFC'}
+                                        </div>
+                                        {ofc.description && (
+                                          <div className="text-xs text-gray-600 mt-1">{ofc.description}</div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="ml-4 pl-4 border-l-2 border-gray-300">
+                                  <div className="text-xs text-gray-400 italic">No OFCs linked to this vulnerability</div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-6 bg-gray-50 rounded-lg text-center text-gray-500">
+                      {needsDataLoad 
+                        ? 'Click "Load Data" to view vulnerabilities and OFCs'
+                        : 'No vulnerabilities extracted from this submission'}
+                    </div>
+                  )}
+
+                  {/* Unlinked OFCs */}
+                  {ofcsByVuln['unlinked'] && ofcsByVuln['unlinked'].length > 0 && (
+                    <div className="mt-6 pt-6 border-t border-gray-300">
+                      <h4 className="text-lg font-semibold text-gray-900 mb-3">
+                        Unlinked Options for Consideration ({ofcsByVuln['unlinked'].length})
+                      </h4>
+                      <div className="space-y-2 max-h-96 overflow-y-auto">
+                        {ofcsByVuln['unlinked'].map((ofc, idx) => (
+                          <div key={ofc.id || `unlinked-${idx}`} className="bg-yellow-50 border border-yellow-200 rounded p-3">
+                            <div className="font-medium text-sm text-gray-900">
+                              {ofc.title || ofc.option || 'Untitled OFC'}
+                            </div>
+                            {ofc.description && (
+                              <div className="text-xs text-gray-600 mt-1">{ofc.description}</div>
+                            )}
+                            <div className="text-xs text-yellow-700 mt-1 italic">
+                              ⚠️ Not linked to any vulnerability
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Raw Data (collapsible) */}
+                  <details className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <summary className="font-medium text-gray-900 cursor-pointer hover:text-blue-600">
+                      📋 View Raw Submission Data
+                    </summary>
+                    <pre className="text-xs text-gray-700 overflow-x-auto mt-3 max-h-96 overflow-y-auto">
+                      {JSON.stringify(data, null, 2)}
+                    </pre>
+                  </details>
+                </div>
               </div>
               );
             })}
@@ -276,4 +358,3 @@ export default function ReviewSubmissionsPage() {
     </RoleGate>
   )
 }
-

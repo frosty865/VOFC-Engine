@@ -140,7 +140,56 @@ export async function POST(request, { params }) {
         }
 
         console.log(`✅ Submission ${submissionId} promoted successfully.`);
+
+        // --- Feed Learning Algorithm ---
+        // Create learning events for approved submission
+        // This feeds the learning algorithm with positive examples
+        try {
+          if (parsed.vulnerabilities && parsed.vulnerabilities.length > 0) {
+            const learningEvents = parsed.vulnerabilities.map(v => {
+              const linkedOfcCount = parsed.ofcs 
+                ? parsed.ofcs.filter(o => o.linked_vulnerability === (v.id || v.title)).length 
+                : 0;
+              
+              return {
+                submission_id: submissionId,
+                event_type: 'approval',
+                approved: true,
+                model_version: process.env.OLLAMA_MODEL || 'vofc-engine:latest',
+                confidence_score: 1.0, // Approved by admin = high confidence
+                metadata: JSON.stringify({
+                  vulnerability_id: v.id || null,
+                  vulnerability: v.title || v.vulnerability,
+                  category: v.category,
+                  severity: v.severity,
+                  ofc_count: linkedOfcCount,
+                  document_name: data.document_name
+                })
+              };
+            });
+
+            // Insert learning events (non-blocking - don't fail approval if this fails)
+            const { error: learningErr } = await supabase
+              .from('learning_events')
+              .insert(learningEvents);
+
+            if (learningErr) {
+              console.warn('⚠️ Error creating learning events (non-fatal):', learningErr);
+              // Don't fail the approval if learning events fail
+            } else {
+              console.log(`📚 Created ${learningEvents.length} learning events for submission ${submissionId}`);
+              console.log(`✅ Learning algorithm fed with approved submission data`);
+            }
+          }
+        } catch (learningError) {
+          console.warn('⚠️ Learning event creation failed (non-fatal):', learningError);
+          // Continue - approval is more important than learning events
+        }
       }
+    } else if (status === 'rejected') {
+      // On REJECT, optionally create negative learning events
+      console.log(`🗑️ Submission ${submissionId} rejected. Not feeding learning algorithm.`);
+      // Rejected submissions don't feed the learning algorithm - they're considered invalid
     }
 
     // -----------------------------------------------------------------
