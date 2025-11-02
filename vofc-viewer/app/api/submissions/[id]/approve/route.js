@@ -39,13 +39,38 @@ export async function POST(request, { params }) {
     // -----------------------------------------------------------------
     // 2️⃣ Update submission record
     // -----------------------------------------------------------------
+    const updatePayload = {
+      status,
+      reviewed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    // Only include comments if the column exists (store in data JSON if needed)
+    // Check if we should store comments in data field instead
+    if (comments) {
+      // Store comments in the data JSON field since comments column may not exist
+      const { data: currentSubmission } = await supabase
+        .from('submissions')
+        .select('data')
+        .eq('id', submissionId)
+        .single();
+      
+      if (currentSubmission && currentSubmission.data) {
+        const currentData = typeof currentSubmission.data === 'string'
+          ? JSON.parse(currentSubmission.data)
+          : currentSubmission.data;
+        
+        updatePayload.data = JSON.stringify({
+          ...currentData,
+          review_comments: comments,
+          reviewed_at: new Date().toISOString()
+        });
+      }
+    }
+    
     const { data: updated, error: updateError } = await supabase
       .from('submissions')
-      .update({
-        status,
-        reviewed_at: new Date().toISOString(),
-        comments
-      })
+      .update(updatePayload)
       .eq('id', submissionId)
       .select()
       .single();
