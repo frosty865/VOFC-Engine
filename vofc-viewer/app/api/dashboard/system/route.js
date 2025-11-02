@@ -230,6 +230,86 @@ export async function GET(request) {
       last_check: status.timestamp
     };
 
+    // Add parsing and processing statistics from database
+    try {
+      // Get submission statistics
+      const { count: totalSubmissions, error: subError } = await supabaseAdmin
+        .from('submissions')
+        .select('*', { count: 'exact', head: true });
+      
+      const { count: pendingSubmissions } = await supabaseAdmin
+        .from('submissions')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending_review');
+      
+      const { count: approvedSubmissions } = await supabaseAdmin
+        .from('submissions')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'approved');
+      
+      const { count: rejectedSubmissions } = await supabaseAdmin
+        .from('submissions')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'rejected');
+
+      // Get vulnerability and OFC counts from production tables
+      const { count: totalVulnerabilities } = await supabaseAdmin
+        .from('submission_vulnerabilities')
+        .select('*', { count: 'exact', head: true });
+      
+      const { count: totalOfcs } = await supabaseAdmin
+        .from('submission_options_for_consideration')
+        .select('*', { count: 'exact', head: true });
+
+      // Get learning events statistics
+      const { count: totalLearningEvents } = await supabaseAdmin
+        .from('learning_events')
+        .select('*', { count: 'exact', head: true });
+      
+      const { count: approvedLearningEvents } = await supabaseAdmin
+        .from('learning_events')
+        .select('*', { count: 'exact', head: true })
+        .eq('approved', true);
+
+      // Get recent submissions for processing timeline
+      const { data: recentSubmissions } = await supabaseAdmin
+        .from('submissions')
+        .select('id, status, created_at, updated_at')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      status.parsing = {
+        total_submissions: totalSubmissions || 0,
+        pending_review: pendingSubmissions || 0,
+        approved: approvedSubmissions || 0,
+        rejected: rejectedSubmissions || 0,
+        total_vulnerabilities: totalVulnerabilities || 0,
+        total_ofcs: totalOfcs || 0,
+        recent_submissions: recentSubmissions || []
+      };
+
+      status.learning = {
+        total_events: totalLearningEvents || 0,
+        approved_events: approvedLearningEvents || 0
+      };
+
+    } catch (statsError) {
+      console.warn('Error fetching parsing statistics:', statsError);
+      status.parsing = {
+        total_submissions: 0,
+        pending_review: 0,
+        approved: 0,
+        rejected: 0,
+        total_vulnerabilities: 0,
+        total_ofcs: 0,
+        error: statsError.message
+      };
+      status.learning = {
+        total_events: 0,
+        approved_events: 0
+      };
+    }
+
     return NextResponse.json(status);
     
   } catch (e) {
