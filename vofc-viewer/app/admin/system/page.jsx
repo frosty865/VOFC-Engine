@@ -377,30 +377,112 @@ export default function SystemStatusPage() {
         </div>
       )}
 
-      {/* Python Runtime Info */}
-      {status.python && (
-        <div className="card">
-          <h3 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-sm)' }}>Python Runtime</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--spacing-lg)', fontSize: 'var(--font-size-sm)' }}>
-            <div>
-              <p style={{ color: 'var(--cisa-gray)', margin: 0, marginBottom: 'var(--spacing-xs)' }}>Model:</p>
-              <p style={{ fontWeight: 600, margin: 0 }}>{status.python.model || 'N/A'}</p>
-            </div>
-            <div>
-              <p style={{ color: 'var(--cisa-gray)', margin: 0, marginBottom: 'var(--spacing-xs)' }}>Version:</p>
-              <p style={{ fontWeight: 600, margin: 0 }}>{status.python.version || 'N/A'}</p>
-            </div>
-            <div>
-              <p style={{ color: 'var(--cisa-gray)', margin: 0, marginBottom: 'var(--spacing-xs)' }}>Runtime:</p>
-              <p style={{ 
-                fontWeight: 600, 
-                margin: 0,
-                color: status.python.runtime_status === 'running' ? 'var(--cisa-success)' : 'var(--cisa-gray)'
-              }}>
-                {status.python.runtime_status || 'Unknown'}
-              </p>
+      {/* Python & Flask Service Information */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'var(--spacing-lg)' }}>
+        {/* Python Runtime Info */}
+        {status.python && (
+          <div className="card">
+            <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-md)' }}>🐍 Python Runtime</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--cisa-gray)' }}>Status:</span>
+                <span style={{ 
+                  fontWeight: 600,
+                  color: (status.python.runtime_status === 'running' || status.python.status === 'running') ? 'var(--cisa-success)' : 'var(--cisa-red)'
+                }}>
+                  {(status.python.runtime_status === 'running' || status.python.status === 'running') ? '✅ Running' : '❌ Stopped'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--cisa-gray)' }}>Version:</span>
+                <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{status.python.version || 'N/A'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--cisa-gray)' }}>Model:</span>
+                <span style={{ fontWeight: 600 }}>{status.python.model || 'N/A'}</span>
+              </div>
+              {status.python.executable && status.python.executable !== 'unknown' && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--cisa-gray)' }}>Executable:</span>
+                  <span style={{ fontFamily: 'monospace', fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {status.python.executable}
+                  </span>
+                </div>
+              )}
+              {status.python.platform && Object.keys(status.python.platform).length > 0 && (
+                <div style={{ paddingTop: 'var(--spacing-sm)', borderTop: '1px solid var(--cisa-gray-light)', fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)' }}>
+                  <div>Platform: {status.python.platform.system} {status.python.platform.release}</div>
+                  {status.python.platform.machine && <div>Architecture: {status.python.platform.machine}</div>}
+                </div>
+              )}
             </div>
           </div>
+        )}
+
+        {/* Flask Service Info */}
+        {status.flask && (
+          <div className="card">
+            <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-md)' }}>🔧 Flask Server</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--cisa-gray)' }}>Version:</span>
+                <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{status.flask.version || 'N/A'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--cisa-gray)' }}>Environment:</span>
+                <span style={{
+                  padding: 'var(--spacing-xs) var(--spacing-sm)',
+                  borderRadius: 'var(--border-radius)',
+                  fontSize: 'var(--font-size-xs)',
+                  fontWeight: 600,
+                  ...(status.flask.environment === 'production' ? 
+                    { backgroundColor: 'rgba(0, 113, 188, 0.1)', color: 'var(--cisa-blue)' } : 
+                    { backgroundColor: 'rgba(255, 193, 7, 0.1)', color: '#856404' })
+                }}>
+                  {status.flask.environment || 'N/A'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--cisa-gray)' }}>Debug Mode:</span>
+                <span style={{
+                  padding: 'var(--spacing-xs) var(--spacing-sm)',
+                  borderRadius: 'var(--border-radius)',
+                  fontSize: 'var(--font-size-xs)',
+                  fontWeight: 600,
+                  ...(status.flask.debug ? 
+                    { backgroundColor: 'var(--cisa-red-light)', color: 'var(--cisa-red-dark)' } : 
+                    { backgroundColor: 'rgba(40, 167, 69, 0.1)', color: '#155724' })
+                }}>
+                  {status.flask.debug ? '⚠️ Enabled' : '✅ Disabled'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Ollama Models */}
+      {status.services?.ollama_models && status.services.ollama_models.length > 0 && (
+        <div className="card">
+          <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-md)' }}>🤖 Available Ollama Models</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--spacing-md)' }}>
+            {status.services.ollama_models.map((model, idx) => (
+              <div key={idx} style={{
+                backgroundColor: 'var(--cisa-gray-lighter)',
+                borderRadius: 'var(--border-radius-lg)',
+                padding: 'var(--spacing-md)',
+                border: '1px solid var(--cisa-gray-light)'
+              }}>
+                <div style={{ fontFamily: 'monospace', fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-xs)' }}>{model}</div>
+                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)' }}>Model {idx + 1}</div>
+              </div>
+            ))}
+          </div>
+          {status.services.ollama_base_url && (
+            <div style={{ marginTop: 'var(--spacing-md)', fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)' }}>
+              Ollama Base URL: <span style={{ fontFamily: 'monospace' }}>{status.services.ollama_base_url}</span>
+            </div>
+          )}
         </div>
       )}
     </div>

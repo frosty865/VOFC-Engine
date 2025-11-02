@@ -116,9 +116,10 @@ async function runLiveMode(send) {
       
       // Check local Flask server status (async IIFE)
       (async () => {
-        const localOllamaUrl = process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
+        // Use production Flask URL if available, otherwise fallback to local
+        const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
         try {
-          const healthResponse = await fetch(`${localOllamaUrl}/health`, {
+          const healthResponse = await fetch(`${flaskUrl}/health`, {
             method: 'GET',
             signal: AbortSignal.timeout(5000)
           });
@@ -128,10 +129,12 @@ async function runLiveMode(send) {
             const incomingCount = health.directories?.incoming?.file_count || 0;
             const libraryCount = health.directories?.library?.file_count || 0;
             const errorsCount = health.directories?.errors?.file_count || 0;
+            const extractedTextCount = health.directories?.extracted_text?.file_count || 0;
             
             send(`📊 Processing Status:`, "info");
             send(`   📥 Incoming: ${incomingCount} file(s)`, "info");
             send(`   📚 Library: ${libraryCount} file(s)`, "info");
+            send(`   📄 Extracted Text: ${extractedTextCount} file(s)`, "info");
             send(`   ❌ Errors: ${errorsCount} file(s)`, errorsCount > 0 ? "warning" : "info");
             
             if (incomingCount > 0) {
@@ -139,10 +142,21 @@ async function runLiveMode(send) {
             } else {
               send("✅ No files waiting - Ready for new submissions", "success");
             }
+            
+            // Show Python/Flask service info if available
+            if (health.python) {
+              send(`🐍 Python: ${health.python.version || 'unknown'}`, "info");
+            }
+            if (health.flask) {
+              send(`🔧 Flask: ${health.flask.version || 'running'}`, "info");
+            }
+            if (health.server?.model) {
+              send(`🤖 Model: ${health.server.model}`, "info");
+            }
           }
         } catch (healthError) {
           send(`⚠️ Could not check Flask server status: ${healthError.message}`, "warning");
-          send(`💡 Make sure Flask server is running at ${localOllamaUrl}`, "tip");
+          send(`💡 Make sure Flask server is running at ${flaskUrl}`, "tip");
         }
       })();
     }
@@ -173,30 +187,45 @@ async function runOllamaOnlyMode(send) {
   send("🧠 OLLAMA-ONLY MODE: Direct model monitoring", "system");
   
   try {
-    // Check local Flask server first (for file processing)
-    const localOllamaUrl = process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
-    send(`🔗 Checking local Flask server at: ${localOllamaUrl}`, "info");
+    // Check Flask server (for file processing)
+    const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
+    send(`🔗 Checking Flask server at: ${flaskUrl}`, "info");
     
     try {
-      const healthResponse = await fetch(`${localOllamaUrl}/health`, {
+      const healthResponse = await fetch(`${flaskUrl}/health`, {
         method: 'GET',
         signal: AbortSignal.timeout(5000)
       });
       
       if (healthResponse.ok) {
         const health = await healthResponse.json();
-        send("✅ Local Flask server is running", "success");
+        send("✅ Flask server is running", "success");
         send(`📊 Status: ${health.status}`, "info");
-        send(`🤖 Model: ${health.server?.model || 'unknown'}`, "info");
+        
+        // Show all service information
+        if (health.python) {
+          send(`🐍 Python: ${health.python.version || 'unknown'}`, "info");
+        }
+        if (health.flask) {
+          send(`🔧 Flask: ${health.flask.version || 'running'}`, "info");
+        }
+        if (health.server?.model) {
+          send(`🤖 Model: ${health.server.model}`, "info");
+        }
         
         const incomingCount = health.directories?.incoming?.file_count || 0;
         const libraryCount = health.directories?.library?.file_count || 0;
+        const extractedTextCount = health.directories?.extracted_text?.file_count || 0;
+        const errorsCount = health.directories?.errors?.file_count || 0;
+        
         send(`📥 Incoming files: ${incomingCount}`, "info");
         send(`📚 Processed files: ${libraryCount}`, "info");
+        send(`📄 Extracted text files: ${extractedTextCount}`, "info");
+        send(`❌ Error files: ${errorsCount}`, errorsCount > 0 ? "warning" : "info");
       }
-    } catch (localError) {
-      send(`⚠️ Local Flask server not responding: ${localError.message}`, "warning");
-      send(`💡 Make sure Flask server is running: python ollama/server.py`, "tip");
+    } catch (flaskError) {
+      send(`⚠️ Flask server not responding: ${flaskError.message}`, "warning");
+      send(`💡 Make sure Flask server is running at ${flaskUrl}`, "tip");
     }
     
     // Also check Ollama API server (for model calls)

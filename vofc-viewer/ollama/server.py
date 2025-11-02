@@ -1106,8 +1106,11 @@ def process_batch():
 
 @app.route('/health', methods=['GET'])
 def health():
-    """Health check endpoint with directory contents"""
+    """Health check endpoint with comprehensive service information"""
     try:
+        import platform
+        import flask
+        
         dirs = {}
         dir_paths = {
             "incoming": UPLOAD_DIR,
@@ -1139,6 +1142,31 @@ def health():
                     "exists": False
                 }
         
+        # Get Python version
+        python_version = sys.version.split()[0]
+        
+        # Get Flask version
+        flask_version = flask.__version__
+        
+        # Get platform information
+        platform_info = {
+            "system": platform.system(),
+            "release": platform.release(),
+            "machine": platform.machine(),
+            "processor": platform.processor()
+        }
+        
+        # Get available models from Ollama (if accessible)
+        ollama_models = []
+        ollama_url = os.getenv('OLLAMA_URL', 'http://localhost:11434')
+        try:
+            models_response = requests.get(f"{ollama_url}/api/tags", timeout=2)
+            if models_response.ok:
+                models_data = models_response.json()
+                ollama_models = [m.get('name', '') for m in models_data.get('models', [])]
+        except:
+            pass  # Ollama may not be accessible from Flask server
+        
         return jsonify({
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
@@ -1146,13 +1174,31 @@ def health():
             "server": {
                 "host": SERVER_HOST,
                 "port": SERVER_PORT,
-                "model": MODEL_NAME
+                "model": MODEL_NAME,
+                "url": f"http://{SERVER_HOST}:{SERVER_PORT}"
+            },
+            "python": {
+                "version": python_version,
+                "executable": sys.executable,
+                "platform": platform_info
+            },
+            "flask": {
+                "version": flask_version,
+                "environment": os.getenv('FLASK_ENV', 'production'),
+                "debug": DEBUG_MODE
+            },
+            "services": {
+                "ollama_models": ollama_models,
+                "ollama_url": ollama_url,
+                "base_directory": BASE_DIR
             }
         }), 200
     except Exception as e:
+        import traceback
         return jsonify({
             "status": "error",
             "error": str(e),
+            "traceback": traceback.format_exc() if DEBUG_MODE else None,
             "timestamp": datetime.now().isoformat()
         }), 500
 

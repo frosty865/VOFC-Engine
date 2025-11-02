@@ -102,7 +102,14 @@ export async function GET(request) {
       python: {
         model: 'unknown',
         version: 'unknown',
+        executable: 'unknown',
+        platform: {},
         runtime_status: 'unknown'
+      },
+      flask: {
+        version: 'unknown',
+        environment: 'unknown',
+        debug: false
       }
     };
 
@@ -116,22 +123,44 @@ export async function GET(request) {
         signal: AbortSignal.timeout(5000) // Increased timeout for production
       });
       
-      if (flaskResponse.ok) {
-        const health = await flaskResponse.json();
-        status.services.flask = {
-          status: 'online',
-          url: flaskUrl,
-          status_code: flaskResponse.status,
-          server: health.server,
-          directories: health.directories
-        };
-        status.files.incoming = health.directories?.incoming?.file_count || 0;
-        status.files.library = health.directories?.library?.file_count || 0;
-        status.files.extracted_text = health.directories?.['extracted_text']?.file_count || 0;
-        status.files.errors = health.directories?.errors?.file_count || 0;
-        status.python.model = health.server?.model || 'unknown';
-        status.python.version = health.server?.python_version || 'unknown';
-        status.python.runtime_status = 'running';
+        if (flaskResponse.ok) {
+          const health = await flaskResponse.json();
+          status.services.flask = {
+            status: 'online',
+            url: flaskUrl,
+            status_code: flaskResponse.status,
+            server: health.server,
+            directories: health.directories
+          };
+          // Extract file counts - handle both directory name formats
+          const dirs = health.directories || {};
+          status.files.incoming = dirs.incoming?.file_count || 0;
+          status.files.library = dirs.library?.file_count || 0;
+          status.files.extracted_text = dirs['extracted_text']?.file_count || dirs['extracted-text']?.file_count || 0;
+          status.files.errors = dirs.errors?.file_count || 0;
+          
+          // Extract comprehensive Python/Flask service information
+          status.python = {
+            model: health.server?.model || 'unknown',
+            version: health.python?.version || 'unknown',
+            executable: health.python?.executable || 'unknown',
+            platform: health.python?.platform || {},
+            runtime_status: 'running'
+          };
+          
+          // Extract Flask service information
+          status.flask = {
+            version: health.flask?.version || 'unknown',
+            environment: health.flask?.environment || 'unknown',
+            debug: health.flask?.debug || false
+          };
+          
+          // Extract Ollama models information
+          if (!status.services.ollama_models) {
+            status.services.ollama_models = [];
+          }
+          status.services.ollama_models = health.services?.ollama_models || [];
+          status.services.ollama_base_url = health.services?.ollama_url || process.env.OLLAMA_URL || 'unknown';
       } else {
         status.services.flask = {
           status: 'error',

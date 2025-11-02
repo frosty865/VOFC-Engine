@@ -178,30 +178,102 @@ export default function VOFCProcessingDashboard() {
         </div>
       </div>
 
-      {/* Processing Pipeline Status */}
-      {status?.python && (
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Python Processing Pipeline</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <div className="text-sm text-gray-600 mb-1">Status</div>
-              <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                status.python.status === 'running' 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-red-100 text-red-800'
-              }`}>
-                {status.python.status === 'running' ? '✅ Running' : '❌ Stopped'}
+      {/* Python & Flask Service Information */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Python Service */}
+        {status?.python && (
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <span>🐍</span> Python Runtime
+            </h2>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Status</span>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  status.python.status === 'running' || status.python.runtime_status === 'running'
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-red-100 text-red-800'
+                }`}>
+                  {status.python.status === 'running' || status.python.runtime_status === 'running' ? '✅ Running' : '❌ Stopped'}
+                </span>
               </div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 mb-1">Model</div>
-              <div className="text-lg font-semibold">{status.python.model || 'N/A'}</div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 mb-1">Version</div>
-              <div className="text-lg font-semibold">{status.python.version || 'N/A'}</div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Version</span>
+                <span className="text-sm font-mono font-semibold">{status.python.version || 'N/A'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Model</span>
+                <span className="text-sm font-semibold">{status.python.model || 'N/A'}</span>
+              </div>
+              {status.python.executable && status.python.executable !== 'unknown' && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Executable</span>
+                  <span className="text-xs font-mono text-gray-500 truncate ml-2">{status.python.executable}</span>
+                </div>
+              )}
+              {status.python.platform && Object.keys(status.python.platform).length > 0 && (
+                <div className="pt-2 border-t border-gray-200">
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <div>Platform: {status.python.platform.system} {status.python.platform.release}</div>
+                    {status.python.platform.machine && <div>Architecture: {status.python.platform.machine}</div>}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
+        )}
+
+        {/* Flask Service */}
+        {status?.flask && (
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <span>🔧</span> Flask Server
+            </h2>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Version</span>
+                <span className="text-sm font-mono font-semibold">{status.flask.version || 'N/A'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Environment</span>
+                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                  status.flask.environment === 'production' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'
+                }`}>
+                  {status.flask.environment || 'N/A'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Debug Mode</span>
+                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                  status.flask.debug ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                }`}>
+                  {status.flask.debug ? '⚠️ Enabled' : '✅ Disabled'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Ollama Models */}
+      {status?.services?.ollama_models && status.services.ollama_models.length > 0 && (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <span>🤖</span> Available Ollama Models
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {status.services.ollama_models.map((model, idx) => (
+              <div key={idx} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <div className="font-mono text-sm font-semibold text-gray-900">{model}</div>
+                <div className="text-xs text-gray-500 mt-1">Model {idx + 1}</div>
+              </div>
+            ))}
+          </div>
+          {status.services.ollama_base_url && (
+            <div className="mt-4 text-xs text-gray-500">
+              Ollama Base URL: <span className="font-mono">{status.services.ollama_base_url}</span>
+            </div>
+          )}
         </div>
       )}
     </div>
