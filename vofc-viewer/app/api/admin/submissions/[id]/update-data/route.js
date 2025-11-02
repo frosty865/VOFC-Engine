@@ -78,37 +78,75 @@ export async function POST(request, { params }) {
     
     let vofcData = null;
     try {
+      // Try to find the actual filename by listing files (if endpoint exists)
+      let actualFilename = jsonFilename;
+      try {
+        const listResponse = await fetch(`${flaskUrl}/api/files/list?folder=library`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(3000)
+        });
+        
+        if (listResponse.ok) {
+          const fileList = await listResponse.json();
+          // Find matching JSON file (case-insensitive, partial match)
+          const baseNameLower = baseName.toLowerCase();
+          const matchingFile = fileList.files?.find(f => 
+            f.toLowerCase().includes(baseNameLower) && f.toLowerCase().endsWith('.json')
+          );
+          if (matchingFile) {
+            actualFilename = matchingFile;
+            console.log(`Found matching JSON file: ${actualFilename}`);
+          }
+        }
+      } catch (listError) {
+        // List endpoint might not exist, continue with original filename
+        console.log('File list endpoint not available, using original filename:', jsonFilename);
+      }
+
       // Read the JSON file from Flask server
-      const jsonResponse = await fetch(`${flaskUrl}/api/files/read?folder=library&filename=${encodeURIComponent(jsonFilename)}`, {
+      const jsonResponse = await fetch(`${flaskUrl}/api/files/read?folder=library&filename=${encodeURIComponent(actualFilename)}`, {
         method: 'GET',
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(10000) // Increased timeout
       });
       
       if (jsonResponse.ok) {
         // Flask server returns parsed JSON directly for .json files
         vofcData = await jsonResponse.json();
+        console.log(`Loaded VOFC data: ${vofcData.vulnerabilities?.length || 0} vulnerabilities, ${vofcData.ofcs?.length || 0} OFCs`);
       } else {
-        const errorData = await jsonResponse.json().catch(() => ({ error: 'Unknown error' }));
+        const errorText = await jsonResponse.text().catch(() => 'Unknown error');
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: errorText };
+        }
+        console.error(`Flask server error (${jsonResponse.status}):`, errorData);
         return NextResponse.json({ 
           error: 'JSON file not found on Flask server', 
-          filename: jsonFilename,
-          flask_error: errorData.error,
-          message: 'The JSON file may have been moved or deleted. Flask server may not be accessible.' 
+          filename: actualFilename,
+          flask_error: errorData.error || errorText,
+          message: 'The JSON file may have been moved or deleted. Flask server may not be accessible.',
+          attempted_url: `${flaskUrl}/api/files/read?folder=library&filename=${encodeURIComponent(actualFilename)}`
         }, { status: 404 });
       }
     } catch (fetchError) {
       // Handle network errors (Flask server not accessible)
+      console.error('Error fetching from Flask server:', fetchError);
       if (fetchError.name === 'AbortError') {
         return NextResponse.json({ 
           error: 'Flask server request timed out', 
-          message: 'The Flask server did not respond within 5 seconds',
-          note: 'Make sure Flask server is running' 
+          message: 'The Flask server did not respond within 10 seconds',
+          note: 'Make sure Flask server is running',
+          flask_url: flaskUrl
         }, { status: 503 });
       }
       return NextResponse.json({ 
         error: 'Failed to fetch JSON from Flask server', 
-        message: fetchError.message,
-        note: 'Make sure Flask server is running and accessible at ' + flaskUrl
+        message: fetchError.message || 'Network error',
+        error_type: fetchError.name || 'Unknown',
+        note: 'Make sure Flask server is running and accessible at ' + flaskUrl,
+        flask_url: flaskUrl
       }, { status: 503 });
     }
 

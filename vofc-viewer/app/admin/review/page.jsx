@@ -125,15 +125,15 @@ export default function ReviewSubmissionsPage() {
               }
 
               // Debug: Log the data structure
-              console.log('Submission data structure:', {
+              console.log('🔍 Submission data structure:', {
                 id: submission.id,
                 hasVulns: !!data.vulnerabilities,
                 hasOfcs: !!data.ofcs,
-                vulnCount: Array.isArray(data.vulnerabilities) ? data.vulnerabilities.length : 0,
-                ofcCount: Array.isArray(data.ofcs) ? data.ofcs.length : 0,
+                vulnCount: Array.isArray(data.vulnerabilities) ? data.vulnerabilities.length : (data.vulnerabilities_count || 0),
+                ofcCount: Array.isArray(data.ofcs) ? data.ofcs.length : (data.ofcs_count || 0),
                 dataKeys: Object.keys(data),
-                firstVuln: data.vulnerabilities?.[0],
-                firstOfc: data.ofcs?.[0]
+                dataType: typeof data,
+                fullData: data // Log full data for debugging
               });
               
               // Extract vulnerabilities - handle multiple possible structures
@@ -315,10 +315,14 @@ export default function ReviewSubmissionsPage() {
                   {vulnerabilities && vulnerabilities.length > 0 ? (
                     <div className="space-y-4">
                       <h4 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2">
-                        Vulnerabilities and Associated OFCs
+                        Vulnerabilities and Associated OFCs ({vulnerabilities.length} total)
                       </h4>
+                      <div className="mb-2 text-xs text-gray-500">
+                        Showing {vulnerabilities.length} vulnerability/vulnerabilities with their associated options for consideration
+                      </div>
                       <div className="space-y-6 max-h-[600px] overflow-y-auto">
                         {vulnerabilities.map((vuln, idx) => {
+                          console.log(`Rendering vulnerability ${idx}:`, vuln);
                           // Try multiple ways to match vulnerability ID
                           const vulnId = vuln.id || vuln.title || vuln.vulnerability || `vuln-${idx}`;
                           const vulnKey = vuln.id || vuln.title || vuln.vulnerability || `vuln-${idx}`;
