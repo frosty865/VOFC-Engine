@@ -252,7 +252,18 @@ export default function ReviewSubmissionsPage() {
                 });
               }
 
-              const hasData = vulnerabilities.length > 0 || ofcs.length > 0;
+              // Extract sources/references
+              let sources = [];
+              if (Array.isArray(data.sources)) {
+                sources = data.sources;
+              } else if (data.sources && typeof data.sources === 'object') {
+                sources = Object.values(data.sources);
+              } else if (data.links && Array.isArray(data.links)) {
+                // Sometimes sources are in links array
+                sources = data.links.filter(link => link.source || link.source_title || link.source_url);
+              }
+
+              const hasData = vulnerabilities.length > 0 || ofcs.length > 0 || sources.length > 0;
               // Only show "Load Data" if we have counts but no actual data (indicates old submission or missing data)
               // New submissions should already have full data stored
               const needsDataLoad = !hasData && 
@@ -377,7 +388,7 @@ export default function ReviewSubmissionsPage() {
                 {/* Content */}
                 <div className="p-6">
                   {/* Summary Stats */}
-                  <div className="mb-6 grid grid-cols-3 gap-4">
+                  <div className="mb-6 grid grid-cols-4 gap-4">
                     <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                       <div className="text-sm text-blue-600 font-medium mb-1">Vulnerabilities</div>
                       <div className="text-2xl font-bold text-blue-900">{vulnerabilities.length || data?.vulnerabilities_count || 0}</div>
@@ -389,6 +400,10 @@ export default function ReviewSubmissionsPage() {
                     <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                       <div className="text-sm text-green-600 font-medium mb-1">Linked OFCs</div>
                       <div className="text-2xl font-bold text-green-900">{Object.keys(ofcsByVuln).filter(k => k !== 'unlinked').length}</div>
+                    </div>
+                    <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+                      <div className="text-sm text-amber-600 font-medium mb-1">Reference Sources</div>
+                      <div className="text-2xl font-bold text-amber-900">{sources.length || 0}</div>
                     </div>
                   </div>
 
@@ -716,6 +731,62 @@ export default function ReviewSubmissionsPage() {
                             )}
                             <div className="text-xs text-yellow-700 mt-1 italic">
                               ⚠️ Not linked to any vulnerability
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reference Sources */}
+                  {sources && sources.length > 0 && (
+                    <div className="mt-6 pt-6 border-t border-gray-300">
+                      <h4 className="text-lg font-semibold text-gray-900 mb-4">
+                        📚 Reference Sources ({sources.length})
+                      </h4>
+                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                        {sources.map((source, idx) => (
+                          <div key={source.id || `source-${idx}`} className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1">
+                                {/* Source Title */}
+                                {source.source_title && (
+                                  <div className="font-semibold text-sm text-gray-900 mb-1">
+                                    {source.source_title}
+                                  </div>
+                                )}
+                                
+                                {/* Source Text/Description */}
+                                {source.source_text && (
+                                  <div className="text-sm text-gray-700 mb-2">
+                                    {source.source_text}
+                                  </div>
+                                )}
+                                
+                                {/* Source URL */}
+                                {source.source_url && (
+                                  <div className="mt-2">
+                                    <a 
+                                      href={source.source_url} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-blue-600 hover:text-blue-800 underline break-all"
+                                    >
+                                      🔗 {source.source_url}
+                                    </a>
+                                  </div>
+                                )}
+                                
+                                {/* Fallback for different field names */}
+                                {!source.source_title && !source.source_text && !source.source_url && (
+                                  <div className="text-sm text-gray-700">
+                                    {source.title || source.text || source.url || source.source || JSON.stringify(source)}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="text-xs text-amber-700 bg-amber-100 px-2 py-1 rounded">
+                                Source #{idx + 1}
+                              </div>
                             </div>
                           </div>
                         ))}
