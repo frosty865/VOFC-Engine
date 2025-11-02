@@ -311,6 +311,16 @@ export default function ReviewSubmissionsPage() {
                     </div>
                   )}
 
+                  {/* Debug info */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <div className="mb-4 p-3 bg-gray-100 rounded text-xs font-mono">
+                      <strong>Debug:</strong> Vulnerabilities={vulnerabilities.length}, OFCs={ofcs.length}, 
+                      DataKeys={Object.keys(data).join(', ')}, 
+                      HasVulns={!!data.vulnerabilities ? 'yes' : 'no'},
+                      HasOfcs={!!data.ofcs ? 'yes' : 'no'}
+                    </div>
+                  )}
+
                   {/* Vulnerabilities with their OFCs */}
                   {vulnerabilities && vulnerabilities.length > 0 ? (
                     <div className="space-y-4">
@@ -322,7 +332,14 @@ export default function ReviewSubmissionsPage() {
                       </div>
                       <div className="space-y-6 max-h-[600px] overflow-y-auto">
                         {vulnerabilities.map((vuln, idx) => {
-                          console.log(`Rendering vulnerability ${idx}:`, vuln);
+                          console.log(`🔍 Rendering vulnerability ${idx}:`, {
+                            vuln,
+                            vulnId: vuln.id,
+                            vulnTitle: vuln.title,
+                            vulnVulnerability: vuln.vulnerability,
+                            hasOptions: !!vuln.options_for_consideration,
+                            optionsCount: vuln.options_for_consideration?.length || 0
+                          });
                           // Try multiple ways to match vulnerability ID
                           const vulnId = vuln.id || vuln.title || vuln.vulnerability || `vuln-${idx}`;
                           const vulnKey = vuln.id || vuln.title || vuln.vulnerability || `vuln-${idx}`;
