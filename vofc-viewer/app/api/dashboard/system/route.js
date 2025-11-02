@@ -106,18 +106,20 @@ export async function GET(request) {
       }
     };
 
-    // 1. Check Flask Server (Python backend) - skip in production if local URL
-    const flaskUrl = process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
+    // 1. Check Flask Server (Python backend)
+    // Priority: OLLAMA_SERVER_URL (production) > OLLAMA_LOCAL_URL (local/dev) > default localhost
+    const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
     const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
     const isLocalUrl = flaskUrl.includes('127.0.0.1') || flaskUrl.includes('localhost') || flaskUrl.includes('0.0.0.0');
     
-    // In production with local URL, skip the check entirely (can't reach localhost from Vercel)
+    // In production with local URL, Flask server is not accessible (Vercel can't reach localhost)
     if (isProduction && isLocalUrl) {
       status.services.flask = {
         status: 'unavailable',
         url: flaskUrl,
-        note: 'Flask server is only accessible on local development environment. File processing runs locally.',
-        production_note: true
+        note: 'Flask server URL points to localhost, which is not accessible from production. Configure OLLAMA_SERVER_URL environment variable if you have a production Flask server deployed.',
+        production_note: true,
+        help: 'To enable Flask server in production, deploy it to a server and set OLLAMA_SERVER_URL environment variable in Vercel.'
       };
     } else if (!isProduction || !isLocalUrl) {
       // Only check Flask if:
