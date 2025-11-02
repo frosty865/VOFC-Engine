@@ -370,7 +370,7 @@ export default function ReviewSubmissionsPage() {
                                     )}
                                   </div>
                                   <div className="text-xs text-gray-500 ml-4">
-                                    {linkedOfcs.length} OFC{linkedOfcs.length !== 1 ? 's' : ''}
+                                    {uniqueLinkedOfcs.length} OFC{uniqueLinkedOfcs.length !== 1 ? 's' : ''}
                                   </div>
                                 </div>
                               </div>
