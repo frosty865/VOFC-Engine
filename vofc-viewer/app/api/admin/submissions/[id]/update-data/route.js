@@ -78,38 +78,37 @@ export async function POST(request, { params }) {
     
     let vofcData = null;
     try {
-      // Try to read the JSON file from Flask server
+      // Read the JSON file from Flask server
       const jsonResponse = await fetch(`${flaskUrl}/api/files/read?folder=library&filename=${encodeURIComponent(jsonFilename)}`, {
         method: 'GET',
         signal: AbortSignal.timeout(5000)
       });
       
       if (jsonResponse.ok) {
-        const jsonContent = await jsonResponse.json();
-        vofcData = typeof jsonContent === 'string' ? JSON.parse(jsonContent) : jsonContent;
+        // Flask server returns parsed JSON directly for .json files
+        vofcData = await jsonResponse.json();
       } else {
-        // Try alternative: read directly as text
-        const textResponse = await fetch(`${flaskUrl}/api/files/read?folder=library&filename=${encodeURIComponent(jsonFilename)}`, {
-          method: 'GET',
-          signal: AbortSignal.timeout(5000)
-        });
-        
-        if (textResponse.ok) {
-          const text = await textResponse.text();
-          vofcData = JSON.parse(text);
-        } else {
-          return NextResponse.json({ 
-            error: 'JSON file not found on Flask server', 
-            filename: jsonFilename,
-            message: 'The JSON file may have been moved or deleted. Flask server may not be accessible.' 
-          }, { status: 404 });
-        }
+        const errorData = await jsonResponse.json().catch(() => ({ error: 'Unknown error' }));
+        return NextResponse.json({ 
+          error: 'JSON file not found on Flask server', 
+          filename: jsonFilename,
+          flask_error: errorData.error,
+          message: 'The JSON file may have been moved or deleted. Flask server may not be accessible.' 
+        }, { status: 404 });
       }
     } catch (fetchError) {
+      // Handle network errors (Flask server not accessible)
+      if (fetchError.name === 'AbortError') {
+        return NextResponse.json({ 
+          error: 'Flask server request timed out', 
+          message: 'The Flask server did not respond within 5 seconds',
+          note: 'Make sure Flask server is running' 
+        }, { status: 503 });
+      }
       return NextResponse.json({ 
         error: 'Failed to fetch JSON from Flask server', 
         message: fetchError.message,
-        note: 'Make sure Flask server is running and accessible' 
+        note: 'Make sure Flask server is running and accessible at ' + flaskUrl
       }, { status: 503 });
     }
 
