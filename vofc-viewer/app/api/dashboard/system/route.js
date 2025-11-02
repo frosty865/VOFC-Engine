@@ -106,72 +106,51 @@ export async function GET(request) {
       }
     };
 
-    // 1. Check Flask Server (Python backend)
-    // Priority: OLLAMA_SERVER_URL (production) > OLLAMA_LOCAL_URL (local/dev) > default localhost
+    // 1. Check Flask Server (Python backend) - Production only
+    // Priority: OLLAMA_SERVER_URL (production) > OLLAMA_LOCAL_URL (fallback)
     const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
-    const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
-    const isLocalUrl = flaskUrl.includes('127.0.0.1') || flaskUrl.includes('localhost') || flaskUrl.includes('0.0.0.0');
     
-    // In production with local URL, Flask server is not accessible (Vercel can't reach localhost)
-    if (isProduction && isLocalUrl) {
-      status.services.flask = {
-        status: 'unavailable',
-        url: flaskUrl,
-        note: 'Flask server URL points to localhost, which is not accessible from production. Configure OLLAMA_SERVER_URL environment variable if you have a production Flask server deployed.',
-        production_note: true,
-        help: 'To enable Flask server in production, deploy it to a server and set OLLAMA_SERVER_URL environment variable in Vercel.'
-      };
-    } else if (!isProduction || !isLocalUrl) {
-      // Only check Flask if:
-      // - Not in production (development), OR
-      // - In production but URL is not local (has a production Flask URL configured)
-      try {
-        const flaskResponse = await fetch(`${flaskUrl}/health`, {
-          signal: AbortSignal.timeout(2000)
-        });
-        
-        if (flaskResponse.ok) {
-          const health = await flaskResponse.json();
-          status.services.flask = {
-            status: 'online',
-            url: flaskUrl,
-            status_code: flaskResponse.status,
-            server: health.server,
-            directories: health.directories
-          };
-          status.files.incoming = health.directories?.incoming?.file_count || 0;
-          status.files.library = health.directories?.library?.file_count || 0;
-          status.files.extracted_text = health.directories?.['extracted_text']?.file_count || 0;
-          status.files.errors = health.directories?.errors?.file_count || 0;
-          status.python.model = health.server?.model || 'unknown';
-          status.python.version = health.server?.python_version || 'unknown';
-          status.python.runtime_status = 'running';
-        } else {
-          status.services.flask = {
-            status: 'error',
-            url: flaskUrl,
-            status_code: flaskResponse.status,
-            error: `HTTP ${flaskResponse.status}`
-          };
-        }
-      } catch (e) {
-        // Better error handling for production
-        if (isProduction) {
-          status.services.flask = {
-            status: 'unavailable',
-            url: flaskUrl,
-            error: 'Cannot connect (local server not accessible from production)',
-            note: 'Flask server runs locally and is not accessible from production environment.'
-          };
-        } else {
-          status.services.flask = {
-            status: 'offline',
-            url: flaskUrl,
-            error: e.message || 'Connection failed',
-            note: 'Make sure the Flask server is running locally'
-          };
-        }
+    // Always check Flask server - production must have it configured and accessible
+    try {
+      const flaskResponse = await fetch(`${flaskUrl}/health`, {
+        signal: AbortSignal.timeout(5000) // Increased timeout for production
+      });
+      
+      if (flaskResponse.ok) {
+        const health = await flaskResponse.json();
+        status.services.flask = {
+          status: 'online',
+          url: flaskUrl,
+          status_code: flaskResponse.status,
+          server: health.server,
+          directories: health.directories
+        };
+        status.files.incoming = health.directories?.incoming?.file_count || 0;
+        status.files.library = health.directories?.library?.file_count || 0;
+        status.files.extracted_text = health.directories?.['extracted_text']?.file_count || 0;
+        status.files.errors = health.directories?.errors?.file_count || 0;
+        status.python.model = health.server?.model || 'unknown';
+        status.python.version = health.server?.python_version || 'unknown';
+        status.python.runtime_status = 'running';
+      } else {
+        status.services.flask = {
+          status: 'error',
+          url: flaskUrl,
+          status_code: flaskResponse.status,
+          error: `HTTP ${flaskResponse.status}`,
+          note: 'Flask server responded with an error. Check server logs.'
+        };
       }
+    } catch (e) {
+      // Connection failed - this is a critical error in production
+      status.services.flask = {
+        status: 'offline',
+        url: flaskUrl,
+        error: e.message || 'Connection failed',
+        note: e.message?.includes('fetch failed') 
+          ? `Cannot reach Flask server at ${flaskUrl}. Ensure OLLAMA_SERVER_URL is configured in Vercel environment variables and the Flask server is deployed and running.`
+          : `Flask server connection failed: ${e.message}. Verify server is running and accessible.`
+      };
     }
 
     // 2. Check Ollama API
