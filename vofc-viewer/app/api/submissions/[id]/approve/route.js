@@ -148,7 +148,7 @@ export async function POST(request, { params }) {
           if (parsed.vulnerabilities && parsed.vulnerabilities.length > 0) {
             const learningEvents = parsed.vulnerabilities.map(v => {
               const linkedOfcCount = parsed.ofcs 
-                ? parsed.ofcs.filter(o => o.linked_vulnerability === (v.id || v.title)).length 
+                ? parsed.ofcs.filter(o => o.linked_vulnerability === (v.id || v.title || v.vulnerability)).length 
                 : 0;
               
               return {
@@ -163,7 +163,7 @@ export async function POST(request, { params }) {
                   category: v.category,
                   severity: v.severity,
                   ofc_count: linkedOfcCount,
-                  document_name: data.document_name
+                  document_name: parsed.document_name || submissionData.data?.document_name || 'Unknown'
                 })
               };
             });
