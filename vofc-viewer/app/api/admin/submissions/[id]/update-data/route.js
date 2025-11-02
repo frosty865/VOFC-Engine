@@ -74,7 +74,16 @@ export async function POST(request, { params }) {
     const baseName = documentName.replace('.pdf', '').replace('.txt', '');
     const jsonFilename = `${baseName}.json`;
     
-    const flaskUrl = process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
+    // Flask Server URL - Priority: OLLAMA_SERVER_URL > OLLAMA_LOCAL_URL > derived from OLLAMA_URL > default
+    const ollamaApiUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
+    let defaultFlaskUrl = 'https://ollama.frostech.site:5000';
+    try {
+      const url = new URL(ollamaApiUrl);
+      defaultFlaskUrl = `${url.protocol}//${url.hostname}:5000`;
+    } catch {
+      // If URL parsing fails, use default
+    }
+    const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || defaultFlaskUrl;
     
     let vofcData = null;
     try {

@@ -116,8 +116,16 @@ async function runLiveMode(send) {
       
       // Check local Flask server status (async IIFE)
       (async () => {
-        // Use production Flask URL if available, otherwise fallback to local
-        const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
+        // Use production Flask URL if available, otherwise derive from Ollama URL
+        const ollamaBaseUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
+        let defaultFlaskUrl = 'https://ollama.frostech.site:5000';
+        try {
+          const url = new URL(ollamaBaseUrl);
+          defaultFlaskUrl = `${url.protocol}//${url.hostname}:5000`;
+        } catch {
+          // If URL parsing fails, use default
+        }
+        const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || defaultFlaskUrl;
         try {
           const healthResponse = await fetch(`${flaskUrl}/health`, {
             method: 'GET',
@@ -188,7 +196,15 @@ async function runOllamaOnlyMode(send) {
   
   try {
     // Check Flask server (for file processing)
-    const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
+    const ollamaBaseUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
+    let defaultFlaskUrl = 'https://ollama.frostech.site:5000';
+    try {
+      const url = new URL(ollamaBaseUrl);
+      defaultFlaskUrl = `${url.protocol}//${url.hostname}:5000`;
+    } catch {
+      // If URL parsing fails, use default
+    }
+    const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || defaultFlaskUrl;
     send(`🔗 Checking Flask server at: ${flaskUrl}`, "info");
     
     try {

@@ -85,8 +85,8 @@ export async function GET(request) {
     const status = {
       timestamp: new Date().toISOString(),
       services: {
-        flask: { status: 'unknown', url: process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000' },
-        ollama: { status: 'unknown', url: process.env.OLLAMA_URL || 'https://ollama.frostech.site' },
+        flask: { status: 'unknown', url: flaskUrl },
+        ollama: { status: 'unknown', url: ollamaApiUrl },
         supabase: { status: 'unknown', url: process.env.NEXT_PUBLIC_SUPABASE_URL }
       },
       files: {
@@ -114,8 +114,17 @@ export async function GET(request) {
     };
 
     // 1. Check Flask Server (Python backend) - Production only
-    // Priority: OLLAMA_SERVER_URL (production) > OLLAMA_LOCAL_URL (fallback)
-    const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
+    // Priority: OLLAMA_SERVER_URL > OLLAMA_LOCAL_URL > derived from OLLAMA_URL > default
+    const ollamaApiUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
+    // Derive Flask server URL from Ollama URL if not explicitly set (use same domain, port 5000)
+    let defaultFlaskUrl = 'https://ollama.frostech.site:5000';
+    try {
+      const url = new URL(ollamaApiUrl);
+      defaultFlaskUrl = `${url.protocol}//${url.hostname}:5000`;
+    } catch {
+      // If URL parsing fails, use default
+    }
+    const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || defaultFlaskUrl;
     
     // Always check Flask server - production must have it configured and accessible
     try {
