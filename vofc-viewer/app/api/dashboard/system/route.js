@@ -106,13 +106,23 @@ export async function GET(request) {
       }
     };
 
-    // 1. Check Flask Server (Python backend) - skip in production
+    // 1. Check Flask Server (Python backend) - skip in production if local URL
     const flaskUrl = process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
     const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
     const isLocalUrl = flaskUrl.includes('127.0.0.1') || flaskUrl.includes('localhost') || flaskUrl.includes('0.0.0.0');
     
-    // Only check Flask if we're in development or it's a local URL
-    if (!isProduction || isLocalUrl) {
+    // In production with local URL, skip the check entirely (can't reach localhost from Vercel)
+    if (isProduction && isLocalUrl) {
+      status.services.flask = {
+        status: 'unavailable',
+        url: flaskUrl,
+        note: 'Flask server is only accessible on local development environment. File processing runs locally.',
+        production_note: true
+      };
+    } else if (!isProduction || !isLocalUrl) {
+      // Only check Flask if:
+      // - Not in production (development), OR
+      // - In production but URL is not local (has a production Flask URL configured)
       try {
         const flaskResponse = await fetch(`${flaskUrl}/health`, {
           signal: AbortSignal.timeout(2000)
@@ -143,20 +153,23 @@ export async function GET(request) {
           };
         }
       } catch (e) {
-        status.services.flask = {
-          status: 'offline',
-          url: flaskUrl,
-          error: e.message || 'Connection failed',
-          note: isProduction ? 'Flask server not accessible in production' : undefined
-        };
+        // Better error handling for production
+        if (isProduction) {
+          status.services.flask = {
+            status: 'unavailable',
+            url: flaskUrl,
+            error: 'Cannot connect (local server not accessible from production)',
+            note: 'Flask server runs locally and is not accessible from production environment.'
+          };
+        } else {
+          status.services.flask = {
+            status: 'offline',
+            url: flaskUrl,
+            error: e.message || 'Connection failed',
+            note: 'Make sure the Flask server is running locally'
+          };
+        }
       }
-    } else {
-      // In production with non-local URL, mark as unavailable
-      status.services.flask = {
-        status: 'unavailable',
-        url: flaskUrl,
-        note: 'Flask server check skipped in production (only accessible locally)'
-      };
     }
 
     // 2. Check Ollama API

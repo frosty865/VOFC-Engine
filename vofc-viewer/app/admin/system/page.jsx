@@ -136,6 +136,11 @@ export default function SystemStatusPage() {
           {status.services?.flask?.error && (
             <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-red)', marginTop: 'var(--spacing-xs)' }}>{status.services.flask.error}</p>
           )}
+          {status.services?.flask?.note && (
+            <p style={{ fontSize: 'var(--font-size-xs)', color: status.services.flask.production_note ? 'var(--cisa-blue)' : 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)', fontStyle: status.services.flask.production_note ? 'normal' : 'italic' }}>
+              {status.services.flask.note}
+            </p>
+          )}
           {status.python?.model && status.python.model !== 'unknown' && (
             <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Model: {status.python.model}</p>
           )}
