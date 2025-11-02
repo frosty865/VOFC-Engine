@@ -99,7 +99,19 @@ export default function ReviewSubmissionsPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {submissions.map((submission) => (
+            {submissions.map((submission) => {
+              // Parse submission data once for the entire component
+              const data = submission.data 
+                ? (typeof submission.data === 'string' 
+                    ? JSON.parse(submission.data) 
+                    : submission.data)
+                : {};
+              const vulnerabilities = data.vulnerabilities || [];
+              const ofcs = data.ofcs || [];
+              const hasData = vulnerabilities.length > 0 || ofcs.length > 0;
+              const needsDataLoad = !hasData && (data.vulnerabilities_count > 0 || data.ofcs_count > 0);
+
+              return (
               <div key={submission.id} className="bg-white rounded-lg shadow p-6">
                 <div className="flex justify-between items-start mb-4">
                   <div>
@@ -112,14 +124,14 @@ export default function ReviewSubmissionsPage() {
                     <p className="text-sm text-gray-500">
                       Type: <span className="font-medium">{submission.type}</span>
                     </p>
-                    {submission.data && typeof submission.data === 'object' && submission.data.document_name && (
+                    {data.document_name && (
                       <p className="text-sm text-gray-500">
-                        Document: <span className="font-medium">{submission.data.document_name}</span>
+                        Document: <span className="font-medium">{data.document_name}</span>
                       </p>
                     )}
                   </div>
                   <div className="flex space-x-2">
-                    {(!vulnerabilities.length && !ofcs.length && data.vulnerabilities_count > 0) && (
+                    {needsDataLoad && (
                       <button
                         onClick={async () => {
                           try {
@@ -161,12 +173,7 @@ export default function ReviewSubmissionsPage() {
                   </div>
                 </div>
 
-                {submission.data && (() => {
-                  const data = typeof submission.data === 'string' 
-                    ? JSON.parse(submission.data) 
-                    : submission.data;
-                  const vulnerabilities = data.vulnerabilities || [];
-                  const ofcs = data.ofcs || [];
+                {submission.data && (
                   
                   return (
                     <div className="mt-4 space-y-4">
@@ -243,10 +250,10 @@ export default function ReviewSubmissionsPage() {
                         </pre>
                       </details>
                     </div>
-                  );
-                })()}
+                  )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
