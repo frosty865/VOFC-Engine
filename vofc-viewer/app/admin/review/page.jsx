@@ -174,8 +174,6 @@ export default function ReviewSubmissionsPage() {
                 </div>
 
                 {submission.data && (
-                  
-                  return (
                     <div className="mt-4 space-y-4">
                       {/* Summary */}
                       <div className="p-4 bg-blue-50 rounded-lg">
