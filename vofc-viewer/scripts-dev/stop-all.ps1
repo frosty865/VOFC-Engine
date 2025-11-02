@@ -30,19 +30,22 @@ if ($flaskProcesses) {
     Write-Host "No Flask servers found running" -ForegroundColor Gray
 }
 
-# Stop file watchers (Node.js processes)
-# We'll stop all node processes that might be the watcher
-$watcherProcesses = Get-Process node -ErrorAction SilentlyContinue
+# Stop service monitor and all monitored services (Node.js processes)
+$nodeProcesses = Get-Process node -ErrorAction SilentlyContinue
 
-if ($watcherProcesses) {
-    Write-Host "Stopping file watchers..." -ForegroundColor Yellow
-    foreach ($proc in $watcherProcesses) {
-        Write-Host "  Stopping PID: $($proc.Id)" -ForegroundColor Gray
-        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+if ($nodeProcesses) {
+    Write-Host "Stopping service monitor and monitored services..." -ForegroundColor Yellow
+    foreach ($proc in $nodeProcesses) {
+        # Check if it's the service monitor or file watcher
+        $commandLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.Id)").CommandLine
+        if ($commandLine -and ($commandLine -like '*service-monitor*' -or $commandLine -like '*file-watcher*')) {
+            Write-Host "  Stopping PID: $($proc.Id) ($($proc.ProcessName))" -ForegroundColor Gray
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        }
     }
     Write-Host "  Done." -ForegroundColor Green
 } else {
-    Write-Host "No file watchers found running" -ForegroundColor Gray
+    Write-Host "No service monitor or file watcher found running" -ForegroundColor Gray
 }
 
 
