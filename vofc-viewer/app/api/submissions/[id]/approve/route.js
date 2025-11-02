@@ -182,9 +182,7 @@ export async function POST(request, { params }) {
             so_what: v.so_what || null,
             sector: v.sector || null,
             subsector: v.subsector || null,
-            discipline: v.discipline || null,
-            category: v.category || 'General',
-            severity: v.severity || 'Unspecified'
+            discipline: v.discipline || null
           }));
 
           const { error: vulnErr } = await supabase
