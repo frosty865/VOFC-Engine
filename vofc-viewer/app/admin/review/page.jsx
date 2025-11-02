@@ -119,6 +119,30 @@ export default function ReviewSubmissionsPage() {
                     )}
                   </div>
                   <div className="flex space-x-2">
+                    {(!vulnerabilities.length && !ofcs.length && data.vulnerabilities_count > 0) && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await fetchWithAuth(`/api/admin/submissions/${submission.id}/update-data`, {
+                              method: 'POST'
+                            });
+                            if (res.ok) {
+                              alert('Submission data loaded from JSON file successfully!');
+                              loadSubmissions();
+                            } else {
+                              const error = await res.json();
+                              alert('Error: ' + (error.error || 'Failed to load data'));
+                            }
+                          } catch (e) {
+                            alert('Error: ' + e.message);
+                          }
+                        }}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm"
+                        title="Load full VOFC data from JSON file"
+                      >
+                        Load Data
+                      </button>
+                    )}
                     <button
                       onClick={() => handleApprove(submission.id)}
                       className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
