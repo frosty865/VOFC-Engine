@@ -101,15 +101,22 @@ export default function ReviewSubmissionsPage() {
           <div className="space-y-4">
             {submissions.map((submission) => {
               // Parse submission data once for the entire component
-              const data = submission.data 
-                ? (typeof submission.data === 'string' 
+              let data = {};
+              try {
+                if (submission.data) {
+                  data = typeof submission.data === 'string' 
                     ? JSON.parse(submission.data) 
-                    : submission.data)
-                : {};
-              const vulnerabilities = data.vulnerabilities || [];
-              const ofcs = data.ofcs || [];
+                    : submission.data;
+                }
+              } catch (parseError) {
+                console.error('Error parsing submission data:', parseError, submission.id);
+                data = {};
+              }
+              
+              const vulnerabilities = Array.isArray(data.vulnerabilities) ? data.vulnerabilities : [];
+              const ofcs = Array.isArray(data.ofcs) ? data.ofcs : [];
               const hasData = vulnerabilities.length > 0 || ofcs.length > 0;
-              const needsDataLoad = !hasData && (data.vulnerabilities_count > 0 || data.ofcs_count > 0);
+              const needsDataLoad = !hasData && ((data.vulnerabilities_count > 0) || (data.ofcs_count > 0));
 
               return (
               <div key={submission.id} className="bg-white rounded-lg shadow p-6">
