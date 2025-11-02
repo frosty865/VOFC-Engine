@@ -266,9 +266,9 @@ export default function ReviewSubmissionsPage() {
                             }
                           }}
                           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm"
-                          title="Load full VOFC data from JSON file"
+                          title="This submission was created before we started storing full data. Click to load from JSON file."
                         >
-                          📥 Load Data
+                          📥 Load Data (Legacy)
                         </button>
                       )}
                       <button
