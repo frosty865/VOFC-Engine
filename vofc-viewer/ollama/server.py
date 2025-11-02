@@ -630,6 +630,9 @@ def process_file_with_heuristic_pipeline(filepath, filename):
         cmd = [sys.executable, pipeline_script,
                '--submission-id', submission_id,
                '--text-file', text_file]
+        # Add PDF path if original file was a PDF (for citation extraction)
+        if file_ext == '.pdf':
+            cmd.extend(['--pdf-path', filepath])
         # Removed --dry-run to enable Supabase writes (Step 4: Update approval queue)
         print(f"   Command: {' '.join(cmd)}")
         
@@ -791,9 +794,52 @@ def process_files():
                     t.write(text)
                 print(f"Extracted text saved to {extracted_path}")
 
-                # Step 2: Run VOFC Engine on extracted text
+                # Step 2: Run VOFC Engine with citation extraction
                 print(f"Analyzing extracted text for {filename} ...")
-                vofc_result = process_text_with_vofc_engine(text)
+                
+                # Import process_submission instead of just process_text_with_vofc_engine
+                # to get citation extraction
+                try:
+                    from heuristic_pipeline import process_submission
+                except ImportError:
+                    try:
+                        from pipeline.heuristic_pipeline import process_submission
+                    except ImportError:
+                        # Fallback to old method if import fails
+                        vofc_result = process_text_with_vofc_engine(text)
+                        # Add empty sources
+                        if 'sources' not in vofc_result:
+                            vofc_result['sources'] = []
+                    else:
+                        # Use process_submission for citation extraction
+                        submission_id = str(uuid.uuid4())
+                        result = process_submission(
+                            submission_id=submission_id,
+                            document_text=text,
+                            pdf_path=filepath,  # Pass PDF path for metadata extraction
+                            dry_run=True  # Don't write to DB, just get the data
+                        )
+                        vofc_result = {
+                            'vulnerabilities': result.get('vulnerabilities', []),
+                            'ofcs': result.get('ofcs', []),
+                            'sources': result.get('sources', []),
+                            'links': result.get('links', {})
+                        }
+                else:
+                    # Use process_submission for citation extraction
+                    submission_id = str(uuid.uuid4())
+                    result = process_submission(
+                        submission_id=submission_id,
+                        document_text=text,
+                        pdf_path=filepath,  # Pass PDF path for metadata extraction
+                        dry_run=True  # Don't write to DB, just get the data
+                    )
+                    vofc_result = {
+                        'vulnerabilities': result.get('vulnerabilities', []),
+                        'ofcs': result.get('ofcs', []),
+                        'sources': result.get('sources', []),
+                        'links': result.get('links', {})
+                    }
 
                 # Step 3: Save JSON output to library
                 json_filename = f"{file_basename}.json"
@@ -910,14 +956,14 @@ def process_extracted_text():
             sys.path.insert(0, pipeline_path)
         
         try:
-            from heuristic_pipeline import process_text_with_vofc_engine
+            from heuristic_pipeline import process_submission
         except ImportError:
             try:
-                from pipeline.heuristic_pipeline import process_text_with_vofc_engine
+                from pipeline.heuristic_pipeline import process_submission
             except ImportError:
                 return jsonify({
                     "success": False,
-                    "error": "Failed to import process_text_with_vofc_engine. Check pipeline path.",
+                    "error": "Failed to import process_submission. Check pipeline path.",
                     "processed": 0
                 }), 500
 
@@ -930,8 +976,31 @@ def process_extracted_text():
                 with open(path, "r", encoding="utf-8") as f:
                     text = f.read()
 
-                # Process with VOFC engine
-                vofc_result = process_text_with_vofc_engine(text)
+                # Try to find original PDF for citation extraction
+                pdf_name = fname.replace('_temp.txt', '.pdf').replace('.txt', '.pdf')
+                pdf_path = None
+                # Look in library first, then incoming
+                for folder in [LIBRARY_DIR, UPLOAD_DIR]:
+                    potential_pdf = os.path.join(folder, pdf_name)
+                    if os.path.exists(potential_pdf):
+                        pdf_path = potential_pdf
+                        print(f"   Found original PDF for citation extraction: {pdf_path}")
+                        break
+
+                # Process with VOFC engine and citation extraction
+                submission_id = str(uuid.uuid4())
+                result = process_submission(
+                    submission_id=submission_id,
+                    document_text=text,
+                    pdf_path=pdf_path,  # Pass PDF path if found for metadata extraction
+                    dry_run=True  # Don't write to DB, just get the data
+                )
+                vofc_result = {
+                    'vulnerabilities': result.get('vulnerabilities', []),
+                    'ofcs': result.get('ofcs', []),
+                    'sources': result.get('sources', []),
+                    'links': result.get('links', {})
+                }
 
                 # Save JSON output to library
                 json_filename = fname.replace("_temp.txt", ".json")
