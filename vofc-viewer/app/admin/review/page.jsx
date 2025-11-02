@@ -478,11 +478,54 @@ export default function ReviewSubmissionsPage() {
                                         </span>
                                       )}
                                     </div>
+                                    {/* Question */}
+                                    {vuln.question && (
+                                      <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                        <div className="text-xs font-semibold text-blue-700 mb-1 uppercase tracking-wide">Question</div>
+                                        <p className="text-sm font-medium text-blue-900">{vuln.question}</p>
+                                      </div>
+                                    )}
                                     <h5 className="text-base font-bold text-gray-900 mt-2">
                                       {vuln.title || vuln.vulnerability || 'Untitled Vulnerability'}
                                     </h5>
-                                    {vuln.description && (
+                                    {/* Structured What and So What */}
+                                    {(vuln.what || vuln.so_what) ? (
+                                      <div className="mt-3 space-y-2">
+                                        {vuln.what && (
+                                          <div className="p-2 bg-yellow-50 border border-yellow-200 rounded">
+                                            <div className="text-xs font-semibold text-yellow-800 mb-1">WHAT:</div>
+                                            <p className="text-sm text-gray-700">{vuln.what}</p>
+                                          </div>
+                                        )}
+                                        {vuln.so_what && (
+                                          <div className="p-2 bg-orange-50 border border-orange-200 rounded">
+                                            <div className="text-xs font-semibold text-orange-800 mb-1">SO WHAT:</div>
+                                            <p className="text-sm text-gray-700">{vuln.so_what}</p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : vuln.description ? (
                                       <p className="text-sm text-gray-600 mt-2">{vuln.description}</p>
+                                    ) : null}
+                                    {/* Sector, Subsector, Discipline metadata */}
+                                    {(vuln.sector || vuln.subsector || vuln.discipline) && (
+                                      <div className="mt-2 flex flex-wrap gap-2">
+                                        {vuln.sector && (
+                                          <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs">
+                                            Sector: {vuln.sector}
+                                          </span>
+                                        )}
+                                        {vuln.subsector && (
+                                          <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded text-xs">
+                                            Subsector: {vuln.subsector}
+                                          </span>
+                                        )}
+                                        {vuln.discipline && (
+                                          <span className="px-2 py-1 bg-teal-100 text-teal-800 rounded text-xs">
+                                            Discipline: {vuln.discipline}
+                                          </span>
+                                        )}
+                                      </div>
                                     )}
                                   </div>
                                   <div className="flex items-center gap-2">
