@@ -175,9 +175,15 @@ export async function POST(request, { params }) {
         if (parsed.vulnerabilities && parsed.vulnerabilities.length > 0) {
           const vulnPayload = parsed.vulnerabilities.map(v => ({
             submission_id: submissionId,
-            title: v.title,
-            description: v.description,
-            category: v.category,
+            title: v.title || v.vulnerability,
+            description: v.description || '',
+            question: v.question || null,
+            what: v.what || null,
+            so_what: v.so_what || null,
+            sector: v.sector || null,
+            subsector: v.subsector || null,
+            discipline: v.discipline || null,
+            category: v.category || 'General',
             severity: v.severity || 'Unspecified'
           }));
 
