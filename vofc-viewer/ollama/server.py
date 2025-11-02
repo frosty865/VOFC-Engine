@@ -353,6 +353,48 @@ def move_file():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/files/read', methods=['GET'])
+def read_file():
+    """Read a file from a specific folder."""
+    try:
+        folder = request.args.get('folder', 'library')  # processed, library, errors, extracted_text
+        filename = request.args.get('filename')
+        
+        if not filename:
+            return jsonify({"error": "filename is required"}), 400
+        
+        folder_map = {
+            'processed': PROCESSED_DIR,
+            'library': LIBRARY_DIR,
+            'errors': ERRORS_DIR,
+            'extracted_text': EXTRACTED_TEXT_DIR,
+            'incoming': UPLOAD_DIR
+        }
+        
+        if folder not in folder_map:
+            return jsonify({"error": "Invalid folder name"}), 400
+        
+        file_path = os.path.join(folder_map[folder], filename)
+        
+        if not os.path.exists(file_path):
+            return jsonify({"error": "File not found", "path": file_path}), 404
+        
+        # Read file content
+        with open(file_path, 'r', encoding='utf-8') as f:
+            if filename.endswith('.json'):
+                # Parse JSON files
+                content = json.load(f)
+                return jsonify(content)
+            else:
+                # Return text files as-is
+                content = f.read()
+                return jsonify({"content": content, "filename": filename, "folder": folder})
+    
+    except json.JSONDecodeError as e:
+        return jsonify({"error": f"Invalid JSON: {str(e)}"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/files/write', methods=['POST'])
 def write_file():
     """Write a file to a specific folder."""
