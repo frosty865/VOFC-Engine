@@ -191,8 +191,7 @@ export async function GET(request) {
       };
     }
 
-    // 2. Check Ollama API
-    const ollamaApiUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
+    // 2. Check Ollama API (ollamaApiUrl already declared above)
     try {
       const ollamaResponse = await fetch(`${ollamaApiUrl}/api/tags`, {
         signal: AbortSignal.timeout(5000)
