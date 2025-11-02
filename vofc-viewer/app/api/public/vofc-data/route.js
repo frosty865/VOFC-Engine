@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-client.js';
 
-export async function GET() {
+export async function GET(request) {
   try {
-    console.log('📊 Fetching public VOFC data...');
+    const { searchParams } = new URL(request.url);
+    const sector = searchParams.get('sector');
+    const subsector = searchParams.get('subsector');
+    const discipline = searchParams.get('discipline');
+    
+    console.log('📊 Fetching public VOFC data...', { sector, subsector, discipline });
     
     if (!supabaseAdmin) {
       return NextResponse.json({
@@ -12,30 +17,67 @@ export async function GET() {
       }, { status: 500 });
     }
 
-    // Get public data using admin client (bypasses RLS)
-    const [vulnerabilitiesResult, ofcsResult] = await Promise.all([
+    // Build query for vulnerabilities with filters
+    let vulnerabilitiesQuery = supabaseAdmin
+      .from('submission_vulnerabilities')
+      .select('id, vulnerability_text, question, what, so_what, sector, subsector, discipline, created_at')
+      .order('created_at', { ascending: false });
+
+    // Apply filters
+    if (sector) {
+      vulnerabilitiesQuery = vulnerabilitiesQuery.eq('sector', sector);
+    }
+    if (subsector) {
+      vulnerabilitiesQuery = vulnerabilitiesQuery.eq('subsector', subsector);
+    }
+    if (discipline) {
+      vulnerabilitiesQuery = vulnerabilitiesQuery.eq('discipline', discipline);
+    }
+
+    // Get filter options (sectors, subsectors, disciplines)
+    const [vulnerabilitiesResult, sectorsResult, subsectorsResult, disciplinesResult] = await Promise.all([
+      vulnerabilitiesQuery.limit(1000),
       supabaseAdmin
-        .from('vulnerabilities')
-        .select('id, vulnerability, discipline, source')
-        .limit(100),
+        .from('sectors')
+        .select('id, name')
+        .order('name'),
       supabaseAdmin
-        .from('options_for_consideration')
-        .select('id, option_text, discipline, source')
-        .limit(100)
+        .from('subsectors')
+        .select('id, name, sector_id')
+        .order('name'),
+      supabaseAdmin
+        .from('submission_vulnerabilities')
+        .select('discipline')
+        .not('discipline', 'is', null)
+        .order('discipline')
     ]);
 
     const vulnerabilities = vulnerabilitiesResult.data || [];
-    const ofcs = ofcsResult.data || [];
+    const sectors = sectorsResult.data || [];
+    const subsectors = subsectorsResult.data || [];
+    
+    // Get unique disciplines
+    const uniqueDisciplines = [...new Set((disciplinesResult.data || []).map(d => d.discipline).filter(Boolean))].sort();
 
-    console.log(`📈 Found ${vulnerabilities.length} vulnerabilities and ${ofcs.length} OFCs`);
+    // Get distinct sectors and subsectors from vulnerabilities table
+    const distinctSectors = [...new Set(vulnerabilities.map(v => v.sector).filter(Boolean))].sort();
+    const distinctSubsectors = [...new Set(vulnerabilities.map(v => v.subsector).filter(Boolean))].sort();
+
+    console.log(`📈 Found ${vulnerabilities.length} vulnerabilities, ${sectors.length} sectors, ${subsectors.length} subsectors, ${uniqueDisciplines.length} disciplines`);
 
     return NextResponse.json({
       success: true,
       vulnerabilities,
-      options_for_consideration: ofcs,
+      filters: {
+        sectors: distinctSectors,
+        subsectors: distinctSubsectors,
+        disciplines: uniqueDisciplines
+      },
       stats: {
         vulnerability_count: vulnerabilities.length,
-        ofc_count: ofcs.length
+        sector_count: distinctSectors.length,
+        subsector_count: distinctSubsectors.length,
+        discipline_count: uniqueDisciplines.length
       }
     });
 
@@ -45,10 +87,16 @@ export async function GET() {
       success: false,
       error: 'Failed to fetch VOFC data',
       vulnerabilities: [],
-      options_for_consideration: [],
+      filters: {
+        sectors: [],
+        subsectors: [],
+        disciplines: []
+      },
       stats: {
         vulnerability_count: 0,
-        ofc_count: 0
+        sector_count: 0,
+        subsector_count: 0,
+        discipline_count: 0
       }
     });
   }
