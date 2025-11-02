@@ -140,34 +140,65 @@ export async function PUT(request) {
   if (error) return authErrorResponse(error);
   try {
     const body = await request.json();
-    const { user_id, is_active, password, role, first_name, last_name } = body;
+    const { user_id, is_active, password, role, first_name, last_name, username, organization, agency } = body;
+    
     if (!user_id) {
       return NextResponse.json(
         { success: false, error: 'User ID is required' },
         { status: 400 }
       );
     }
+    
     // 1) Update password in auth if provided
-    if (password) {
+    if (password && password.trim()) {
       const { error: pwErr } = await supabaseAdmin.auth.admin.updateUserById(user_id, { password });
-      if (pwErr) throw pwErr;
+      if (pwErr) {
+        console.error('Password update error:', pwErr);
+        throw pwErr;
+      }
     }
-    // 2) Update profile
-    const profUpdate = {};
+    
+    // 2) Update user_metadata if role changed
+    if (role) {
+      const { data: currentUser } = await supabaseAdmin.auth.admin.getUserById(user_id);
+      if (currentUser?.user) {
+        const { error: metaErr } = await supabaseAdmin.auth.admin.updateUserById(user_id, {
+          user_metadata: {
+            ...currentUser.user.user_metadata,
+            role: role
+          }
+        });
+        if (metaErr) {
+          console.warn('Metadata update error (non-fatal):', metaErr);
+        }
+      }
+    }
+    
+    // 3) Update profile
+    const profUpdate = {
+      updated_at: new Date().toISOString()
+    };
+    
     if (typeof is_active !== 'undefined') profUpdate.is_active = is_active;
     if (role) profUpdate.role = role;
-    if (first_name) profUpdate.first_name = first_name;
-    if (last_name) profUpdate.last_name = last_name;
+    if (first_name !== undefined) profUpdate.first_name = first_name || null;
+    if (last_name !== undefined) profUpdate.last_name = last_name || null;
+    if (organization) profUpdate.organization = organization;
+    if (agency) profUpdate.organization = agency; // agency is alias for organization
+    if (username) profUpdate.username = username;
 
-    if (Object.keys(profUpdate).length > 0) {
+    if (Object.keys(profUpdate).length > 1) { // More than just updated_at
       const { error: profErr } = await supabaseAdmin
         .from('user_profiles')
         .update(profUpdate)
         .eq('user_id', user_id);
-      if (profErr) throw profErr;
+      if (profErr) {
+        console.error('Profile update error:', profErr);
+        throw profErr;
+      }
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, message: 'User updated successfully' });
   } catch (error) {
     console.error('Error updating user:', error);
     return NextResponse.json(

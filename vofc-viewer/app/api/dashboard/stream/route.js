@@ -110,11 +110,40 @@ async function runLiveMode(send) {
           send("✅ All systems operational", "success");
         }
         
-        // Check for new activity every 60 seconds
-        if (heartbeatCount % 60 === 0) {
-          send("🔍 Checking for new processing activity...", "info");
-          send("📭 No active jobs - Ready for new submissions", "info");
+    // Check for new activity every 60 seconds
+    if (heartbeatCount % 60 === 0) {
+      send("🔍 Checking for new processing activity...", "info");
+      
+      // Check local Flask server status
+      const localOllamaUrl = process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
+      try {
+        const healthResponse = await fetch(`${localOllamaUrl}/health`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(5000)
+        });
+        
+        if (healthResponse.ok) {
+          const health = await healthResponse.json();
+          const incomingCount = health.directories?.incoming?.file_count || 0;
+          const libraryCount = health.directories?.library?.file_count || 0;
+          const errorsCount = health.directories?.errors?.file_count || 0;
+          
+          send(`📊 Processing Status:`, "info");
+          send(`   📥 Incoming: ${incomingCount} file(s)`, "info");
+          send(`   📚 Library: ${libraryCount} file(s)`, "info");
+          send(`   ❌ Errors: ${errorsCount} file(s)`, errorsCount > 0 ? "warning" : "info");
+          
+          if (incomingCount > 0) {
+            send(`⚠️ ${incomingCount} file(s) waiting to be processed`, "warning");
+          } else {
+            send("✅ No files waiting - Ready for new submissions", "success");
+          }
         }
+      } catch (healthError) {
+        send(`⚠️ Could not check Flask server status: ${healthError.message}`, "warning");
+        send(`💡 Make sure Flask server is running at ${localOllamaUrl}`, "tip");
+      }
+    }
       }, 1000);
       
       // Clean up interval when promise resolves
@@ -142,16 +171,35 @@ async function runOllamaOnlyMode(send) {
   send("🧠 OLLAMA-ONLY MODE: Direct model monitoring", "system");
   
   try {
-    // Check Ollama configuration
-    const ollamaUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
-    if (!ollamaUrl || ollamaUrl === 'https://ollama.frostech.site') {
-      send(`⚠️ Ollama using default URL: ${ollamaUrl}`, "warning");
-      send("💡 Set OLLAMA_URL in .env.local for custom configuration", "tip");
-    } else {
-      send(`✅ Ollama configured: ${ollamaUrl}`, "success");
+    // Check local Flask server first (for file processing)
+    const localOllamaUrl = process.env.OLLAMA_LOCAL_URL || 'http://127.0.0.1:5000';
+    send(`🔗 Checking local Flask server at: ${localOllamaUrl}`, "info");
+    
+    try {
+      const healthResponse = await fetch(`${localOllamaUrl}/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000)
+      });
+      
+      if (healthResponse.ok) {
+        const health = await healthResponse.json();
+        send("✅ Local Flask server is running", "success");
+        send(`📊 Status: ${health.status}`, "info");
+        send(`🤖 Model: ${health.server?.model || 'unknown'}`, "info");
+        
+        const incomingCount = health.directories?.incoming?.file_count || 0;
+        const libraryCount = health.directories?.library?.file_count || 0;
+        send(`📥 Incoming files: ${incomingCount}`, "info");
+        send(`📚 Processed files: ${libraryCount}`, "info");
+      }
+    } catch (localError) {
+      send(`⚠️ Local Flask server not responding: ${localError.message}`, "warning");
+      send(`💡 Make sure Flask server is running: python ollama/server.py`, "tip");
     }
     
-    send(`🔗 Connecting to Ollama at: ${ollamaUrl}`, "info");
+    // Also check Ollama API server (for model calls)
+    const ollamaUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
+    send(`🔗 Connecting to Ollama API at: ${ollamaUrl}`, "info");
     
     // Test Ollama connection
     try {

@@ -61,6 +61,9 @@ const PROCESS_INTERVAL_MS = 30000; // Also check every 30 seconds for any missed
 // Track files being processed to avoid duplicates
 const processingFiles = new Set();
 const processedFiles = new Set();
+let isProcessing = false; // Prevent concurrent processing attempts
+let processingStartTime = null; // Track when processing started
+const MAX_PROCESSING_TIME = 3600000; // Auto-reset after 1 hour (safety timeout)
 
 // Colors for console output
 const colors = {
@@ -122,7 +125,26 @@ async function processFilesInFolder() {
     }
 
     if (validFiles.length > 0) {
+      // Check if processing flag is stuck (timeout protection)
+      if (isProcessing && processingStartTime) {
+        const elapsed = Date.now() - processingStartTime;
+        if (elapsed > MAX_PROCESSING_TIME) {
+          log(`⚠️ Processing flag stuck for ${Math.round(elapsed / 1000 / 60)} minutes, resetting...`, 'yellow');
+          isProcessing = false;
+          processingStartTime = null;
+        } else {
+          log(`⏳ Processing already in progress (${Math.round(elapsed / 1000)}s), skipping this check`, 'yellow');
+          return;
+        }
+      } else if (isProcessing) {
+        // Flag is set but no start time (orphaned state), reset it
+        log(`⚠️ Processing flag in orphaned state, resetting...`, 'yellow');
+        isProcessing = false;
+      }
+      
       log(`📄 Found ${validFiles.length} file(s) ready for processing`, 'cyan');
+      isProcessing = true;
+      processingStartTime = Date.now();
       
       // Call Ollama server directly to process files
       try {
@@ -132,7 +154,7 @@ async function processFilesInFolder() {
           headers: {
             'Content-Type': 'application/json'
           },
-          signal: AbortSignal.timeout(60000) // 60 second timeout
+          signal: AbortSignal.timeout(1800000) // 30 minute timeout (LLM processing can take much longer for large documents)
         });
 
         if (response.ok) {
@@ -153,12 +175,17 @@ async function processFilesInFolder() {
         }
       } catch (error) {
         if (error.name === 'AbortError') {
-          log(`❌ Processing request timed out after 60 seconds`, 'red');
-        } else if (error.code === 'ECONNREFUSED' || error.message.includes('fetch failed')) {
+          log(`❌ Processing request timed out after 30 minutes`, 'red');
+          log(`   Large documents with LLM processing can take a long time.`, 'yellow');
+          log(`   You may need to process files manually or increase the timeout.`, 'yellow');
+        } else if (error.code === 'ECONNREFUSED' || error.message.includes('fetch failed') || error.message.includes('Cannot connect')) {
           log(`❌ Cannot connect to Ollama server at ${PROCESS_ENDPOINT}`, 'red');
           log(`   Make sure your Ollama server is running!`, 'yellow');
           log(`   Expected URL: ${PROCESSING_URL}`, 'yellow');
           log(`   Try running: python ollama/server.py (in vofc-viewer directory)`, 'yellow');
+          // Immediately reset flag on connection errors
+          isProcessing = false;
+          processingStartTime = null;
         } else {
           log(`❌ Error processing files: ${error.message}`, 'red');
           log(`   Endpoint: ${PROCESS_ENDPOINT}`, 'yellow');
@@ -166,10 +193,16 @@ async function processFilesInFolder() {
             log(`   Error code: ${error.code}`, 'yellow');
           }
         }
+      } finally {
+        // Always reset processing flag and start time, even on error
+        isProcessing = false;
+        processingStartTime = null;
       }
     }
   } catch (error) {
     log(`❌ Error checking incoming folder: ${error.message}`, 'red');
+    isProcessing = false;
+    processingStartTime = null;
   }
 }
 

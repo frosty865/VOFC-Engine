@@ -77,7 +77,19 @@ export default function UserManagement() {
 
       const result = await response.json();
       if (result.success) {
-        setUsers(result.users || []);
+        // Map API response to match frontend expectations
+        const mappedUsers = (result.users || []).map(user => ({
+          user_id: user.id || user.user_id,
+          username: user.email?.split('@')[0] || user.username || user.email,
+          email: user.email,
+          full_name: user.full_name || user.name || '',
+          role: user.role || 'user',
+          agency: user.agency || user.organization || 'CISA',
+          is_active: user.is_active ?? true,
+          force_password_change: user.force_password_change || false,
+          last_login: user.last_sign_in_at || user.last_login
+        }));
+        setUsers(mappedUsers);
       } else {
         throw new Error(result.error || 'Failed to load users');
       }
@@ -187,36 +199,81 @@ export default function UserManagement() {
   const handleEditUser = (user) => {
     console.log('🔧 Edit user clicked:', user);
     setEditingUser(user);
+    // Split full_name into first_name and last_name if needed
+    const nameParts = (user.full_name || '').trim().split(/\s+/);
+    const first_name = nameParts[0] || '';
+    const last_name = nameParts.slice(1).join(' ') || '';
+    
     setEditFormData({
-      user_id: user.user_id,
-      username: user.username,
-      full_name: user.full_name,
-      role: user.role,
-      agency: user.agency || '',
+      user_id: user.user_id || user.id,
+      username: user.username || user.email?.split('@')[0] || '',
+      full_name: user.full_name || '',
+      first_name: user.first_name || first_name,
+      last_name: user.last_name || last_name,
+      role: user.role || 'user',
+      agency: user.agency || user.organization || '',
       password: '',
       force_password_change: user.force_password_change || false,
-      is_active: user.is_active
+      is_active: user.is_active ?? true
     });
     setShowEditForm(true);
-    console.log('🔧 Edit form should be showing now');
+    console.log('🔧 Edit form opened, form data:', editFormData);
   };
 
   const handleUpdateUser = async (e) => {
     e.preventDefault();
     try {
+      // Split full_name into first_name and last_name for API
+      const nameParts = (editFormData.full_name || '').trim().split(/\s+/);
+      const first_name = editFormData.first_name || nameParts[0] || '';
+      const last_name = editFormData.last_name || nameParts.slice(1).join(' ') || '';
+      
+      // Prepare update payload with fields the API expects
+      const updatePayload = {
+        user_id: editFormData.user_id,
+        role: editFormData.role,
+        is_active: editFormData.is_active,
+        first_name: first_name,
+        last_name: last_name,
+        organization: editFormData.agency || 'CISA'
+      };
+      
+      // Only include password if provided
+      if (editFormData.password && editFormData.password.trim()) {
+        updatePayload.password = editFormData.password;
+      }
+      
+      console.log('📤 Sending update request:', updatePayload);
+      
       const response = await fetchWithAuth('/api/admin/users', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(editFormData),
+        body: JSON.stringify(updatePayload),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
 
       const result = await response.json();
 
       if (result.success) {
         setShowEditForm(false);
         setEditingUser(null);
+        // Reset form data
+        setEditFormData({
+          user_id: '',
+          username: '',
+          full_name: '',
+          role: '',
+          agency: '',
+          password: '',
+          force_password_change: false,
+          is_active: true
+        });
         loadUsers();
         alert('User updated successfully!');
       } else {
@@ -439,7 +496,10 @@ export default function UserManagement() {
               
               <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-800">
-                  <strong>User:</strong> {editingUser.username}
+                  <strong>User ID:</strong> {editingUser.user_id || editingUser.id}
+                </p>
+                <p className="text-sm text-blue-800">
+                  <strong>Email:</strong> {editingUser.email || editingUser.username}@cisa.dhs.gov
                 </p>
                 <p className="text-sm text-blue-600">
                   <strong>Current Role:</strong> {getRoleDisplayName(editingUser.role)}
