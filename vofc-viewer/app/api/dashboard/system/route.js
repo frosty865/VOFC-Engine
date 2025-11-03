@@ -171,23 +171,28 @@ export async function GET(request) {
       }
     };
 
-    // 2. Check Flask Server (Python backend) - Production only
-    
-    // Always check Flask server - production must have it configured and accessible
+    // 2. Check Flask Server (Python backend) - Use proxy route
     try {
-      const flaskResponse = await fetch(`${flaskUrl}/health`, {
-        signal: AbortSignal.timeout(10000), // 10 second timeout for production
+      // Use internal Vercel API route to proxy Flask health check
+      const baseUrl = process.env.VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL}`
+        : process.env.NEXT_PUBLIC_VERCEL_URL || 'http://localhost:3000';
+      
+      const flaskProxyResponse = await fetch(`${baseUrl}/api/proxy/flask/health`, {
+        signal: AbortSignal.timeout(10000),
         headers: {
           'Accept': 'application/json',
         }
       });
       
-        if (flaskResponse.ok) {
-          const health = await flaskResponse.json();
+      if (flaskProxyResponse.ok) {
+        const proxyData = await flaskProxyResponse.json();
+        if (proxyData.success && proxyData.data) {
+          const health = proxyData.data;
           status.services.flask = {
             status: 'online',
-            url: flaskUrl,
-            status_code: flaskResponse.status,
+            url: proxyData.url || flaskUrl,
+            status_code: flaskProxyResponse.status,
             server: health.server,
             directories: health.directories
           };
@@ -237,12 +242,21 @@ export async function GET(request) {
             avg_response_time: 0,
             queue_size: 0
           };
+        } else {
+          status.services.flask = {
+            status: 'error',
+            url: flaskUrl,
+            error: proxyData.error || 'Proxy returned unsuccessful response',
+            note: 'Flask proxy check failed'
+          };
+        }
       } else {
+        const errorData = await flaskProxyResponse.json().catch(() => ({}));
         status.services.flask = {
           status: 'error',
           url: flaskUrl,
-          status_code: flaskResponse.status,
-          error: `HTTP ${flaskResponse.status}`,
+          status_code: flaskProxyResponse.status,
+          error: errorData.error || `HTTP ${flaskProxyResponse.status}`,
           note: 'Flask server responded with an error. Check server logs.'
         };
       }
@@ -253,35 +267,46 @@ export async function GET(request) {
         url: flaskUrl,
         error: e.message || 'Connection failed',
         note: e.message?.includes('fetch failed') 
-          ? `Cannot reach Flask server at ${flaskUrl}. Ensure OLLAMA_SERVER_URL is configured in Vercel environment variables and the Flask server is deployed and running.`
+          ? `Cannot reach Flask server via proxy. Ensure OLLAMA_SERVER_URL is configured in Vercel environment variables and the Flask server is accessible via Cloudflare tunnel.`
           : `Flask server connection failed: ${e.message}. Verify server is running and accessible.`
       };
     }
 
-    // 3. Check Ollama API
+    // 3. Check Ollama API - Use proxy route
     try {
-      const ollamaResponse = await fetch(`${ollamaApiUrl}/api/tags`, {
+      // Use internal Vercel API route to proxy Ollama API check
+      const ollamaProxyResponse = await fetch(`${vercelBaseUrl}/api/proxy/ollama/tags`, {
         signal: AbortSignal.timeout(10000), // 10 second timeout
         headers: {
           'Accept': 'application/json',
         }
       });
       
-      if (ollamaResponse.ok) {
-        const models = await ollamaResponse.json();
-        status.services.ollama = {
-          status: 'online',
-          url: ollamaApiUrl,
-          status_code: ollamaResponse.status,
-          models_count: models.models?.length || 0,
-          models: models.models?.map(m => m.name) || []
-        };
+      if (ollamaProxyResponse.ok) {
+        const proxyData = await ollamaProxyResponse.json();
+        if (proxyData.success && proxyData.data) {
+          const models = proxyData.data;
+          status.services.ollama = {
+            status: 'online',
+            url: proxyData.url || ollamaApiUrl,
+            status_code: ollamaProxyResponse.status,
+            models_count: models.models?.length || 0,
+            models: models.models?.map(m => m.name) || []
+          };
+        } else {
+          status.services.ollama = {
+            status: 'error',
+            url: ollamaApiUrl,
+            error: proxyData.error || 'Proxy returned unsuccessful response'
+          };
+        }
       } else {
+        const errorData = await ollamaProxyResponse.json().catch(() => ({}));
         status.services.ollama = {
           status: 'error',
           url: ollamaApiUrl,
-          status_code: ollamaResponse.status,
-          error: `HTTP ${ollamaResponse.status}`
+          status_code: ollamaProxyResponse.status,
+          error: errorData.error || `HTTP ${ollamaProxyResponse.status}`
         };
       }
     } catch (e) {
