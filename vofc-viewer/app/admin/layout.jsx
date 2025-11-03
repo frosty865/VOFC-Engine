@@ -1,10 +1,15 @@
 'use client'
 
+console.log('[ADMIN LAYOUT] Module loading...')
+
 import RoleGate from '@/components/RoleGate'
 import Link from 'next/link'
 import '../../styles/cisa.css'
 
-export default function AdminLayout({ children }) {
+console.log('[ADMIN LAYOUT] Imports completed')
+
+function AdminLayout({ children }) {
+  console.log('[ADMIN LAYOUT] Component rendering, children:', typeof children)
   return (
     <RoleGate>
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--cisa-gray-lighter)' }}>
@@ -136,5 +141,8 @@ export default function AdminLayout({ children }) {
     </RoleGate>
   )
 }
+
+console.log('[ADMIN LAYOUT] Exporting AdminLayout component...')
+export default AdminLayout
 
 

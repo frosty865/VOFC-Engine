@@ -1,7 +1,7 @@
 'use client';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../app/lib/supabaseClient';
 // Removed localStorage dependencies - now using secure server-side authentication
 import '../styles/cisa.css';
@@ -13,38 +13,7 @@ export default function Navigation({ simple = false }) {
   const [loading, setLoading] = useState(true);
   const [showSubmissionsDropdown, setShowSubmissionsDropdown] = useState(false);
 
-  // CRITICAL DEBUG: Multiple log types to ensure visibility
-  console.error('🔴 NAVIGATION COMPONENT MOUNTED 🔴', { simple, pathname });
-  console.warn('🟡 NAVIGATION COMPONENT MOUNTED 🟡', { simple, pathname });
-  console.log('🟢 NAVIGATION COMPONENT MOUNTED 🟢', { simple, pathname });
-  
-  // Also log to window for debugging
-  if (typeof window !== 'undefined') {
-    window.__navDebug = { mounted: true, simple, pathname, timestamp: Date.now() };
-  }
-
-  useEffect(() => {
-    console.error('🔴 [Navigation] useEffect triggered', { simple, pathname });
-    // Always load user - we need to check auth even on simple pages to show admin menu
-    console.error('🔴 [Navigation] Calling loadUser balance always');
-    loadUser();
-  }, [simple, pathname]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (showSubmissionsDropdown && !event.target.closest('[data-dropdown]')) {
-        setShowSubmissionsDropdown(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showSubmissionsDropdown]);
-
-  const loadUser = async () => {
+  const loadUser = useCallback(async () => {
     console.log('[Navigation] loadUser() STARTED');
     try {
       // Include Supabase access token so /api/auth/verify can validate
@@ -101,7 +70,26 @@ export default function Navigation({ simple = false }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // Always load user - we need to check auth even on simple pages to show admin menu
+    loadUser();
+  }, [loadUser]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showSubmissionsDropdown && !event.target.closest('[data-dropdown]')) {
+        setShowSubmissionsDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSubmissionsDropdown]);
 
   const handleLogout = async () => {
     try {

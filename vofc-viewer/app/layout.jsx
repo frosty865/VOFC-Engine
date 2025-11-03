@@ -16,23 +16,8 @@ export default function RootLayout({ children }) {
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
       </head>
       <body className="antialiased">
-        <script dangerouslySetInnerHTML={{__html: `
-          console.error('🔴🔴🔴 PAGE LOADING - BEFORE REACT 🔴🔴🔴');
-          console.warn('🟡🟡🟡 PAGE LOADING - BEFORE REACT 🟡🟡🟡');
-          console.log('🟢🟢🟢 PAGE LOADING - BEFORE REACT 🟢🟢🟢');
-          window.__pageLoaded = true;
-        `}} />
-        <script dangerouslySetInnerHTML={{__html: `
-          console.error('🔴🔴🔴 ABOUT TO RENDER NAVIGATION 🔴🔴🔴');
-        `}} />
         <div className="min-h-screen" style={{backgroundColor: 'var(--cisa-gray-lighter)'}}>
-          <script dangerouslySetInnerHTML={{__html: `
-            console.error('🔴🔴🔴 RENDERING NAVIGATION NOW 🔴🔴🔴');
-          `}} />
           <Navigation />
-          <script dangerouslySetInnerHTML={{__html: `
-            console.error('🔴🔴🔴 AFTER NAVIGATION RENDER 🔴🔴🔴');
-          `}} />
           <main className="w-full py-8">
             {children}
           </main>

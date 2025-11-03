@@ -1,11 +1,15 @@
 'use client'
 
+console.log('[SYSTEM DASHBOARD] MODULE LOADING - File is being imported/executed')
+
 import { useEffect, useState } from 'react'
 import { fetchWithAuth } from '../../lib/fetchWithAuth'
 import '../../../styles/cisa.css'
 
-export default function SystemStatusPage() {
-  console.log('[SYSTEM DASHBOARD] Component mounting/rendering...')
+console.log('[SYSTEM DASHBOARD] Imports completed, defining component...')
+
+function SystemStatusPage() {
+  console.log('[SYSTEM DASHBOARD] Component function called - rendering...')
   
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -623,3 +627,6 @@ export default function SystemStatusPage() {
     </div>
   )
 }
+
+console.log('[SYSTEM DASHBOARD] Exporting SystemStatusPage component...')
+export default SystemStatusPage

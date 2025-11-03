@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser } from './lib/auth';
 import { fetchVulnerabilities } from './lib/fetchVOFC';
@@ -7,20 +7,25 @@ import { fetchVulnerabilities } from './lib/fetchVOFC';
 export default function VOFCViewer() {
   const router = useRouter();
   const [authenticated, setAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [vulnerabilities, setVulnerabilities] = useState([]);
   const [filteredVulnerabilities, setFilteredVulnerabilities] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDiscipline, setSelectedDiscipline] = useState('');
+  const [selectedSection, setSelectedSection] = useState('');
+  const [selectedSubsection, setSelectedSubsection] = useState('');
   const [disciplines, setDisciplines] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [subsections, setSubsections] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedVulnerability, setSelectedVulnerability] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [mounted, setMounted] = useState(false);
 
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
+      setLoading(true);
       const user = await getCurrentUser();
       if (user) {
         setAuthenticated(true);
@@ -34,11 +39,14 @@ export default function VOFCViewer() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [router]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    if (!authenticated) return;
+    
     try {
       setDataLoading(true);
+      setError('');
       
       // Fetch vulnerabilities with their OFCs and sources
       const vulnsData = await fetchVulnerabilities();
@@ -50,29 +58,69 @@ export default function VOFCViewer() {
       const uniqueDisciplines = [...new Set(vulnsData?.map(v => v.discipline).filter(Boolean) || [])];
       setDisciplines(uniqueDisciplines.sort());
       
+      // Extract unique sections
+      const uniqueSections = [...new Set(vulnsData?.map(v => v.section).filter(Boolean) || [])];
+      setSections(uniqueSections.sort());
+      
+      // Extract unique subsections
+      const uniqueSubsections = [...new Set(vulnsData?.map(v => v.subsection).filter(Boolean) || [])];
+      setSubsections(uniqueSubsections.sort());
+      
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       setError('Failed to load vulnerability data. Please try again.');
+      setVulnerabilities([]);
+      setFilteredVulnerabilities([]);
     } finally {
       setDataLoading(false);
     }
-  };
+  }, [authenticated]);
 
-  const getUniqueDisciplines = () => {
+  const getUniqueDisciplines = useCallback(() => {
     const disciplines = vulnerabilities.map(v => v.discipline).filter(Boolean);
     return [...new Set(disciplines)].sort();
-  };
+  }, [vulnerabilities]);
+
+  const getUniqueSections = useCallback(() => {
+    const sections = vulnerabilities.map(v => v.section).filter(Boolean);
+    return [...new Set(sections)].sort();
+  }, [vulnerabilities]);
+
+  const getUniqueSubsections = useCallback(() => {
+    // Filter subsections based on selected section if one is chosen
+    let filtered = vulnerabilities;
+    if (selectedSection) {
+      filtered = filtered.filter(v => v.section === selectedSection);
+    }
+    const subsections = filtered.map(v => v.subsection).filter(Boolean);
+    return [...new Set(subsections)].sort();
+  }, [vulnerabilities, selectedSection]);
+
+  // Reset subsection when section changes (unless it's still valid)
+  useEffect(() => {
+    if (selectedSection && selectedSubsection) {
+      // Check if the selected subsection is still valid for the current section
+      const validSubsections = vulnerabilities
+        .filter(v => v.section === selectedSection)
+        .map(v => v.subsection)
+        .filter(Boolean);
+      
+      if (!validSubsections.includes(selectedSubsection)) {
+        setSelectedSubsection('');
+      }
+    }
+  }, [selectedSection, vulnerabilities, selectedSubsection]);
 
   useEffect(() => {
     setMounted(true);
     checkAuth();
-  }, []);
+  }, [checkAuth]);
 
   useEffect(() => {
     if (authenticated) {
       loadData();
     }
-  }, [authenticated]);
+  }, [authenticated, loadData]);
 
   useEffect(() => {
     let filtered = vulnerabilities;
@@ -88,9 +136,17 @@ export default function VOFCViewer() {
       filtered = filtered.filter(v => v.discipline === selectedDiscipline);
     }
 
+    if (selectedSection) {
+      filtered = filtered.filter(v => v.section === selectedSection);
+    }
+
+    if (selectedSubsection) {
+      filtered = filtered.filter(v => v.subsection === selectedSubsection);
+    }
 
     setFilteredVulnerabilities(filtered);
-  }, [vulnerabilities, searchTerm, selectedDiscipline]);
+  }, [vulnerabilities, searchTerm, selectedDiscipline, selectedSection, selectedSubsection]);
+
 
   if (!mounted) {
     return (
@@ -164,7 +220,7 @@ export default function VOFCViewer() {
             <h2 className="card-title">Filters</h2>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             {/* Search */}
             <div className="form-group">
               <label className="form-label" htmlFor="search-input">
@@ -200,6 +256,51 @@ export default function VOFCViewer() {
               </select>
             </div>
 
+            {/* Section */}
+            <div className="form-group">
+              <label className="form-label" htmlFor="section-select">
+                Section
+              </label>
+              <select
+                id="section-select"
+                value={selectedSection}
+                onChange={(e) => setSelectedSection(e.target.value)}
+                className="form-select"
+              >
+                <option value="">All Sections</option>
+                {getUniqueSections().map(section => (
+                  <option key={section} value={section}>
+                    {section}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Subsection */}
+            <div className="form-group">
+              <label className="form-label" htmlFor="subsection-select">
+                Subsection
+              </label>
+              <select
+                id="subsection-select"
+                value={selectedSubsection}
+                onChange={(e) => setSelectedSubsection(e.target.value)}
+                className="form-select"
+              >
+                <option value="">All Subsections</option>
+                {getUniqueSubsections().map(subsection => (
+                  <option key={subsection} value={subsection}>
+                    {subsection}
+                  </option>
+                ))}
+              </select>
+              {selectedSection && (
+                <small className="text-gray-500 text-xs mt-1 block">
+                  Showing subsections for selected section
+                </small>
+              )}
+            </div>
+
             {/* Clear Filters */}
             <div className="form-group">
               <label className="form-label">&nbsp;</label>
@@ -207,6 +308,8 @@ export default function VOFCViewer() {
                 onClick={() => {
                   setSearchTerm('');
                   setSelectedDiscipline('');
+                  setSelectedSection('');
+                  setSelectedSubsection('');
                 }}
                 className="btn btn-secondary w-full"
               >

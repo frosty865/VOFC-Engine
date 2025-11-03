@@ -67,10 +67,12 @@ export default function VOFCProcessingDashboard() {
   };
 
   const getServiceStatus = (service) => {
-    if (!service || !status?.services[service]) return { color: 'gray', text: 'Unknown', icon: '❓' };
+    if (!service || !status?.services || !status.services[service]) {
+      return { color: 'gray', text: 'Unknown', icon: '❓' };
+    }
     
     const svc = status.services[service];
-    const serviceStatus = svc.status || 'unknown';
+    const serviceStatus = svc?.status || 'unknown';
     
     switch (serviceStatus) {
       case 'online':
