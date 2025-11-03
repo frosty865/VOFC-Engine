@@ -10,9 +10,10 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$projectRoot = Split-Path -Parent $scriptDir
-Set-Location $projectRoot
-Set-Location "vofc-viewer"
+# scriptDir is: .../vofc-viewer/scripts-dev
+# So we need to go up one level to get vofc-viewer
+$vofcViewerDir = Split-Path -Parent $scriptDir
+Set-Location $vofcViewerDir
 
 # Check Python
 Write-Host "[1/4] Checking Python installation..." -ForegroundColor Yellow
