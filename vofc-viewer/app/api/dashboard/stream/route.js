@@ -226,13 +226,35 @@ async function runOllamaOnlyMode(send) {
   try {
     // Check Flask server (for file processing)
     const ollamaBaseUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
-    let defaultFlaskUrl = 'https://ollama.frostech.site:5000';
-    try {
-      const url = new URL(ollamaBaseUrl);
-      defaultFlaskUrl = `${url.protocol}//${url.hostname}:5000`;
-    } catch {
-      // If URL parsing fails, use default
+    
+    // Detect if we're in a local development environment
+    const isLocalDev = process.env.NODE_ENV !== 'production' || 
+                       process.env.VERCEL !== '1' ||
+                       process.env.OLLAMA_LOCAL_URL;
+    
+    // Derive Flask server URL - use localhost in local dev, production URL in production
+    let defaultFlaskUrl = isLocalDev 
+      ? 'http://127.0.0.1:5000'  // Local development
+      : 'https://flask.frostech.site';  // Production (Cloudflare tunnel)
+    
+    if (process.env.OLLAMA_URL && isLocalDev) {
+      try {
+        const url = new URL(ollamaBaseUrl);
+        if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+          defaultFlaskUrl = 'http://127.0.0.1:5000';
+        }
+      } catch {}
+    } else if (process.env.OLLAMA_URL && !isLocalDev) {
+      try {
+        const url = new URL(ollamaBaseUrl);
+        if (url.hostname === 'ollama.frostech.site') {
+          defaultFlaskUrl = 'https://flask.frostech.site';
+        } else {
+          defaultFlaskUrl = `${url.protocol}//flask.${url.hostname}`;
+        }
+      } catch {}
     }
+    
     const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || defaultFlaskUrl;
     send(`🔗 Checking Flask server at: ${flaskUrl}`, "info");
     
