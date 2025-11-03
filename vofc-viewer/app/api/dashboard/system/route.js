@@ -167,12 +167,24 @@ export async function GET(request) {
     // Since this is server-side code running on Vercel, we can make external HTTP requests directly
     console.log('[SYSTEM API] Checking Flask server at:', flaskUrl);
     try {
-      const flaskResponse = await fetch(`${flaskUrl}/health`, {
-        signal: AbortSignal.timeout(10000), // 10 second timeout
-        headers: {
-          'Accept': 'application/json',
-        }
-      });
+      // Try /api/health first (more comprehensive), fallback to /health
+      let flaskResponse;
+      try {
+        flaskResponse = await fetch(`${flaskUrl}/api/health`, {
+          signal: AbortSignal.timeout(10000), // 10 second timeout
+          headers: {
+            'Accept': 'application/json',
+          }
+        });
+      } catch (e) {
+        // Fallback to /health if /api/health fails
+        flaskResponse = await fetch(`${flaskUrl}/health`, {
+          signal: AbortSignal.timeout(10000),
+          headers: {
+            'Accept': 'application/json',
+          }
+        });
+      }
       
       console.log('[SYSTEM API] Flask response status:', flaskResponse.status, flaskResponse.ok);
       

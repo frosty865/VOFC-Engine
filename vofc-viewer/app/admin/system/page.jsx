@@ -42,15 +42,11 @@ function SystemStatusPage() {
     }
   }
 
-  // Simple health check using Flask endpoint
+  // Live health check using Next.js API proxy (same as admin dashboard)
   useEffect(() => {
     async function fetchSystemHealth() {
       try {
-        // Get Flask URL from environment or use default
-        const flaskUrl = process.env.NEXT_PUBLIC_OLLAMA_SERVER_URL || 
-                       process.env.NEXT_PUBLIC_OLLAMA_LOCAL_URL || 
-                       'http://127.0.0.1:5000'
-        const res = await fetch(`${flaskUrl}/api/system/health`)
+        const res = await fetch('/api/system/health', { cache: 'no-store' })
         if (res.ok) {
           const data = await res.json()
           setSimpleHealth({
@@ -194,10 +190,10 @@ function SystemStatusPage() {
 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)' }}>
 
-      {/* Simple Health Check Status */}
+      {/* Live Health Status - Single source of truth */}
       <div className="card" style={{ marginBottom: 'var(--spacing-xl)' }}>
         <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-md)' }}>
-          Quick Health Status (Flask Endpoint)
+          System Health Status
         </h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-md)' }}>
           {['flask', 'ollama', 'supabase'].map(key => (
@@ -225,175 +221,88 @@ function SystemStatusPage() {
         </div>
       </div>
 
-      {/* Service Status Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--spacing-lg)' }}>
-        {/* Flask Server */}
+      {/* File Processing Status - Only show if we have valid data */}
+      {status.files && (status.files.incoming > 0 || status.files.library > 0 || status.files.extracted_text > 0 || status.files.errors > 0 || status.processing?.active_jobs > 0) && (
         <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)' }}>
-            <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', margin: 0 }}>Flask Server (Python)</h3>
-            <span style={{
-              width: '12px',
-              height: '12px',
-              borderRadius: '50%',
-              backgroundColor: getStatusColor(status.services?.flask?.status)
-            }}></span>
-          </div>
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginBottom: 'var(--spacing-xs)' }}>
-            Status: <span style={{
-              padding: 'var(--spacing-xs) var(--spacing-sm)',
-              borderRadius: 'var(--border-radius)',
-              fontSize: 'var(--font-size-xs)',
-              fontWeight: 600,
-              ...getStatusBadgeStyle(status.services?.flask?.status)
+          <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-lg)' }}>File Processing Pipeline</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-lg)' }}>
+            <div style={{
+              textAlign: 'center',
+              padding: 'var(--spacing-lg)',
+              backgroundColor: 'rgba(255, 193, 7, 0.1)',
+              borderRadius: 'var(--border-radius-lg)',
+              border: '1px solid rgba(255, 193, 7, 0.3)'
             }}>
-              {status.services?.flask?.status || 'Unknown'}
-            </span>
-          </p>
-          {status.services?.flask?.error && (
-            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-red)', marginTop: 'var(--spacing-xs)' }}>{status.services.flask.error}</p>
-          )}
-          {status.services?.flask?.note && (
-            <p style={{ fontSize: 'var(--font-size-xs)', color: status.services.flask.production_note ? 'var(--cisa-blue)' : 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)', fontStyle: status.services.flask.production_note ? 'normal' : 'italic' }}>
-              {status.services.flask.note}
-            </p>
-          )}
-          {status.python?.model && status.python.model !== 'unknown' && (
-            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Model: {status.python.model}</p>
-          )}
-        </div>
-
-        {/* Ollama API */}
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)' }}>
-            <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', margin: 0 }}>Ollama API</h3>
-            <span style={{
-              width: '12px',
-              height: '12px',
-              borderRadius: '50%',
-              backgroundColor: getStatusColor(status.services?.ollama?.status)
-            }}></span>
-          </div>
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginBottom: 'var(--spacing-xs)' }}>
-            Status: <span style={{
-              padding: 'var(--spacing-xs) var(--spacing-sm)',
-              borderRadius: 'var(--border-radius)',
-              fontSize: 'var(--font-size-xs)',
-              fontWeight: 600,
-              ...getStatusBadgeStyle(status.services?.ollama?.status)
-            }}>
-              {status.services?.ollama?.status || 'Unknown'}
-            </span>
-          </p>
-          {status.services?.ollama?.models_count && (
-            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>{status.services.ollama.models_count} model(s) available</p>
-          )}
-        </div>
-
-        {/* Supabase */}
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-sm)' }}>
-            <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', margin: 0 }}>Supabase</h3>
-            <span style={{
-              width: '12px',
-              height: '12px',
-              borderRadius: '50%',
-              backgroundColor: getStatusColor(status.services?.supabase?.status)
-            }}></span>
-          </div>
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginBottom: 'var(--spacing-xs)' }}>
-            Status: <span style={{
-              padding: 'var(--spacing-xs) var(--spacing-sm)',
-              borderRadius: 'var(--border-radius)',
-              fontSize: 'var(--font-size-xs)',
-              fontWeight: 600,
-              ...getStatusBadgeStyle(status.services?.supabase?.status)
-            }}>
-              {status.services?.supabase?.status || 'Unknown'}
-            </span>
-          </p>
-        </div>
-      </div>
-
-      {/* File Processing Status */}
-      <div className="card">
-        <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-lg)' }}>File Processing Pipeline</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-lg)' }}>
-          <div style={{
-            textAlign: 'center',
-            padding: 'var(--spacing-lg)',
-            backgroundColor: 'rgba(255, 193, 7, 0.1)',
-            borderRadius: 'var(--border-radius-lg)',
-            border: '1px solid rgba(255, 193, 7, 0.3)'
-          }}>
-            <p style={{ fontSize: 'var(--font-size-xxl)', fontWeight: 700, color: '#856404', margin: 0 }}>{status.files?.incoming || 0}</p>
-            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Incoming Files</p>
-            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7 }}>Awaiting processing</p>
-          </div>
-          <div style={{
-            textAlign: 'center',
-            padding: 'var(--spacing-lg)',
-            backgroundColor: 'var(--cisa-blue-lightest)',
-            borderRadius: 'var(--border-radius-lg)',
-            border: '1px solid var(--cisa-blue-lighter)'
-          }}>
-            <p style={{ fontSize: 'var(--font-size-xxl)', fontWeight: 700, color: 'var(--cisa-blue)', margin: 0 }}>{status.files?.library || 0}</p>
-            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Processed Files</p>
-            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7 }}>In library</p>
-          </div>
-          <div style={{
-            textAlign: 'center',
-            padding: 'var(--spacing-lg)',
-            backgroundColor: 'rgba(40, 167, 69, 0.1)',
-            borderRadius: 'var(--border-radius-lg)',
-            border: '1px solid rgba(40, 167, 69, 0.3)'
-          }}>
-            <p style={{ fontSize: 'var(--font-size-xxl)', fontWeight: 700, color: '#155724', margin: 0 }}>{status.files?.extracted_text || 0}</p>
-            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Extracted Text</p>
-            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7 }}>Ready for analysis</p>
-          </div>
-          <div style={{
-            textAlign: 'center',
-            padding: 'var(--spacing-lg)',
-            backgroundColor: 'var(--cisa-red-light)',
-            borderRadius: 'var(--border-radius-lg)',
-            border: '1px solid var(--cisa-red)'
-          }}>
-            <p style={{ fontSize: 'var(--font-size-xxl)', fontWeight: 700, color: 'var(--cisa-red-dark)', margin: 0 }}>{status.files?.errors || 0}</p>
-            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Errors</p>
-            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7 }}>Failed processing</p>
-          </div>
-        </div>
-        
-        {/* Processing Status */}
-        <div style={{
-          marginTop: 'var(--spacing-lg)',
-          padding: 'var(--spacing-lg)',
-          backgroundColor: 'var(--cisa-gray-lighter)',
-          borderRadius: 'var(--border-radius-lg)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--cisa-gray)', margin: 0 }}>Processing Status</p>
-              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7, marginTop: 'var(--spacing-xs)' }}>
-                Active Jobs: {status.processing?.active_jobs || 0} | 
-                Ready: {status.processing?.ready ? 'Yes' : 'No'}
-              </p>
+              <p style={{ fontSize: 'var(--font-size-xxl)', fontWeight: 700, color: '#856404', margin: 0 }}>{status.files.incoming || 0}</p>
+              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Incoming Files</p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7 }}>Awaiting processing</p>
             </div>
-            <span style={{
-              padding: 'var(--spacing-xs) var(--spacing-md)',
-              borderRadius: '999px',
-              fontSize: 'var(--font-size-xs)',
-              fontWeight: 600,
-              ...(status.processing?.ready ? 
-                { backgroundColor: 'rgba(40, 167, 69, 0.1)', color: '#155724' } : 
-                { backgroundColor: 'var(--cisa-gray-light)', color: 'var(--cisa-gray)' }
-              )
+            <div style={{
+              textAlign: 'center',
+              padding: 'var(--spacing-lg)',
+              backgroundColor: 'var(--cisa-blue-lightest)',
+              borderRadius: 'var(--border-radius-lg)',
+              border: '1px solid var(--cisa-blue-lighter)'
             }}>
-              {status.processing?.ready ? 'Ready' : 'Idle'}
-            </span>
+              <p style={{ fontSize: 'var(--font-size-xxl)', fontWeight: 700, color: 'var(--cisa-blue)', margin: 0 }}>{status.files.library || 0}</p>
+              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Processed Files</p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7 }}>In library</p>
+            </div>
+            <div style={{
+              textAlign: 'center',
+              padding: 'var(--spacing-lg)',
+              backgroundColor: 'rgba(40, 167, 69, 0.1)',
+              borderRadius: 'var(--border-radius-lg)',
+              border: '1px solid rgba(40, 167, 69, 0.3)'
+            }}>
+              <p style={{ fontSize: 'var(--font-size-xxl)', fontWeight: 700, color: '#155724', margin: 0 }}>{status.files.extracted_text || 0}</p>
+              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Extracted Text</p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7 }}>Ready for analysis</p>
+            </div>
+            <div style={{
+              textAlign: 'center',
+              padding: 'var(--spacing-lg)',
+              backgroundColor: 'var(--cisa-red-light)',
+              borderRadius: 'var(--border-radius-lg)',
+              border: '1px solid var(--cisa-red)'
+            }}>
+              <p style={{ fontSize: 'var(--font-size-xxl)', fontWeight: 700, color: 'var(--cisa-red-dark)', margin: 0 }}>{status.files.errors || 0}</p>
+              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Errors</p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7 }}>Failed processing</p>
+            </div>
+          </div>
+          
+          {/* Processing Status */}
+          <div style={{
+            marginTop: 'var(--spacing-lg)',
+            padding: 'var(--spacing-lg)',
+            backgroundColor: 'var(--cisa-gray-lighter)',
+            borderRadius: 'var(--border-radius-lg)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <p style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--cisa-gray)', margin: 0 }}>Processing Status</p>
+                <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7, marginTop: 'var(--spacing-xs)' }}>
+                  Active Jobs: {status.processing?.active_jobs || 0} | 
+                  Ready: {status.processing?.ready ? 'Yes' : 'No'}
+                </p>
+              </div>
+              <span style={{
+                padding: 'var(--spacing-xs) var(--spacing-md)',
+                borderRadius: '999px',
+                fontSize: 'var(--font-size-xs)',
+                fontWeight: 600,
+                ...(status.processing?.ready ? 
+                  { backgroundColor: 'rgba(40, 167, 69, 0.1)', color: '#155724' } : 
+                  { backgroundColor: 'var(--cisa-gray-light)', color: 'var(--cisa-gray)' }
+                )
+              }}>
+                {status.processing?.ready ? 'Ready' : 'Idle'}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Parsing & Processing Statistics */}
       {status.parsing && (
