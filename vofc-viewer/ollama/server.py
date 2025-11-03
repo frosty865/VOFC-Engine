@@ -57,6 +57,35 @@ def health_check():
         "upload_dir": UPLOAD_DIR
     }), 200
 
+@app.route("/api/system/health", methods=["GET"])
+def system_health():
+    import requests
+    ollama_url = "http://localhost:11434/api/tags"
+    supabase_url = os.getenv("SUPABASE_URL", "") or os.getenv("NEXT_PUBLIC_SUPABASE_URL", "")
+    status = {"flask": "online"}
+
+    # Check Ollama
+    try:
+        r = requests.get(ollama_url, timeout=3)
+        if r.status_code == 200:
+            status["ollama"] = "online"
+        else:
+            status["ollama"] = f"error ({r.status_code})"
+    except Exception as e:
+        status["ollama"] = f"offline ({str(e)})"
+
+    # Check Supabase connectivity (optional)
+    try:
+        if supabase_url:
+            r = requests.get(f"{supabase_url}/rest/v1/?apikey=" + os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""), timeout=3)
+            status["supabase"] = "online" if r.status_code < 400 else f"error ({r.status_code})"
+        else:
+            status["supabase"] = "not_configured"
+    except Exception as e:
+        status["supabase"] = f"offline ({str(e)})"
+
+    return jsonify({"status": "ok", "components": status}), 200
+
 # Helper function to create submission record in Supabase
 def create_submission_record(submission_id, filename, vuln_count, ofc_count, filepath=None, vofc_data=None):
     """
