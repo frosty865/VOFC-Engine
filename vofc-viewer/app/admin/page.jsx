@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { fetchWithAuth } from '../lib/fetchWithAuth'
 import '../../styles/cisa.css'
 import Link from 'next/link'
@@ -11,232 +11,837 @@ export default function AdminOverviewPage() {
   const [system, setSystem] = useState({ flask: 'checking', ollama: 'checking', supabase: 'checking' })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [lastRefresh, setLastRefresh] = useState(null)
 
-  // ---- System health checker ----
+  // System health checker
+  const fetchSystemHealth = useCallback(async () => {
+    try {
+      const flaskUrl = process.env.NEXT_PUBLIC_OLLAMA_SERVER_URL || 
+                     process.env.NEXT_PUBLIC_OLLAMA_LOCAL_URL || 
+                     'https://flask.frostech.site'
+      const res = await fetch(`${flaskUrl}/api/system/health`, { cache: 'no-store' })
+      const json = await res.json()
+      setSystem(json.components || {})
+    } catch (err) {
+      console.error('[System Health] Fetch failed:', err)
+      setSystem({ flask: 'offline', ollama: 'offline', supabase: 'offline' })
+    }
+  }, [])
+
   useEffect(() => {
     let isMounted = true
-    async function fetchSystemHealth() {
-      try {
-        const flaskUrl = process.env.NEXT_PUBLIC_OLLAMA_SERVER_URL || 
-                       process.env.NEXT_PUBLIC_OLLAMA_LOCAL_URL || 
-                       'https://flask.frostech.site'
-        const res = await fetch(`${flaskUrl}/api/system/health`, { cache: 'no-store' })
-        const json = await res.json()
-        if (isMounted) {
-          setSystem(json.components || {})
-        }
-      } catch (err) {
-        console.error('[System Health] Fetch failed:', err)
-        if (isMounted) {
-          setSystem({ flask: 'offline', ollama: 'offline', supabase: 'offline' })
-        }
-      }
-    }
     fetchSystemHealth()
-    const interval = setInterval(fetchSystemHealth, 15000)
+    const interval = setInterval(() => {
+      if (isMounted) fetchSystemHealth()
+    }, 15000)
     return () => { isMounted = false; clearInterval(interval) }
+  }, [fetchSystemHealth])
+
+  // Admin overview data fetcher
+  const loadDashboardData = useCallback(async () => {
+    try {
+      const res = await fetchWithAuth('/api/dashboard/overview', { cache: 'no-store' })
+      
+      if (!res.ok) {
+        const errorText = await res.text()
+        console.error(`[Admin Overview] API error: ${res.status}`, errorText.substring(0, 200))
+        throw new Error(`HTTP ${res.status}: ${res.status === 401 ? 'Unauthorized' : res.status === 403 ? 'Forbidden' : 'Server Error'}`)
+      }
+      
+      const json = await res.json()
+      setStats(json.stats || [])
+      setSoft(json.soft || [])
+      setError(null)
+      setLastRefresh(new Date())
+    } catch (e) {
+      console.error('[Admin Overview] Load error:', e)
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  // ---- Existing Admin Overview fetch ----
   useEffect(() => {
     let isMounted = true
-    const load = async () => {
-      try {
-        const res = await fetchWithAuth('/api/dashboard/overview', { cache: 'no-store' })
-        
-        // Log response status for debugging
-        if (!res.ok) {
-          const errorText = await res.text()
-          console.error(`[Admin Overview] API error: ${res.status}`, errorText.substring(0, 200))
-          throw new Error(`HTTP ${res.status}: ${res.status === 401 ? 'Unauthorized' : res.status === 403 ? 'Forbidden' : 'Server Error'}`)
-        }
-        
-        const json = await res.json()
-        if (isMounted) {
-          setStats(json.stats || [])
-          setSoft(json.soft || [])
-          setError(null) // Clear any previous errors
-        }
-      } catch (e) {
-        console.error('[Admin Overview] Load error:', e)
-        if (isMounted) {
-          setError(e.message)
-          // If unauthorized, redirect might be handled by RoleGate
-        }
-      } finally {
-        if (isMounted) setLoading(false)
-      }
-    }
-    load()
-    const id = setInterval(load, 30000)
+    loadDashboardData()
+    const id = setInterval(() => {
+      if (isMounted) loadDashboardData()
+    }, 30000)
     return () => { isMounted = false; clearInterval(id) }
-  }, [])
+  }, [loadDashboardData])
 
-  if (error) return (
-    <div className="alert alert-danger" style={{ 
-      padding: 'var(--spacing-lg)', 
-      backgroundColor: '#fee', 
-      border: '1px solid #f00',
-      borderRadius: 'var(--border-radius)',
-      marginBottom: 'var(--spacing-lg)'
-    }}>
-      <h3 style={{ margin: '0 0 var(--spacing-sm) 0', color: '#c00' }}>Error Loading Admin Data</h3>
-      <p style={{ margin: 0, color: '#800' }}>{error}</p>
-      <p style={{ margin: 'var(--spacing-sm) 0 0 0', fontSize: 'var(--font-size-sm)', color: '#666' }}>
-        This may indicate an authentication issue. Check the browser console for details.
-      </p>
-    </div>
-  )
+  // Calculate aggregate statistics
+  const aggregateStats = stats.length > 0 ? {
+    avgAcceptRate: stats.reduce((sum, s) => sum + (s.accept_rate || 0), 0) / stats.length,
+    avgSoftmatchRatio: stats.reduce((sum, s) => sum + (s.softmatch_ratio || 0), 0) / stats.length,
+    latestModel: stats[0]?.model_version || 'N/A',
+    totalModels: stats.length
+  } : null
+
+  const getSystemStatusColor = (status) => {
+    switch (status) {
+      case 'online': return { bg: '#e6f6ea', border: '#00a651', text: '#007a3d' }
+      case 'offline': return { bg: '#fdecea', border: '#c00', text: '#a00' }
+      default: return { bg: '#f5f5f5', border: '#ccc', text: '#666' }
+    }
+  }
+
+  if (error && !stats.length && !soft.length) {
+    return (
+      <div className="alert alert-danger" style={{ 
+        padding: 'var(--spacing-xl)', 
+        backgroundColor: '#fee', 
+        border: '1px solid #f00',
+        borderRadius: 'var(--border-radius)',
+        margin: 'var(--spacing-lg)',
+        textAlign: 'center'
+      }}>
+        <h2 style={{ margin: '0 0 var(--spacing-md) 0', color: '#c00' }}>⚠️ Error Loading Admin Dashboard</h2>
+        <p style={{ margin: '0 0 var(--spacing-md) 0', color: '#800', fontSize: 'var(--font-size-lg)' }}>{error}</p>
+        <p style={{ margin: 'var(--spacing-sm) 0 0 0', fontSize: 'var(--font-size-sm)', color: '#666' }}>
+          This may indicate an authentication issue. Check the browser console for details.
+        </p>
+        <button 
+          onClick={() => { setLoading(true); setError(null); loadDashboardData(); }}
+          className="btn btn-primary"
+          style={{ marginTop: 'var(--spacing-md)' }}
+        >
+          🔄 Retry
+        </button>
+      </div>
+    )
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)' }}>
-
-      {/* ---- System Health Summary ---- */}
-      <section>
-        <h2 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-md)' }}>
-          System Health
-        </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--spacing-lg)' }}>
-          {['flask', 'ollama', 'supabase'].map(key => (
-            <div key={key} className="card" style={{
-              backgroundColor: system[key] === 'online' ? '#e6f6ea' : '#fdecea',
-              border: `1px solid ${system[key] === 'online' ? '#00a651' : '#c00'}`,
-              transition: '0.3s all ease'
+    <div style={{ padding: 'var(--spacing-lg)', maxWidth: '1600px', margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: 'var(--spacing-xl)',
+        flexWrap: 'wrap',
+        gap: 'var(--spacing-md)'
+      }}>
+        <div>
+          <h1 style={{ 
+            fontSize: 'var(--font-size-xxl)', 
+            fontWeight: 700, 
+            color: 'var(--cisa-blue)', 
+            margin: 0,
+            marginBottom: 'var(--spacing-xs)'
+          }}>
+            VOFC Admin Dashboard
+          </h1>
+          {lastRefresh && (
+            <p style={{ 
+              fontSize: 'var(--font-size-sm)', 
+              color: 'var(--cisa-gray)', 
+              margin: 0 
             }}>
-              <div style={{ fontWeight: 600, color: system[key] === 'online' ? '#007a3d' : '#a00', marginBottom: 'var(--spacing-xs)' }}>
-                {key.charAt(0).toUpperCase() + key.slice(1)} Server
-              </div>
-              <div style={{ fontSize: 'var(--font-size-sm)', color: '#444' }}>
-                Status: <strong>{system[key]}</strong>
-              </div>
-            </div>
-          ))}
+              Last updated: {lastRefresh.toLocaleTimeString()}
+            </p>
+          )}
         </div>
-      </section>
+        <button 
+          onClick={() => { setLoading(true); loadDashboardData(); fetchSystemHealth(); }}
+          className="btn btn-primary"
+          disabled={loading}
+          style={{ opacity: loading ? 0.6 : 1 }}
+        >
+          {loading ? '⏳ Refreshing...' : '🔄 Refresh'}
+        </button>
+      </div>
 
-      <section>
-        <h2 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-md)' }}>Model Performance Summary</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--spacing-lg)' }}>
-          {stats?.map((s) => (
-            <div key={s.model_version} className="card">
-              <div style={{ fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-xs)' }}>{s.model_version}</div>
-              <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', marginBottom: 'var(--spacing-md)' }}>
-                Last updated {new Date(s.updated_at).toLocaleString()}
-              </div>
-              <div style={{ fontSize: 'var(--font-size-sm)' }}>
-                <p style={{ margin: 'var(--spacing-xs) 0' }}>Accept rate: <strong>{(s.accept_rate * 100).toFixed(1)}%</strong></p>
-                <p style={{ margin: 'var(--spacing-xs) 0' }}>Softmatch ratio: <strong>{(s.softmatch_ratio * 100).toFixed(1)}%</strong></p>
-              </div>
-            </div>
-          )) || <p style={{ color: 'var(--cisa-gray)' }}>No data available</p>}
-          {loading && <p style={{ color: 'var(--cisa-gray)' }}>Loading...</p>}
+      {error && stats.length > 0 && (
+        <div className="alert alert-warning" style={{ 
+          padding: 'var(--spacing-md)', 
+          marginBottom: 'var(--spacing-lg)',
+          backgroundColor: '#fff3cd',
+          border: '1px solid #ffc107',
+          borderRadius: 'var(--border-radius)'
+        }}>
+          <strong>⚠️ Warning:</strong> {error} (showing cached data)
         </div>
-      </section>
+      )}
 
-      <section>
-        <h2 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-md)' }}>Admin Actions</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 'var(--spacing-md)' }}>
-          <Link href="/admin/users" className="card" style={{ textDecoration: 'none', transition: 'all 0.3s ease' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)'
-              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)'
-              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
-            }}
-          >
-            <div style={{ fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-xs)' }}>User Management</div>
-            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>Add, activate, and manage users</div>
-          </Link>
-          <Link href="/admin/review" className="card" style={{ textDecoration: 'none', transition: 'all 0.3s ease' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)'
-              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)'
-              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
+      {/* System Health Summary */}
+      <section style={{ marginBottom: 'var(--spacing-xl)' }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          marginBottom: 'var(--spacing-md)'
+        }}>
+          <h2 style={{ 
+            fontSize: 'var(--font-size-xl)', 
+            fontWeight: 600, 
+            color: 'var(--cisa-blue)', 
+            margin: 0
+          }}>
+            System Health
+          </h2>
+          <Link 
+            href="/admin/system" 
+            style={{ 
+              fontSize: 'var(--font-size-sm)', 
+              color: 'var(--cisa-blue)',
+              textDecoration: 'none'
             }}
           >
-            <div style={{ fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-xs)' }}>Review Submissions</div>
-            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>Moderate new content</div>
-          </Link>
-          <Link href="/admin/models" className="card" style={{ textDecoration: 'none', transition: 'all 0.3s ease' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)'
-              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)'
-              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
-            }}
-          >
-            <div style={{ fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-xs)' }}>Model Analytics</div>
-            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>Accept rate, edits, softmatch ratio</div>
-          </Link>
-          <Link href="/admin/softmatches" className="card" style={{ textDecoration: 'none', transition: 'all 0.3s ease' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)'
-              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)'
-              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
-            }}
-          >
-            <div style={{ fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-xs)' }}>Soft Match Audit</div>
-            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>Near-duplicate detections</div>
-          </Link>
-          <Link href="/admin/system" className="card" style={{ textDecoration: 'none', transition: 'all 0.3s ease' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)'
-              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)'
-              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
-            }}
-          >
-            <div style={{ fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-xs)' }}>System Health</div>
-            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>Backend and Ollama status</div>
-          </Link>
-          <Link href="/learning" className="card" style={{ textDecoration: 'none', transition: 'all 0.3s ease' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)'
-              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)'
-              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
-            }}
-          >
-            <div style={{ fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-xs)' }}>Learning Monitor</div>
-            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>Continuous learning overview</div>
+            View Details →
           </Link>
         </div>
-      </section>
-
-      <section>
-        <h2 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-md)' }}>Recent Soft Matches</h2>
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-            {soft?.map((r, i) => (
-              <li key={i} style={{
-                padding: 'var(--spacing-md)',
-                borderBottom: i < soft.length - 1 ? '1px solid var(--cisa-gray-light)' : 'none',
-                fontSize: 'var(--font-size-sm)'
-              }}>
-                <div style={{ color: 'var(--cisa-black)', marginBottom: 'var(--spacing-xs)' }}>{r.new_text}</div>
-                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)' }}>
-                  sim {r.similarity?.toFixed(3)} • {r.source_doc}
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', 
+          gap: 'var(--spacing-lg)'
+        }}>
+          {['flask', 'ollama', 'supabase'].map(key => {
+            const status = system[key] || 'checking'
+            const colors = getSystemStatusColor(status)
+            return (
+              <div 
+                key={key} 
+                className="card" 
+                style={{
+                  backgroundColor: colors.bg,
+                  border: `2px solid ${colors.border}`,
+                  transition: 'all 0.3s ease',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}
+              >
+                <div style={{ 
+                  position: 'absolute', 
+                  top: 0, 
+                  right: 0, 
+                  width: '4px', 
+                  height: '100%',
+                  backgroundColor: colors.border
+                }}></div>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 'var(--spacing-sm)',
+                  marginBottom: 'var(--spacing-sm)'
+                }}>
+                  <div style={{
+                    width: '12px',
+                    height: '12px',
+                    borderRadius: '50%',
+                    backgroundColor: colors.border,
+                    boxShadow: `0 0 8px ${colors.border}`
+                  }}></div>
+                  <div style={{ 
+                    fontWeight: 700, 
+                    color: colors.text,
+                    fontSize: 'var(--font-size-lg)'
+                  }}>
+                    {key.charAt(0).toUpperCase() + key.slice(1)} Server
+                  </div>
                 </div>
-              </li>
-            )) || <li style={{ padding: 'var(--spacing-md)', color: 'var(--cisa-gray)' }}>No soft matches yet</li>}
-            {loading && <li style={{ padding: 'var(--spacing-md)', fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>Loading...</li>}
-          </ul>
+                <div style={{ 
+                  fontSize: 'var(--font-size-sm)', 
+                  color: '#444',
+                  fontWeight: 500
+                }}>
+                  Status: <strong style={{ color: colors.text }}>{status}</strong>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </section>
+
+      {/* Key Metrics Overview */}
+      {aggregateStats && (
+        <section style={{ marginBottom: 'var(--spacing-xl)' }}>
+          <h2 style={{ 
+            fontSize: 'var(--font-size-xl)', 
+            fontWeight: 600, 
+            color: 'var(--cisa-blue)', 
+            marginBottom: 'var(--spacing-md)'
+          }}>
+            Key Metrics Overview
+          </h2>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
+            gap: 'var(--spacing-lg)'
+          }}>
+            <div className="card" style={{
+              background: 'linear-gradient(135deg, var(--cisa-blue-lightest) 0%, rgba(0, 113, 188, 0.05) 100%)',
+              border: '1px solid var(--cisa-blue-lighter)'
+            }}>
+              <div style={{ 
+                fontSize: 'var(--font-size-sm)', 
+                color: 'var(--cisa-gray)', 
+                marginBottom: 'var(--spacing-xs)'
+              }}>
+                Average Accept Rate
+              </div>
+              <div style={{ 
+                fontSize: 'var(--font-size-xxl)', 
+                fontWeight: 700, 
+                color: 'var(--cisa-blue)',
+                marginBottom: 'var(--spacing-xs)'
+              }}>
+                {(aggregateStats.avgAcceptRate * 100).toFixed(1)}%
+              </div>
+              <div style={{ 
+                fontSize: 'var(--font-size-xs)', 
+                color: 'var(--cisa-gray)',
+                opacity: 0.7
+              }}>
+                Across {aggregateStats.totalModels} model{aggregateStats.totalModels !== 1 ? 's' : ''}
+              </div>
+            </div>
+
+            <div className="card" style={{
+              background: 'linear-gradient(135deg, rgba(138, 43, 226, 0.1) 0%, rgba(138, 43, 226, 0.05) 100%)',
+              border: '1px solid rgba(138, 43, 226, 0.3)'
+            }}>
+              <div style={{ 
+                fontSize: 'var(--font-size-sm)', 
+                color: 'var(--cisa-gray)', 
+                marginBottom: 'var(--spacing-xs)'
+              }}>
+                Average Softmatch Ratio
+              </div>
+              <div style={{ 
+                fontSize: 'var(--font-size-xxl)', 
+                fontWeight: 700, 
+                color: '#6f42c1',
+                marginBottom: 'var(--spacing-xs)'
+              }}>
+                {(aggregateStats.avgSoftmatchRatio * 100).toFixed(1)}%
+              </div>
+              <div style={{ 
+                fontSize: 'var(--font-size-xs)', 
+                color: 'var(--cisa-gray)',
+                opacity: 0.7
+              }}>
+                Near-duplicate detection rate
+              </div>
+            </div>
+
+            <div className="card" style={{
+              background: 'linear-gradient(135deg, rgba(40, 167, 69, 0.1) 0%, rgba(40, 167, 69, 0.05) 100%)',
+              border: '1px solid rgba(40, 167, 69, 0.3)'
+            }}>
+              <div style={{ 
+                fontSize: 'var(--font-size-sm)', 
+                color: 'var(--cisa-gray)', 
+                marginBottom: 'var(--spacing-xs)'
+              }}>
+                Latest Model Version
+              </div>
+              <div style={{ 
+                fontSize: 'var(--font-size-lg)', 
+                fontWeight: 700, 
+                color: '#155724',
+                marginBottom: 'var(--spacing-xs)',
+                fontFamily: 'monospace'
+              }}>
+                {aggregateStats.latestModel}
+              </div>
+              <div style={{ 
+                fontSize: 'var(--font-size-xs)', 
+                color: 'var(--cisa-gray)',
+                opacity: 0.7
+              }}>
+                Currently in use
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Model Performance Summary */}
+      <section style={{ marginBottom: 'var(--spacing-xl)' }}>
+        <h2 style={{ 
+          fontSize: 'var(--font-size-xl)', 
+          fontWeight: 600, 
+          color: 'var(--cisa-blue)', 
+          marginBottom: 'var(--spacing-md)'
+        }}>
+          Model Performance Summary
+        </h2>
+        {loading && !stats.length ? (
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            padding: 'var(--spacing-xl)',
+            color: 'var(--cisa-gray)'
+          }}>
+            <div style={{
+              width: '32px',
+              height: '32px',
+              border: '3px solid var(--cisa-gray-light)',
+              borderTopColor: 'var(--cisa-blue)',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+              marginRight: 'var(--spacing-md)'
+            }}></div>
+            Loading model statistics...
+          </div>
+        ) : stats.length > 0 ? (
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
+            gap: 'var(--spacing-lg)'
+          }}>
+            {stats.map((s) => (
+              <div key={s.model_version} className="card" style={{
+                transition: 'all 0.3s ease',
+                border: '1px solid var(--cisa-gray-light)'
+              }}>
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  marginBottom: 'var(--spacing-md)'
+                }}>
+                  <div style={{ 
+                    fontWeight: 700, 
+                    color: 'var(--cisa-blue)', 
+                    fontSize: 'var(--font-size-lg)',
+                    fontFamily: 'monospace'
+                  }}>
+                    {s.model_version}
+                  </div>
+                  <div style={{
+                    padding: 'var(--spacing-xs) var(--spacing-sm)',
+                    borderRadius: 'var(--border-radius)',
+                    backgroundColor: 'rgba(0, 113, 188, 0.1)',
+                    color: 'var(--cisa-blue)',
+                    fontSize: 'var(--font-size-xs)',
+                    fontWeight: 600
+                  }}>
+                    Active
+                  </div>
+                </div>
+                <div style={{ 
+                  fontSize: 'var(--font-size-xs)', 
+                  color: 'var(--cisa-gray)', 
+                  marginBottom: 'var(--spacing-md)',
+                  paddingBottom: 'var(--spacing-md)',
+                  borderBottom: '1px solid var(--cisa-gray-light)'
+                }}>
+                  Last updated: {new Date(s.updated_at).toLocaleString()}
+                </div>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: '1fr 1fr', 
+                  gap: 'var(--spacing-md)'
+                }}>
+                  <div>
+                    <div style={{ 
+                      fontSize: 'var(--font-size-xs)', 
+                      color: 'var(--cisa-gray)',
+                      marginBottom: 'var(--spacing-xs)'
+                    }}>
+                      Accept Rate
+                    </div>
+                    <div style={{ 
+                      fontSize: 'var(--font-size-xl)', 
+                      fontWeight: 700, 
+                      color: 'var(--cisa-blue)'
+                    }}>
+                      {(s.accept_rate * 100).toFixed(1)}%
+                    </div>
+                    <div style={{ 
+                      width: '100%', 
+                      height: '6px', 
+                      backgroundColor: 'var(--cisa-gray-light)',
+                      borderRadius: '3px',
+                      marginTop: 'var(--spacing-xs)',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{ 
+                        width: `${(s.accept_rate * 100)}%`, 
+                        height: '100%', 
+                        backgroundColor: 'var(--cisa-blue)',
+                        transition: 'width 0.3s ease'
+                      }}></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ 
+                      fontSize: 'var(--font-size-xs)', 
+                      color: 'var(--cisa-gray)',
+                      marginBottom: 'var(--spacing-xs)'
+                    }}>
+                      Softmatch Ratio
+                    </div>
+                    <div style={{ 
+                      fontSize: 'var(--font-size-xl)', 
+                      fontWeight: 700, 
+                      color: '#6f42c1'
+                    }}>
+                      {(s.softmatch_ratio * 100).toFixed(1)}%
+                    </div>
+                    <div style={{ 
+                      width: '100%', 
+                      height: '6px', 
+                      backgroundColor: 'var(--cisa-gray-light)',
+                      borderRadius: '3px',
+                      marginTop: 'var(--spacing-xs)',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{ 
+                        width: `${(s.softmatch_ratio * 100)}%`, 
+                        height: '100%', 
+                        backgroundColor: '#6f42c1',
+                        transition: 'width 0.3s ease'
+                      }}></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="card" style={{ 
+            padding: 'var(--spacing-xl)', 
+            textAlign: 'center',
+            color: 'var(--cisa-gray)'
+          }}>
+            <p style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>
+              No model performance data available yet
+            </p>
+            <p style={{ margin: 'var(--spacing-sm) 0 0 0', fontSize: 'var(--font-size-sm)' }}>
+              Model statistics will appear here once processing begins
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* Admin Actions */}
+      <section style={{ marginBottom: 'var(--spacing-xl)' }}>
+        <h2 style={{ 
+          fontSize: 'var(--font-size-xl)', 
+          fontWeight: 600, 
+          color: 'var(--cisa-blue)', 
+          marginBottom: 'var(--spacing-md)'
+        }}>
+          Admin Actions
+        </h2>
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', 
+          gap: 'var(--spacing-md)'
+        }}>
+          <Link href="/admin/users" className="card" style={{ 
+            textDecoration: 'none', 
+            transition: 'all 0.3s ease',
+            border: '1px solid var(--cisa-gray-light)',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-4px)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+              e.currentTarget.style.borderColor = 'var(--cisa-blue)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
+              e.currentTarget.style.borderColor = 'var(--cisa-gray-light)'
+            }}
+          >
+            <div style={{ 
+              fontSize: 'var(--font-size-xxl)', 
+              marginBottom: 'var(--spacing-sm)'
+            }}>👥</div>
+            <div style={{ 
+              fontWeight: 700, 
+              color: 'var(--cisa-blue)', 
+              marginBottom: 'var(--spacing-xs)',
+              fontSize: 'var(--font-size-lg)'
+            }}>User Management</div>
+            <div style={{ 
+              fontSize: 'var(--font-size-sm)', 
+              color: 'var(--cisa-gray)'
+            }}>Add, activate, and manage users</div>
+          </Link>
+
+          <Link href="/admin/review" className="card" style={{ 
+            textDecoration: 'none', 
+            transition: 'all 0.3s ease',
+            border: '1px solid var(--cisa-gray-light)'
+          }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-4px)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+              e.currentTarget.style.borderColor = 'var(--cisa-blue)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
+              e.currentTarget.style.borderColor = 'var(--cisa-gray-light)'
+            }}
+          >
+            <div style={{ 
+              fontSize: 'var(--font-size-xxl)', 
+              marginBottom: 'var(--spacing-sm)'
+            }}>📋</div>
+            <div style={{ 
+              fontWeight: 700, 
+              color: 'var(--cisa-blue)', 
+              marginBottom: 'var(--spacing-xs)',
+              fontSize: 'var(--font-size-lg)'
+            }}>Review Submissions</div>
+            <div style={{ 
+              fontSize: 'var(--font-size-sm)', 
+              color: 'var(--cisa-gray)'
+            }}>Moderate new content</div>
+          </Link>
+
+          <Link href="/admin/models" className="card" style={{ 
+            textDecoration: 'none', 
+            transition: 'all 0.3s ease',
+            border: '1px solid var(--cisa-gray-light)'
+          }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-4px)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+              e.currentTarget.style.borderColor = 'var(--cisa-blue)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
+              e.currentTarget.style.borderColor = 'var(--cisa-gray-light)'
+            }}
+          >
+            <div style={{ 
+              fontSize: 'var(--font-size-xxl)', 
+              marginBottom: 'var(--spacing-sm)'
+            }}>📊</div>
+            <div style={{ 
+              fontWeight: 700, 
+              color: 'var(--cisa-blue)', 
+              marginBottom: 'var(--spacing-xs)',
+              fontSize: 'var(--font-size-lg)'
+            }}>Model Analytics</div>
+            <div style={{ 
+              fontSize: 'var(--font-size-sm)', 
+              color: 'var(--cisa-gray)'
+            }}>Accept rate, edits, softmatch ratio</div>
+          </Link>
+
+          <Link href="/admin/softmatches" className="card" style={{ 
+            textDecoration: 'none', 
+            transition: 'all 0.3s ease',
+            border: '1px solid var(--cisa-gray-light)'
+          }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-4px)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+              e.currentTarget.style.borderColor = 'var(--cisa-blue)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
+              e.currentTarget.style.borderColor = 'var(--cisa-gray-light)'
+            }}
+          >
+            <div style={{ 
+              fontSize: 'var(--font-size-xxl)', 
+              marginBottom: 'var(--spacing-sm)'
+            }}>🔍</div>
+            <div style={{ 
+              fontWeight: 700, 
+              color: 'var(--cisa-blue)', 
+              marginBottom: 'var(--spacing-xs)',
+              fontSize: 'var(--font-size-lg)'
+            }}>Soft Match Audit</div>
+            <div style={{ 
+              fontSize: 'var(--font-size-sm)', 
+              color: 'var(--cisa-gray)'
+            }}>Near-duplicate detections</div>
+          </Link>
+
+          <Link href="/admin/system" className="card" style={{ 
+            textDecoration: 'none', 
+            transition: 'all 0.3s ease',
+            border: '1px solid var(--cisa-gray-light)'
+          }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-4px)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+              e.currentTarget.style.borderColor = 'var(--cisa-blue)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
+              e.currentTarget.style.borderColor = 'var(--cisa-gray-light)'
+            }}
+          >
+            <div style={{ 
+              fontSize: 'var(--font-size-xxl)', 
+              marginBottom: 'var(--spacing-sm)'
+            }}>⚙️</div>
+            <div style={{ 
+              fontWeight: 700, 
+              color: 'var(--cisa-blue)', 
+              marginBottom: 'var(--spacing-xs)',
+              fontSize: 'var(--font-size-lg)'
+            }}>System Health</div>
+            <div style={{ 
+              fontSize: 'var(--font-size-sm)', 
+              color: 'var(--cisa-gray)'
+            }}>Backend and Ollama status</div>
+          </Link>
+
+          <Link href="/learning" className="card" style={{ 
+            textDecoration: 'none', 
+            transition: 'all 0.3s ease',
+            border: '1px solid var(--cisa-gray-light)'
+          }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-4px)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+              e.currentTarget.style.borderColor = 'var(--cisa-blue)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
+              e.currentTarget.style.borderColor = 'var(--cisa-gray-light)'
+            }}
+          >
+            <div style={{ 
+              fontSize: 'var(--font-size-xxl)', 
+              marginBottom: 'var(--spacing-sm)'
+            }}>🧠</div>
+            <div style={{ 
+              fontWeight: 700, 
+              color: 'var(--cisa-blue)', 
+              marginBottom: 'var(--spacing-xs)',
+              fontSize: 'var(--font-size-lg)'
+            }}>Learning Monitor</div>
+            <div style={{ 
+              fontSize: 'var(--font-size-sm)', 
+              color: 'var(--cisa-gray)'
+            }}>Continuous learning overview</div>
+          </Link>
+        </div>
+      </section>
+
+      {/* Recent Soft Matches */}
+      <section>
+        <h2 style={{ 
+          fontSize: 'var(--font-size-xl)', 
+          fontWeight: 600, 
+          color: 'var(--cisa-blue)', 
+          marginBottom: 'var(--spacing-md)'
+        }}>
+          Recent Activity
+        </h2>
+        <div className="card" style={{ 
+          padding: 0, 
+          overflow: 'hidden',
+          border: '1px solid var(--cisa-gray-light)'
+        }}>
+          {loading && !soft.length ? (
+            <div style={{ 
+              padding: 'var(--spacing-xl)', 
+              textAlign: 'center',
+              color: 'var(--cisa-gray)'
+            }}>
+              <div style={{
+                display: 'inline-block',
+                width: '24px',
+                height: '24px',
+                border: '3px solid var(--cisa-gray-light)',
+                borderTopColor: 'var(--cisa-blue)',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+                marginRight: 'var(--spacing-sm)'
+              }}></div>
+              Loading recent activity...
+            </div>
+          ) : soft.length > 0 ? (
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {soft.map((r, i) => (
+                <li 
+                  key={i} 
+                  style={{
+                    padding: 'var(--spacing-md)',
+                    borderBottom: i < soft.length - 1 ? '1px solid var(--cisa-gray-light)' : 'none',
+                    fontSize: 'var(--font-size-sm)',
+                    transition: 'background-color 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--cisa-gray-lighter)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent'
+                  }}
+                >
+                  <div style={{ 
+                    color: 'var(--cisa-black)', 
+                    marginBottom: 'var(--spacing-xs)',
+                    fontWeight: 500,
+                    lineHeight: 1.5
+                  }}>
+                    {r.new_text || r.text || r.title || 'Submission'}
+                  </div>
+                  <div style={{ 
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--spacing-md)',
+                    fontSize: 'var(--font-size-xs)', 
+                    color: 'var(--cisa-gray)'
+                  }}>
+                    {r.similarity && (
+                      <span style={{
+                        padding: '2px 8px',
+                        borderRadius: 'var(--border-radius)',
+                        backgroundColor: 'rgba(138, 43, 226, 0.1)',
+                        color: '#6f42c1',
+                        fontWeight: 600
+                      }}>
+                        sim {r.similarity.toFixed(3)}
+                      </span>
+                    )}
+                    {r.source_doc && (
+                      <span style={{ fontFamily: 'monospace' }}>{r.source_doc}</span>
+                    )}
+                    {r.created_at && (
+                      <span style={{ marginLeft: 'auto' }}>
+                        {new Date(r.created_at).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div style={{ 
+              padding: 'var(--spacing-xl)', 
+              textAlign: 'center',
+              color: 'var(--cisa-gray)'
+            }}>
+              <p style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>
+                No recent activity
+              </p>
+              <p style={{ margin: 'var(--spacing-sm) 0 0 0', fontSize: 'var(--font-size-sm)' }}>
+                Activity will appear here as submissions are processed
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <style jsx>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   )
 }
