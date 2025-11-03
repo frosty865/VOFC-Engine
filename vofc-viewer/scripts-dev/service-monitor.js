@@ -17,10 +17,30 @@ const OLLAMA_URL = `http://127.0.0.1:${OLLAMA_PORT}`;
 const CHECK_INTERVAL = 10000; // Check every 10 seconds
 const RESTART_DELAY = 3000; // Wait 3 seconds before restarting
 
-// Paths
-const projectRoot = path.resolve(__dirname, '..');
-const flaskScript = path.join(projectRoot, 'ollama', 'server.py');
-const watcherScript = path.join(projectRoot, 'scripts-dev', 'file-watcher.js');
+// Paths - resolve to absolute paths to handle spaces in directory names
+const scriptDir = __dirname;
+const projectRoot = path.resolve(scriptDir, '..');
+const flaskScript = path.resolve(projectRoot, 'ollama', 'server.py');
+const watcherScript = path.resolve(projectRoot, 'scripts-dev', 'file-watcher.js');
+
+// Verify paths exist and log them for debugging
+console.log(`[DEBUG] Script directory: ${scriptDir}`);
+console.log(`[DEBUG] Project root: ${projectRoot}`);
+console.log(`[DEBUG] Flask script: ${flaskScript}`);
+console.log(`[DEBUG] Watcher script: ${watcherScript}`);
+
+if (!fs.existsSync(flaskScript)) {
+  console.error(`ERROR: Flask script not found at: ${flaskScript}`);
+  console.error(`Please run this script from the vofc-viewer directory.`);
+  console.error(`Current working directory: ${process.cwd()}`);
+  process.exit(1);
+}
+if (!fs.existsSync(watcherScript)) {
+  console.error(`ERROR: Watcher script not found at: ${watcherScript}`);
+  console.error(`Please run this script from the vofc-viewer directory.`);
+  console.error(`Current working directory: ${process.cwd()}`);
+  process.exit(1);
+}
 
 // Service state
 const services = {
@@ -172,11 +192,20 @@ async function startFlask() {
   }
 
   const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-  const flaskProcess = spawn(pythonCmd, [flaskScript], {
-    cwd: projectRoot,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    shell: true
-  });
+  // Use absolute path - construct command string for Windows to handle spaces properly
+  const flaskProcess = process.platform === 'win32'
+    ? spawn(`"${pythonCmd}" "${flaskScript}"`, [], {
+        cwd: projectRoot,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: true,
+        env: { ...process.env, PYTHONUNBUFFERED: '1' }
+      })
+    : spawn(pythonCmd, [flaskScript], {
+        cwd: projectRoot,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: true,
+        env: { ...process.env, PYTHONUNBUFFERED: '1' }
+      });
 
   flaskProcess.stdout.on('data', (data) => {
     const output = data.toString().trim();
@@ -242,6 +271,7 @@ async function startWatcher() {
 
   log('Watcher', 'Starting file watcher...');
 
+  // Use absolute path and ensure proper quoting for Windows paths with spaces
   const watcherProcess = spawn('node', [watcherScript], {
     cwd: projectRoot,
     stdio: ['ignore', 'pipe', 'pipe'],
