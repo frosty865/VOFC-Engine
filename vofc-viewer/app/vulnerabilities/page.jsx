@@ -27,11 +27,6 @@ export default function VulnerabilityViewer() {
     loadVulnerabilities();
   }, [selectedSector, selectedSubsector, selectedDiscipline]);
 
-  // Load filter options on mount (without filters to get all available options)
-  useEffect(() => {
-    loadFilterOptions();
-  }, []);
-
   useEffect(() => {
     filterVulnerabilities();
   }, [vulnerabilities, searchTerm]);
