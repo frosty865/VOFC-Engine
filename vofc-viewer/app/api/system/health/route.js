@@ -3,113 +3,75 @@ import { NextResponse } from 'next/server'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export async function GET(request) {
-  try {
-    // Get Flask URL from environment variables with fallback
-    const flaskUrl = process.env.NEXT_PUBLIC_OLLAMA_SERVER_URL || 
-                   process.env.NEXT_PUBLIC_OLLAMA_LOCAL_URL || 
+export async function GET() {
+  // Get Flask URL from environment variables - use Cloudflare Tunnel URL
+  const FLASK_URL = process.env.NEXT_PUBLIC_FLASK_URL || 
+                   process.env.NEXT_PUBLIC_OLLAMA_SERVER_URL || 
+                   process.env.OLLAMA_SERVER_URL || 
+                   process.env.OLLAMA_LOCAL_URL || 
                    'https://flask.frostech.site'
-    
-    // Fetch health status from Flask backend
+  
+  console.log('[System Health API Proxy] Using Flask URL:', FLASK_URL)
+  
+  try {
+    // Proxy request to Flask /api/system/health endpoint
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
     
-    try {
-      // Use /health endpoint which provides comprehensive system health
-      const res = await fetch(`${flaskUrl}/health`, {
-        cache: 'no-store',
-        signal: controller.signal,
-        headers: {
-          'Accept': 'application/json',
-        }
-      })
-      
-      clearTimeout(timeoutId)
-      
-      if (!res.ok) {
-        // If Flask returns an error, return partial status
-        return NextResponse.json({
-          status: 'partial',
-          components: {
-            flask: `error (${res.status})`,
-            ollama: 'unknown',
-            supabase: 'unknown'
-          },
-          error: `Flask server returned ${res.status}`,
-          message: 'Health check endpoint responded with an error'
-        }, { status: 200 }) // Return 200 to allow frontend to handle gracefully
+    const res = await fetch(`${FLASK_URL}/api/system/health`, {
+      cache: 'no-store',
+      signal: controller.signal,
+      headers: {
+        'Accept': 'application/json',
       }
-      
-      const data = await res.json()
-      
-      // Extract component status from /health endpoint response
-      // The /health endpoint returns status: "healthy" or "error"
-      const flaskStatus = data.status === 'healthy' ? 'online' : 'offline'
-      
-      // Check Ollama from the health data if available
-      let ollamaStatus = 'unknown'
-      if (data.services?.ollama_models && data.services.ollama_models.length > 0) {
-        ollamaStatus = 'online'
-      }
-      
-      // Supabase status - we'll check it separately since Flask doesn't check Supabase
-      const supabaseStatus = 'online' // Will be checked separately or can be enhanced
-      
-      // Return the health data in expected format
-      return NextResponse.json({
-        status: data.status === 'healthy' ? 'ok' : 'partial',
-        components: {
-          flask: flaskStatus,
-          ollama: ollamaStatus,
-          supabase: supabaseStatus
-        },
-        timestamp: new Date().toISOString(),
-        raw: data // Include raw data for debugging
-      })
-      
-    } catch (fetchError) {
-      clearTimeout(timeoutId)
-      
-      // Handle network errors, timeouts, etc.
-      if (fetchError.name === 'AbortError') {
-        return NextResponse.json({
-          status: 'timeout',
-          components: {
-            flask: 'offline (timeout)',
-            ollama: 'unknown',
-            supabase: 'unknown'
-          },
-          error: 'Health check request timed out',
-          message: 'Flask server did not respond within 5 seconds'
-        }, { status: 200 })
-      }
-      
-      // Other fetch errors (network issues, DNS, etc.)
-      return NextResponse.json({
-        status: 'error',
-        components: {
-          flask: 'offline',
-          ollama: 'unknown',
-          supabase: 'unknown'
-        },
-        error: fetchError.message || 'Failed to connect to Flask server',
-        message: 'Unable to reach Flask backend for health check',
-        flaskUrl: flaskUrl // Include URL for debugging
-      }, { status: 200 })
+    })
+    
+    clearTimeout(timeoutId)
+    
+    if (!res.ok) {
+      console.error('[System Health API Proxy] Flask returned error:', res.status)
+      throw new Error(`HTTP ${res.status}`)
     }
     
-  } catch (error) {
-    console.error('[System Health API] Unexpected error:', error)
-    return NextResponse.json({
-      status: 'error',
-      components: {
-        flask: 'offline',
-        ollama: 'unknown',
-        supabase: 'unknown'
+    const data = await res.json()
+    console.log('[System Health API Proxy] Flask response:', data)
+    
+    // Return the health data directly from Flask
+    return NextResponse.json(data)
+    
+  } catch (err) {
+    console.error('[System Health API Proxy] Error:', err.message)
+    console.error('[System Health API Proxy] Error type:', err.name)
+    
+    // Handle timeout
+    if (err.name === 'AbortError') {
+      return NextResponse.json(
+        { 
+          status: 'error', 
+          message: 'Request timeout', 
+          components: { 
+            flask: 'offline (timeout)', 
+            ollama: 'unknown', 
+            supabase: 'unknown' 
+          } 
+        },
+        { status: 500 }
+      )
+    }
+    
+    // Handle other errors
+    return NextResponse.json(
+      { 
+        status: 'error', 
+        message: err.message || 'Failed to connect to Flask server', 
+        components: { 
+          flask: 'offline', 
+          ollama: 'unknown', 
+          supabase: 'unknown' 
+        },
+        flaskUrl: FLASK_URL // Include for debugging
       },
-      error: error.message || 'Unknown error occurred',
-      message: 'Health check failed due to server error'
-    }, { status: 500 })
+      { status: 500 }
+    )
   }
 }
-
