@@ -17,13 +17,40 @@ export default function VulnerabilityViewer() {
   const [subsectors, setSubsectors] = useState([]);
   const [disciplines, setDisciplines] = useState([]);
 
+  // Load filter options on mount (without filters to get all available options)
+  useEffect(() => {
+    loadFilterOptions();
+  }, []);
+
+  // Load vulnerabilities when filters change
   useEffect(() => {
     loadVulnerabilities();
   }, [selectedSector, selectedSubsector, selectedDiscipline]);
 
+  // Load filter options on mount (without filters to get all available options)
+  useEffect(() => {
+    loadFilterOptions();
+  }, []);
+
   useEffect(() => {
     filterVulnerabilities();
   }, [vulnerabilities, searchTerm]);
+
+  // Load filter options separately to ensure dropdowns are always populated
+  const loadFilterOptions = async () => {
+    try {
+      const response = await fetch('/api/public/vofc-data');
+      const data = await response.json();
+      
+      if (data.success) {
+        setSectors(data.filters?.sectors || []);
+        setSubsectors(data.filters?.subsectors || []);
+        setDisciplines(data.filters?.disciplines || []);
+      }
+    } catch (error) {
+      console.error('Error loading filter options:', error);
+    }
+  };
 
   const loadVulnerabilities = async () => {
     try {
@@ -40,9 +67,12 @@ export default function VulnerabilityViewer() {
       
       if (data.success) {
         setVulnerabilities(data.vulnerabilities || []);
-        setSectors(data.filters?.sectors || []);
-        setSubsectors(data.filters?.subsectors || []);
-        setDisciplines(data.filters?.disciplines || []);
+        // Update filter options from response (may have changed)
+        if (data.filters) {
+          setSectors(data.filters.sectors || []);
+          setSubsectors(data.filters.subsectors || []);
+          setDisciplines(data.filters.disciplines || []);
+        }
       }
     } catch (error) {
       console.error('Error loading vulnerabilities:', error);

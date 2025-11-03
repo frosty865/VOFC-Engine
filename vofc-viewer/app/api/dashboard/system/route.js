@@ -155,6 +155,19 @@ export async function GET(request) {
         version: 'unknown',
         environment: 'unknown',
         debug: false
+      },
+      gpu: {
+        available: false,
+        utilization: 0,
+        memory_used: 0,
+        memory_total: 0,
+        devices: []
+      },
+      backend: {
+        active_connections: 0,
+        requests_per_minute: 0,
+        avg_response_time: 0,
+        queue_size: 0
       }
     };
 
@@ -207,6 +220,23 @@ export async function GET(request) {
           }
           status.services.ollama_models = health.services?.ollama_models || [];
           status.services.ollama_base_url = health.services?.ollama_url || process.env.OLLAMA_URL || 'unknown';
+          
+          // Extract GPU utilization if available
+          status.gpu = health.gpu || {
+            available: false,
+            utilization: 0,
+            memory_used: 0,
+            memory_total: 0,
+            devices: []
+          };
+          
+          // Extract backend statistics if available
+          status.backend = health.backend || {
+            active_connections: 0,
+            requests_per_minute: 0,
+            avg_response_time: 0,
+            queue_size: 0
+          };
       } else {
         status.services.flask = {
           status: 'error',

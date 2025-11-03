@@ -1271,6 +1271,71 @@ def health():
         except:
             pass  # Ollama may not be accessible from Flask server
         
+        # Get GPU utilization (if available)
+        gpu_info = {
+            "available": False,
+            "utilization": 0,
+            "memory_used": 0,
+            "memory_total": 0,
+            "devices": []
+        }
+        try:
+            # Try pynvml for NVIDIA GPUs
+            try:
+                import pynvml
+                pynvml.nvmlInit()
+                device_count = pynvml.nvmlDeviceGetCount()
+                if device_count > 0:
+                    gpu_info["available"] = True
+                    gpu_info["devices"] = []
+                    total_util = 0
+                    total_mem_used = 0
+                    total_mem_total = 0
+                    
+                    for i in range(device_count):
+                        handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+                        name = pynvml.nvmlDeviceGetName(handle).decode('utf-8')
+                        util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+                        mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                        
+                        gpu_info["devices"].append({
+                            "id": i,
+                            "name": name,
+                            "utilization": util.gpu,
+                            "memory_used_mb": mem_info.used // (1024 * 1024),
+                            "memory_total_mb": mem_info.total // (1024 * 1024)
+                        })
+                        total_util += util.gpu
+                        total_mem_used += mem_info.used
+                        total_mem_total += mem_info.total
+                    
+                    gpu_info["utilization"] = total_util // device_count if device_count > 0 else 0
+                    gpu_info["memory_used"] = total_mem_used // (1024 * 1024 * 1024)  # GB
+                    gpu_info["memory_total"] = total_mem_total // (1024 * 1024 * 1024)  # GB
+            except ImportError:
+                # pynvml not installed - try psutil as fallback for basic system info
+                try:
+                    import psutil
+                    # psutil doesn't have GPU info, but we can indicate it's not available
+                    pass
+                except ImportError:
+                    pass
+            except Exception as e:
+                # GPU detection failed
+                if DEBUG_MODE:
+                    print(f"GPU detection error: {e}")
+        except Exception:
+            pass
+        
+        # Backend statistics (tracking request metrics)
+        # Note: In production, you'd want to use a proper metrics library
+        backend_stats = {
+            "active_connections": len(app.url_map.iter_rules()) if hasattr(app, 'url_map') else 0,
+            "requests_per_minute": 0,  # Would need middleware to track
+            "avg_response_time": 0,  # Would need middleware to track
+            "queue_size": dirs.get("incoming", {}).get("file_count", 0)
+        }
+        
         return jsonify({
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
@@ -1295,7 +1360,9 @@ def health():
                 "ollama_models": ollama_models,
                 "ollama_url": ollama_url,
                 "base_directory": BASE_DIR
-            }
+            },
+            "gpu": gpu_info,
+            "backend": backend_stats
         }), 200
     except Exception as e:
         import traceback

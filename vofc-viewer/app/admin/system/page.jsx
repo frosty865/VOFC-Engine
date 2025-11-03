@@ -461,6 +461,69 @@ export default function SystemStatusPage() {
         )}
       </div>
 
+      {/* GPU Utilization */}
+      {status.gpu && (
+        <div className="card">
+          <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-lg)' }}>🎮 GPU Utilization</h3>
+          {status.gpu.available ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-lg)' }}>
+              <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)', backgroundColor: 'var(--cisa-blue-lightest)', borderRadius: 'var(--border-radius-lg)' }}>
+                <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: 'var(--cisa-blue)', margin: 0 }}>{status.gpu.utilization || 0}%</p>
+                <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>GPU Utilization</p>
+              </div>
+              <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)', backgroundColor: 'rgba(138, 43, 226, 0.1)', borderRadius: 'var(--border-radius-lg)' }}>
+                <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: '#6f42c1', margin: 0 }}>
+                  {status.gpu.memory_used ? `${Math.round(status.gpu.memory_used / 1024)} GB` : 'N/A'}
+                </p>
+                <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Memory Used</p>
+                {status.gpu.memory_total && (
+                  <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7, marginTop: 'var(--spacing-xs)' }}>
+                    of {Math.round(status.gpu.memory_total / 1024)} GB
+                  </p>
+                )}
+              </div>
+              {status.gpu.devices && status.gpu.devices.length > 0 && (
+                <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)', backgroundColor: 'var(--cisa-gray-lighter)', borderRadius: 'var(--border-radius-lg)' }}>
+                  <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: 'var(--cisa-gray)', margin: 0 }}>{status.gpu.devices.length}</p>
+                  <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>GPU Devices</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ padding: 'var(--spacing-lg)', backgroundColor: 'var(--cisa-gray-lighter)', borderRadius: 'var(--border-radius-lg)', textAlign: 'center' }}>
+              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', margin: 0 }}>GPU not available or not detected</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Backend Statistics */}
+      {status.backend && (
+        <div className="card">
+          <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-lg)' }}>⚙️ Backend Statistics</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-lg)' }}>
+            <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)', backgroundColor: 'var(--cisa-blue-lightest)', borderRadius: 'var(--border-radius-lg)' }}>
+              <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: 'var(--cisa-blue)', margin: 0 }}>{status.backend.active_connections || 0}</p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Active Connections</p>
+            </div>
+            <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)', backgroundColor: 'rgba(40, 167, 69, 0.1)', borderRadius: 'var(--border-radius-lg)' }}>
+              <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: '#155724', margin: 0 }}>{status.backend.requests_per_minute || 0}</p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Requests/Min</p>
+            </div>
+            <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)', backgroundColor: 'rgba(255, 193, 7, 0.1)', borderRadius: 'var(--border-radius-lg)' }}>
+              <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: '#856404', margin: 0 }}>
+                {status.backend.avg_response_time ? `${status.backend.avg_response_time}ms` : 'N/A'}
+              </p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Avg Response Time</p>
+            </div>
+            <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)', backgroundColor: 'var(--cisa-gray-lighter)', borderRadius: 'var(--border-radius-lg)' }}>
+              <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: 'var(--cisa-gray)', margin: 0 }}>{status.backend.queue_size || 0}</p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Queue Size</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Ollama Models */}
       {status.services?.ollama_models && status.services.ollama_models.length > 0 && (
         <div className="card">
