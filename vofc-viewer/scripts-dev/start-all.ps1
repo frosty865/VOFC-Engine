@@ -73,7 +73,16 @@ Write-Host ""
 # Start Service Monitor (handles Flask, Ollama, and File Watcher with auto-restart)
 Write-Host "Starting Service Monitor..." -ForegroundColor Yellow
 $monitorPath = (Get-Location).Path
-$monitorJob = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$monitorPath'; node scripts-dev\service-monitor.js" -PassThru
+$monitorScript = Join-Path $monitorPath "scripts-dev\service-monitor.js"
+Write-Host "  Monitor path: $monitorScript" -ForegroundColor Gray
+if (-not (Test-Path $monitorScript)) {
+    Write-Host "  ERROR: Service monitor script not found!" -ForegroundColor Red
+    Write-Host "  Expected: $monitorScript" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+    exit 1
+}
+# Use absolute path and ensure we're in the vofc-viewer directory
+$monitorJob = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$monitorPath'; `$env:NODE_ENV='production'; node '$monitorScript'" -PassThru
 Start-Sleep -Seconds 5
 
 Write-Host ""

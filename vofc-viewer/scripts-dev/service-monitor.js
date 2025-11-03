@@ -195,8 +195,9 @@ async function startFlask() {
 
   const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
   // Use absolute path - construct command string for Windows to handle spaces properly
+  // Escape quotes properly for Windows PowerShell/cmd
   const flaskProcess = process.platform === 'win32'
-    ? spawn(`"${pythonCmd}" "${flaskScript}"`, [], {
+    ? spawn(`python "${flaskScript}"`, [], {
         cwd: projectRoot,
         stdio: ['ignore', 'pipe', 'pipe'],
         shell: true,
@@ -205,7 +206,7 @@ async function startFlask() {
     : spawn(pythonCmd, [flaskScript], {
         cwd: projectRoot,
         stdio: ['ignore', 'pipe', 'pipe'],
-        shell: true,
+        shell: false,
         env: { ...process.env, PYTHONUNBUFFERED: '1' }
       });
 
