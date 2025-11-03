@@ -1280,11 +1280,11 @@ def health():
             "devices": []
         }
         try:
-            # Try pynvml for NVIDIA GPUs
+            # Try nvidia-ml-py for NVIDIA GPUs (replacement for deprecated pynvml)
             try:
-                import pynvml
-                pynvml.nvmlInit()
-                device_count = pynvml.nvmlDeviceGetCount()
+                import pynvml as nvml  # nvidia-ml-py uses pynvml as the import name
+                nvml.nvmlInit()
+                device_count = nvml.nvmlDeviceGetCount()
                 if device_count > 0:
                     gpu_info["available"] = True
                     gpu_info["devices"] = []
@@ -1293,10 +1293,10 @@ def health():
                     total_mem_total = 0
                     
                     for i in range(device_count):
-                        handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-                        name = pynvml.nvmlDeviceGetName(handle).decode('utf-8')
-                        util = pynvml.nvmlDeviceGetUtilizationRates(handle)
-                        mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                        handle = nvml.nvmlDeviceGetHandleByIndex(i)
+                        name = nvml.nvmlDeviceGetName(handle).decode('utf-8')
+                        util = nvml.nvmlDeviceGetUtilizationRates(handle)
+                        mem_info = nvml.nvmlDeviceGetMemoryInfo(handle)
                         
                         gpu_info["devices"].append({
                             "id": i,
@@ -1313,7 +1313,7 @@ def health():
                     gpu_info["memory_used"] = total_mem_used // (1024 * 1024 * 1024)  # GB
                     gpu_info["memory_total"] = total_mem_total // (1024 * 1024 * 1024)  # GB
             except ImportError:
-                # pynvml not installed - this is fine, GPU just won't be available
+                # nvidia-ml-py not installed - this is fine, GPU just won't be available
                 pass
             except Exception as e:
                 # GPU detection failed - log but don't crash
