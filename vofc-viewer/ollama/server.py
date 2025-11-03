@@ -13,6 +13,29 @@ app = Flask(__name__)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Disable caching
 # Note: For production, consider using background tasks (Celery, etc.) for long-running processing
 
+# CORS support for cross-origin requests
+@app.after_request
+def after_request(response):
+    """Add CORS headers to all responses"""
+    origin = request.headers.get('Origin', '*')
+    # Allow requests from known domains or all origins in development
+    allowed_origins = [
+        'https://www.zophielgroup.com',
+        'https://zophielgroup.com',
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        '*'
+    ]
+    
+    if origin in allowed_origins or '*' in allowed_origins:
+        response.headers['Access-Control-Allow-Origin'] = origin if origin != '*' else '*'
+    
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    response.headers['Access-Control-Max-Age'] = '3600'
+    return response
+
 # Configuration - can be overridden via environment variables
 BASE_DIR = os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'Ollama', 'data')
 UPLOAD_DIR = os.getenv(
@@ -48,8 +71,11 @@ SUPABASE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '')
 for directory in [UPLOAD_DIR, PROCESSED_DIR, LIBRARY_DIR, ERRORS_DIR, EXTRACTED_TEXT_DIR]:
     os.makedirs(directory, exist_ok=True)
 
-@app.route("/api/health", methods=["GET"])
+@app.route("/api/health", methods=["GET", "OPTIONS"])
 def health_check():
+    """Health check endpoint with CORS support"""
+    if request.method == 'OPTIONS':
+        return '', 200
     return jsonify({
         "status": "ok",
         "message": "VOFC Flask backend online",
@@ -57,8 +83,11 @@ def health_check():
         "upload_dir": UPLOAD_DIR
     }), 200
 
-@app.route("/api/system/health", methods=["GET"])
+@app.route("/api/system/health", methods=["GET", "OPTIONS"])
 def system_health():
+    """System health check endpoint with CORS support"""
+    if request.method == 'OPTIONS':
+        return '', 200
     import requests
     ollama_url = "http://localhost:11434/api/tags"
     supabase_url = os.getenv("SUPABASE_URL", "") or os.getenv("NEXT_PUBLIC_SUPABASE_URL", "")

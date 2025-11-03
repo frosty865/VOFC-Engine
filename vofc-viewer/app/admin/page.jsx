@@ -13,18 +13,41 @@ export default function AdminOverviewPage() {
   const [error, setError] = useState(null)
   const [lastRefresh, setLastRefresh] = useState(null)
 
-  // System health checker
+  // System health checker - uses Next.js API route proxy to avoid CORS issues
   const fetchSystemHealth = useCallback(async () => {
     try {
-      const flaskUrl = process.env.NEXT_PUBLIC_OLLAMA_SERVER_URL || 
-                     process.env.NEXT_PUBLIC_OLLAMA_LOCAL_URL || 
-                     'https://flask.frostech.site'
-      const res = await fetch(`${flaskUrl}/api/system/health`, { cache: 'no-store' })
+      // Use Next.js API route proxy instead of calling Flask directly
+      // This avoids CORS issues and provides better error handling
+      const res = await fetch('/api/system/health', { 
+        cache: 'no-store',
+        headers: {
+          'Accept': 'application/json'
+        }
+      })
+      
+      if (!res.ok) {
+        throw new Error(`Health check API returned ${res.status}`)
+      }
+      
       const json = await res.json()
-      setSystem(json.components || {})
+      
+      // Handle the response data structure
+      if (json.components) {
+        setSystem(json.components)
+      } else if (json.status === 'error' || json.status === 'timeout') {
+        // API route returned an error state
+        setSystem({
+          flask: json.components?.flask || 'offline',
+          ollama: json.components?.ollama || 'unknown',
+          supabase: json.components?.supabase || 'unknown'
+        })
+      } else {
+        // Fallback if structure is unexpected
+        setSystem({ flask: 'unknown', ollama: 'unknown', supabase: 'unknown' })
+      }
     } catch (err) {
       console.error('[System Health] Fetch failed:', err)
-      setSystem({ flask: 'offline', ollama: 'offline', supabase: 'offline' })
+      setSystem({ flask: 'offline', ollama: 'unknown', supabase: 'unknown' })
     }
   }, [])
 
