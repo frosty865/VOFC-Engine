@@ -1293,25 +1293,32 @@ def health():
                     total_mem_total = 0
                     
                     for i in range(device_count):
-                        handle = nvml.nvmlDeviceGetHandleByIndex(i)
-                        name = nvml.nvmlDeviceGetName(handle).decode('utf-8')
-                        util = nvml.nvmlDeviceGetUtilizationRates(handle)
-                        mem_info = nvml.nvmlDeviceGetMemoryInfo(handle)
-                        
-                        gpu_info["devices"].append({
-                            "id": i,
-                            "name": name,
-                            "utilization": util.gpu,
-                            "memory_used_mb": mem_info.used // (1024 * 1024),
-                            "memory_total_mb": mem_info.total // (1024 * 1024)
-                        })
-                        total_util += util.gpu
-                        total_mem_used += mem_info.used
-                        total_mem_total += mem_info.total
+                        try:
+                            handle = nvml.nvmlDeviceGetHandleByIndex(i)
+                            name = nvml.nvmlDeviceGetName(handle).decode('utf-8')
+                            util = nvml.nvmlDeviceGetUtilizationRates(handle)
+                            mem_info = nvml.nvmlDeviceGetMemoryInfo(handle)
+                            
+                            gpu_info["devices"].append({
+                                "id": i,
+                                "name": name,
+                                "utilization": util.gpu,
+                                "memory_used_mb": mem_info.used // (1024 * 1024),
+                                "memory_total_mb": mem_info.total // (1024 * 1024)
+                            })
+                            total_util += util.gpu
+                            total_mem_used += mem_info.used
+                            total_mem_total += mem_info.total
+                        except Exception as gpu_err:
+                            # Skip individual GPU if it fails
+                            if DEBUG_MODE:
+                                print(f"Error reading GPU {i}: {gpu_err}")
+                            continue
                     
-                    gpu_info["utilization"] = total_util // device_count if device_count > 0 else 0
-                    gpu_info["memory_used"] = total_mem_used // (1024 * 1024 * 1024)  # GB
-                    gpu_info["memory_total"] = total_mem_total // (1024 * 1024 * 1024)  # GB
+                    if device_count > 0:
+                        gpu_info["utilization"] = total_util // device_count
+                        gpu_info["memory_used"] = total_mem_used // (1024 * 1024 * 1024)  # GB
+                        gpu_info["memory_total"] = total_mem_total // (1024 * 1024 * 1024)  # GB
             except ImportError:
                 # nvidia-ml-py not installed - this is fine, GPU just won't be available
                 pass
@@ -1319,9 +1326,16 @@ def health():
                 # GPU detection failed - log but don't crash
                 if DEBUG_MODE:
                     print(f"GPU detection error: {e}")
+                    import traceback
+                    print(traceback.format_exc())
                 # Continue without GPU info
                 pass
-        except Exception:
+        except Exception as outer_err:
+            # Catch any outer exceptions to prevent health endpoint from crashing
+            if DEBUG_MODE:
+                print(f"Outer GPU check error: {outer_err}")
+                import traceback
+                print(traceback.format_exc())
             pass
         
         # Backend statistics (tracking request metrics)
