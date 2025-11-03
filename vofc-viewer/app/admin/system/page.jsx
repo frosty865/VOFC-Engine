@@ -498,12 +498,12 @@ function SystemStatusPage() {
               </div>
               <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)', backgroundColor: 'rgba(138, 43, 226, 0.1)', borderRadius: 'var(--border-radius-lg)' }}>
                 <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: '#6f42c1', margin: 0 }}>
-                  {status.gpu.memory_used ? `${Math.round(status.gpu.memory_used / 1024)} GB` : 'N/A'}
+                  {status.gpu.memory_used ? `${status.gpu.memory_used.toFixed(2)} GB` : 'N/A'}
                 </p>
                 <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', marginTop: 'var(--spacing-xs)' }}>Memory Used</p>
                 {status.gpu.memory_total && (
                   <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7, marginTop: 'var(--spacing-xs)' }}>
-                    of {Math.round(status.gpu.memory_total / 1024)} GB
+                    of {status.gpu.memory_total.toFixed(2)} GB
                   </p>
                 )}
               </div>
