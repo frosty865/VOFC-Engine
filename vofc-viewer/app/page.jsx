@@ -41,6 +41,19 @@ export default function VOFCViewer() {
     }
   }, [router]);
 
+  // Load sectors from sectors table
+  const loadSectors = useCallback(async () => {
+    try {
+      console.log('Loading sectors from database...');
+      const sectorsData = await fetchSectors();
+      console.log('Sectors loaded:', sectorsData);
+      setSectors(sectorsData || []);
+    } catch (error) {
+      console.error('Error loading sectors:', error);
+      setSectors([]);
+    }
+  }, []);
+
   const loadData = useCallback(async () => {
     if (!authenticated) return;
     
@@ -58,9 +71,6 @@ export default function VOFCViewer() {
       const uniqueDisciplines = [...new Set(vulnsData?.map(v => v.discipline).filter(Boolean) || [])];
       setDisciplines(uniqueDisciplines.sort());
       
-      // Load sectors and subsectors from tables
-      await loadSectors();
-      
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       setError('Failed to load vulnerability data. Please try again.');
@@ -76,22 +86,13 @@ export default function VOFCViewer() {
     return [...new Set(disciplines)].sort();
   }, [vulnerabilities]);
 
-  // Load sectors from sectors table
-  const loadSectors = useCallback(async () => {
-    try {
-      const sectorsData = await fetchSectors();
-      setSectors(sectorsData || []);
-    } catch (error) {
-      console.error('Error loading sectors:', error);
-      setSectors([]);
-    }
-  }, []);
-
   // Load subsectors based on selected sector
   const loadSubsectors = useCallback(async (sectorId) => {
     try {
       if (sectorId) {
+        console.log('Loading subsectors for sector ID:', sectorId);
         const subsectorsData = await fetchSubsectorsBySector(sectorId);
+        console.log('Subsectors loaded:', subsectorsData);
         setSubsectors(subsectorsData || []);
       } else {
         setSubsectors([]);
@@ -132,8 +133,9 @@ export default function VOFCViewer() {
   useEffect(() => {
     if (authenticated) {
       loadData();
+      loadSectors(); // Load sectors after authentication
     }
-  }, [authenticated, loadData]);
+  }, [authenticated, loadData, loadSectors]);
 
   useEffect(() => {
     let filtered = vulnerabilities;
@@ -305,12 +307,21 @@ export default function VOFCViewer() {
                 className="form-select"
               >
                 <option value="">All Sectors</option>
-                {sectors.map(sector => (
-                  <option key={sector.id} value={sector.name || sector.id}>
-                    {sector.name || `Sector ${sector.id}`}
-                  </option>
-                ))}
+                {sectors.length === 0 ? (
+                  <option value="" disabled>Loading sectors...</option>
+                ) : (
+                  sectors.map(sector => (
+                    <option key={sector.id} value={sector.name || sector.id}>
+                      {sector.name || `Sector ${sector.id}`}
+                    </option>
+                  ))
+                )}
               </select>
+              {sectors.length === 0 && authenticated && (
+                <small className="text-gray-500 text-xs mt-1 block">
+                  No sectors found in database
+                </small>
+              )}
             </div>
 
             {/* Subsector */}
@@ -326,11 +337,15 @@ export default function VOFCViewer() {
                 disabled={!selectedSector}
               >
                 <option value="">All Subsectors</option>
-                {subsectors.map(subsector => (
-                  <option key={subsector.id} value={subsector.name || subsector.id}>
-                    {subsector.name || `Subsector ${subsector.id}`}
-                  </option>
-                ))}
+                {selectedSector && subsectors.length === 0 ? (
+                  <option value="" disabled>Loading subsectors...</option>
+                ) : (
+                  subsectors.map(subsector => (
+                    <option key={subsector.id} value={subsector.name || subsector.id}>
+                      {subsector.name || `Subsector ${subsector.id}`}
+                    </option>
+                  ))
+                )}
               </select>
               {selectedSector && subsectors.length === 0 && (
                 <small className="text-gray-500 text-xs mt-1 block">
