@@ -85,14 +85,39 @@ export async function GET(request) {
     // 1. Setup URLs first (needed for status initialization)
     // Priority: OLLAMA_SERVER_URL > OLLAMA_LOCAL_URL > derived from OLLAMA_URL > default
     const ollamaApiUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
+    
+    // Detect if we're in a local development environment
+    const isLocalDev = process.env.NODE_ENV !== 'production' || 
+                       process.env.VERCEL !== '1' ||
+                       process.env.OLLAMA_LOCAL_URL;
+    
     // Derive Flask server URL from Ollama URL if not explicitly set (use same domain, port 5000)
-    let defaultFlaskUrl = 'https://ollama.frostech.site:5000';
-    try {
-      const url = new URL(ollamaApiUrl);
-      defaultFlaskUrl = `${url.protocol}//${url.hostname}:5000`;
-    } catch {
-      // If URL parsing fails, use default
+    // In local dev, default to localhost; in production, use production URL
+    let defaultFlaskUrl = isLocalDev 
+      ? 'http://127.0.0.1:5000'  // Local development
+      : 'https://ollama.frostech.site:5000';  // Production
+    
+    // If OLLAMA_URL is set and not production, try to derive from it
+    if (process.env.OLLAMA_URL && isLocalDev) {
+      try {
+        const url = new URL(ollamaApiUrl);
+        // If OLLAMA_URL points to localhost, use localhost for Flask too
+        if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+          defaultFlaskUrl = 'http://127.0.0.1:5000';
+        }
+      } catch {
+        // If URL parsing fails, use default
+      }
+    } else if (process.env.OLLAMA_URL && !isLocalDev) {
+      // In production, derive from OLLAMA_URL
+      try {
+        const url = new URL(ollamaApiUrl);
+        defaultFlaskUrl = `${url.protocol}//${url.hostname}:5000`;
+      } catch {
+        // If URL parsing fails, use default
+      }
     }
+    
     const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || defaultFlaskUrl;
 
     const status = {
