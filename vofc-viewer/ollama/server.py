@@ -287,6 +287,20 @@ def generate():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/', methods=['GET'])
+def root():
+    """Root endpoint - redirect to health or show API info."""
+    return jsonify({
+        "service": "VOFC Processing Server",
+        "version": "1.0.0",
+        "status": "running",
+        "endpoints": {
+            "health": "/health",
+            "process": "/api/files/process",
+            "files": "/api/files/list"
+        }
+    })
+
 @app.route('/api/tags', methods=['GET'])
 def get_tags():
     """Get available models/tags."""
