@@ -110,21 +110,37 @@ async function runLiveMode(send) {
           send("✅ All systems operational", "success");
         }
         
-    // Check for new activity every 60 seconds
-    if (heartbeatCount % 60 === 0) {
-      send("🔍 Checking for new processing activity...", "info");
-      
+    // Check Flask server status more frequently for live updates (every 5 seconds)
+    if (heartbeatCount % 5 === 0) {
       // Check local Flask server status (async IIFE)
       (async () => {
         // Use production Flask URL if available, otherwise derive from Ollama URL
         const ollamaBaseUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
-        let defaultFlaskUrl = 'https://ollama.frostech.site:5000';
-        try {
-          const url = new URL(ollamaBaseUrl);
-          defaultFlaskUrl = `${url.protocol}//${url.hostname}:5000`;
-        } catch {
-          // If URL parsing fails, use default
+        
+        // Detect if we're in a local development environment
+        const isLocalDev = process.env.NODE_ENV !== 'production' || 
+                           process.env.VERCEL !== '1' ||
+                           process.env.OLLAMA_LOCAL_URL;
+        
+        // Derive Flask server URL - use localhost in local dev, production URL in production
+        let defaultFlaskUrl = isLocalDev 
+          ? 'http://127.0.0.1:5000'  // Local development
+          : 'https://ollama.frostech.site:5000';  // Production
+        
+        if (process.env.OLLAMA_URL && isLocalDev) {
+          try {
+            const url = new URL(ollamaBaseUrl);
+            if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+              defaultFlaskUrl = 'http://127.0.0.1:5000';
+            }
+          } catch {}
+        } else if (process.env.OLLAMA_URL && !isLocalDev) {
+          try {
+            const url = new URL(ollamaBaseUrl);
+            defaultFlaskUrl = `${url.protocol}//${url.hostname}:5000`;
+          } catch {}
         }
+        
         const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || defaultFlaskUrl;
         try {
           const healthResponse = await fetch(`${flaskUrl}/health`, {
@@ -134,21 +150,26 @@ async function runLiveMode(send) {
           
           if (healthResponse.ok) {
             const health = await healthResponse.json();
-            const incomingCount = health.directories?.incoming?.file_count || 0;
-            const libraryCount = health.directories?.library?.file_count || 0;
-            const errorsCount = health.directories?.errors?.file_count || 0;
-            const extractedTextCount = health.directories?.extracted_text?.file_count || 0;
+            const dirs = health.directories || {};
+            const incomingCount = dirs.incoming?.file_count || 0;
+            const libraryCount = dirs.library?.file_count || 0;
+            const errorsCount = dirs.errors?.file_count || 0;
+            const extractedTextCount = dirs['extracted_text']?.file_count || dirs['extracted-text']?.file_count || 0;
             
-            send(`📊 Processing Status:`, "info");
-            send(`   📥 Incoming: ${incomingCount} file(s)`, "info");
-            send(`   📚 Library: ${libraryCount} file(s)`, "info");
-            send(`   📄 Extracted Text: ${extractedTextCount} file(s)`, "info");
-            send(`   ❌ Errors: ${errorsCount} file(s)`, errorsCount > 0 ? "warning" : "info");
+            // Only send update if counts changed (to reduce noise)
+            // Send full status every 30 seconds, otherwise just count updates
+            if (heartbeatCount % 30 === 0) {
+              send(`📊 Processing Status:`, "info");
+              send(`   📥 Incoming: ${incomingCount} file(s)`, "info");
+              send(`   📚 Library: ${libraryCount} file(s)`, "info");
+              send(`   📄 Extracted Text: ${extractedTextCount} file(s)`, "info");
+              send(`   ❌ Errors: ${errorsCount} file(s)`, errorsCount > 0 ? "warning" : "info");
+            }
             
             if (incomingCount > 0) {
-              send(`⚠️ ${incomingCount} file(s) waiting to be processed`, "warning");
-            } else {
-              send("✅ No files waiting - Ready for new submissions", "success");
+              if (heartbeatCount % 10 === 0) {  // Remind every 10 seconds if files waiting
+                send(`⚠️ ${incomingCount} file(s) waiting to be processed`, "warning");
+              }
             }
             
             // Show Python/Flask service info if available

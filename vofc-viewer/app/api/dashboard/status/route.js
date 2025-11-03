@@ -16,14 +16,36 @@ export async function GET(request) {
 
     // Flask Server URL - Priority: OLLAMA_SERVER_URL > OLLAMA_LOCAL_URL > derived from OLLAMA_URL > default
     const ollamaApiUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
-    // Derive Flask server URL from Ollama URL if not explicitly set (use same domain, port 5000)
-    let defaultFlaskUrl = 'https://ollama.frostech.site:5000';
-    try {
-      const url = new URL(ollamaApiUrl);
-      defaultFlaskUrl = `${url.protocol}//${url.hostname}:5000`;
-    } catch {
-      // If URL parsing fails, use default
+    
+    // Detect if we're in a local development environment
+    const isLocalDev = process.env.NODE_ENV !== 'production' || 
+                       process.env.VERCEL !== '1' ||
+                       process.env.OLLAMA_LOCAL_URL;
+    
+    // Derive Flask server URL - use localhost in local dev, production URL in production
+    let defaultFlaskUrl = isLocalDev 
+      ? 'http://127.0.0.1:5000'  // Local development
+      : 'https://ollama.frostech.site:5000';  // Production
+    
+    // If OLLAMA_URL is set and not production, try to derive from it
+    if (process.env.OLLAMA_URL && isLocalDev) {
+      try {
+        const url = new URL(ollamaApiUrl);
+        if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+          defaultFlaskUrl = 'http://127.0.0.1:5000';
+        }
+      } catch {
+        // If URL parsing fails, use default
+      }
+    } else if (process.env.OLLAMA_URL && !isLocalDev) {
+      try {
+        const url = new URL(ollamaApiUrl);
+        defaultFlaskUrl = `${url.protocol}//${url.hostname}:5000`;
+      } catch {
+        // If URL parsing fails, use default
+      }
     }
+    
     const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || defaultFlaskUrl;
     
     // Check Flask Server (Python) - Production processing server
@@ -35,6 +57,16 @@ export async function GET(request) {
       
       if (flaskResponse.ok) {
         const health = await flaskResponse.json();
+        
+        // Extract file counts from directories
+        const dirs = health.directories || {};
+        status.files = {
+          incoming: dirs.incoming?.file_count || 0,
+          library: dirs.library?.file_count || 0,
+          extracted_text: dirs['extracted_text']?.file_count || dirs['extracted-text']?.file_count || 0,
+          errors: dirs.errors?.file_count || 0
+        };
+        
         status.services.flask = {
           status: 'online',
           url: flaskUrl,
@@ -45,6 +77,22 @@ export async function GET(request) {
           python: health.python || {},
           flask: health.flask || {},
           services: health.services || {}
+        };
+        
+        // Extract Python/Flask service information
+        if (health.python) {
+          status.python = {
+            version: health.python.version || 'unknown',
+            executable: health.python.executable || 'unknown',
+            platform: health.python.platform || {},
+            model: health.server?.model || 'unknown',
+            runtime_status: 'running'
+          };
+        }
+        
+        status.processing = {
+          active_jobs: 0, // TODO: Track active processing jobs
+          ready: (status.files.incoming || 0) === 0  // Ready if no files waiting
         };
       } else {
         status.services.flask = {
