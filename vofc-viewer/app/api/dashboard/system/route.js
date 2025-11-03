@@ -327,11 +327,20 @@ export async function GET(request) {
     }
 
     // 3. Check Supabase (already have supabaseAdmin from auth check)
+    console.log('[SYSTEM API] Checking Supabase:', {
+      hasUrl: !!supabaseUrl,
+      hasKey: !!supabaseServiceKey,
+      hasAdmin: !!supabaseAdmin
+    });
+    
     if (supabaseUrl && supabaseServiceKey && supabaseAdmin) {
       try {
         const { data, error } = await supabaseAdmin.from('submissions').select('id').limit(1);
         
+        console.log('[SYSTEM API] Supabase test query:', { hasData: !!data, error: error?.message });
+        
         if (error) {
+          console.error('[SYSTEM API] Supabase error:', error);
           status.services.supabase = {
             status: 'error',
             url: supabaseUrl,
@@ -344,6 +353,7 @@ export async function GET(request) {
           };
         }
       } catch (e) {
+        console.error('[SYSTEM API] Supabase connection error:', e.message);
         status.services.supabase = {
           status: 'error',
           url: supabaseUrl,
@@ -351,6 +361,11 @@ export async function GET(request) {
         };
       }
     } else {
+      console.warn('[SYSTEM API] Supabase not configured:', {
+        url: supabaseUrl || 'missing',
+        key: supabaseServiceKey ? 'present' : 'missing',
+        admin: supabaseAdmin ? 'present' : 'missing'
+      });
       status.services.supabase = {
         status: 'warning',
         url: supabaseUrl || 'Not configured',
