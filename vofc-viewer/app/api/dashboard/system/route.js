@@ -252,7 +252,7 @@ export async function GET(request) {
         url: flaskUrl,
         error: e.message || 'Connection failed',
         note: e.message?.includes('fetch failed') 
-          ? `Cannot reach Flask server via proxy. Ensure OLLAMA_SERVER_URL is configured in Vercel environment variables and the Flask server is accessible via Cloudflare tunnel.`
+          ? `Cannot reach Flask server at ${flaskUrl}. Ensure OLLAMA_SERVER_URL is configured in Vercel environment variables and the Flask server is accessible via Cloudflare tunnel.`
           : `Flask server connection failed: ${e.message}. Verify server is running and accessible.`
       };
     }
