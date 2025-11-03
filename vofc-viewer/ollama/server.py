@@ -782,8 +782,14 @@ def process_files():
         # --- Process each file ---
         for filepath in incoming_files:
             filename = os.path.basename(filepath)
+            # Sanitize filename for safe printing (handle encoding issues)
+            safe_filename = filename.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
             file_basename = os.path.splitext(filename)[0]
-            print(f"Processing {filename} ...")
+            try:
+                print(f"Processing {safe_filename} ...")
+            except (OSError, UnicodeEncodeError):
+                # Fallback for problematic filenames
+                print(f"Processing file (name may contain special characters) ...")
 
             try:
                 # Step 1: Extract text from PDF
