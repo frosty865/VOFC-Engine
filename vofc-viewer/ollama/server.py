@@ -48,6 +48,15 @@ SUPABASE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '')
 for directory in [UPLOAD_DIR, PROCESSED_DIR, LIBRARY_DIR, ERRORS_DIR, EXTRACTED_TEXT_DIR]:
     os.makedirs(directory, exist_ok=True)
 
+@app.route("/api/health", methods=["GET"])
+def health_check():
+    return jsonify({
+        "status": "ok",
+        "message": "VOFC Flask backend online",
+        "model": MODEL_NAME,
+        "upload_dir": UPLOAD_DIR
+    }), 200
+
 # Helper function to create submission record in Supabase
 def create_submission_record(submission_id, filename, vuln_count, ofc_count, filepath=None, vofc_data=None):
     """
