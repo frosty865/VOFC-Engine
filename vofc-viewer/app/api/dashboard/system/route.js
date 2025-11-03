@@ -319,6 +319,9 @@ export async function GET(request) {
     }
 
     // 3. Check Supabase (already have supabaseAdmin from auth check)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
     console.log('[SYSTEM API] Checking Supabase:', {
       hasUrl: !!supabaseUrl,
       hasKey: !!supabaseServiceKey,
