@@ -464,6 +464,9 @@ export async function POST(req: Request) {
     
     const consolidated = Object.values(grouped).map(consolidateVOFCItem)
 
+    // Link OFCs to vulnerabilities using text similarity
+    const linkedResult = linkUnattachedOFCs(consolidated)
+
     // Success: Move original to library and save processed JSON to processed folder
     try {
       // Move original file from incoming to library
@@ -471,14 +474,14 @@ export async function POST(req: Request) {
       console.log(`✅ Moved ${fileName} from incoming to library`)
       
       // Write processed JSON to processed folder
-      await writeProcessedFile(fileName, consolidated)
+      await writeProcessedFile(fileName, linkedResult)
       console.log(`✅ Saved processed JSON to processed folder`)
       
-      return await uploadResult(fileName, consolidated, submissionId)
+      return await uploadResult(fileName, linkedResult, submissionId)
     } catch (moveError: any) {
       console.error('❌ Failed to move file or write processed output:', moveError)
       // Still return results even if file movement fails
-      return await uploadResult(fileName, consolidated, submissionId)
+      return await uploadResult(fileName, linkedResult, submissionId)
     }
     
   } catch (e: any) {
@@ -576,6 +579,126 @@ function consolidateVOFCItem(item: any): any {
     ...item,
     options_for_consideration: uniqueOptions.slice(0, 5) // Limit to 5 best options
   }
+}
+
+/**
+ * Link unattached OFCs to vulnerabilities using text similarity.
+ * This handles cases where OFCs come in as a flat list without linkage.
+ */
+function linkUnattachedOFCs(vulnerabilities: any[], threshold: number = 0.45): any[] {
+  // Extract all OFCs from vulnerabilities
+  const allOFCs: any[] = []
+  const vulnMap = new Map<string, any>()
+  
+  vulnerabilities.forEach((vuln, index) => {
+    const vulnId = vuln.id || `vuln_${index}`
+    vulnMap.set(vulnId, { ...vuln, id: vulnId })
+    
+    // Collect OFCs from nested structure
+    if (Array.isArray(vuln.options_for_consideration)) {
+      vuln.options_for_consideration.forEach((ofc: any, ofcIndex: number) => {
+        const ofcId = ofc.id || `ofc_${index}_${ofcIndex}`
+        allOFCs.push({
+          ...ofc,
+          id: ofcId,
+          linked_vulnerability: ofc.linked_vulnerability || null,
+          source_vulnerability_id: vulnId // Track which vuln it came from
+        })
+      })
+    }
+  })
+  
+  // If OFCs are already linked, check for unlinked ones
+  const unlinkedOFCs = allOFCs.filter(ofc => !ofc.linked_vulnerability)
+  
+  if (unlinkedOFCs.length === 0) {
+    console.log('[Linker] All OFCs already linked')
+    return rebuildVulnerabilitiesWithLinks(vulnerabilities, allOFCs)
+  }
+  
+  // Link unlinked OFCs to vulnerabilities using text similarity
+  let linked = 0
+  
+  for (const ofc of unlinkedOFCs) {
+    let bestMatch: any = null
+    let bestScore = 0
+    const ofcText = (ofc.option_text || ofc.text || '').toLowerCase()
+    
+    for (const [vulnId, vuln] of vulnMap.entries()) {
+      // Combine vulnerability context for fuzzy matching
+      const vulnContext = [
+        vuln.vulnerability || '',
+        vuln.question || '',
+        vuln.what || '',
+        vuln.so_what || '',
+        vuln.description || ''
+      ].join(' ').toLowerCase()
+      
+      // Calculate similarity ratio (simple implementation)
+      const similarity = calculateSimilarity(ofcText, vulnContext)
+      
+      if (similarity > bestScore) {
+        bestScore = similarity
+        bestMatch = vuln
+      }
+    }
+    
+    // Link if similarity exceeds threshold
+    if (bestMatch && bestScore >= threshold) {
+      ofc.linked_vulnerability = bestMatch.id
+      linked++
+    }
+  }
+  
+  console.log(`[Linker] Linked ${linked} OFCs to vulnerabilities (${unlinkedOFCs.length - linked} unlinked)`)
+  
+  return rebuildVulnerabilitiesWithLinks(vulnerabilities, allOFCs)
+}
+
+/**
+ * Rebuild vulnerabilities array with linked OFCs
+ */
+function rebuildVulnerabilitiesWithLinks(vulnerabilities: any[], allOFCs: any[]): any[] {
+  const result = vulnerabilities.map((vuln, index) => {
+    const vulnId = vuln.id || `vuln_${index}`
+    // Find OFCs linked to this vulnerability
+    const linkedOFCs = allOFCs.filter(ofc => 
+      ofc.linked_vulnerability === vulnId || 
+      ofc.source_vulnerability_id === vulnId
+    )
+    
+    return {
+      ...vuln,
+      id: vulnId,
+      options_for_consideration: linkedOFCs.map(({ source_vulnerability_id, ...ofc }) => ofc)
+    }
+  })
+  
+  return result
+}
+
+/**
+ * Calculate text similarity ratio (0-1) using simple longest common subsequence
+ */
+function calculateSimilarity(text1: string, text2: string): number {
+  if (!text1 || !text2) return 0
+  
+  // Simple word-based similarity
+  const words1 = text1.split(/\s+/).filter(w => w.length > 2)
+  const words2 = text2.split(/\s+/).filter(w => w.length > 2)
+  
+  if (words1.length === 0 || words2.length === 0) return 0
+  
+  const set1 = new Set(words1)
+  const set2 = new Set(words2)
+  
+  let common = 0
+  set1.forEach(word => {
+    if (set2.has(word)) common++
+  })
+  
+  const union = new Set([...words1, ...words2])
+  return union.size > 0 ? common / union.size : 0
 }
 
 async function uploadResult(fileName: string, payload: any, submissionId?: string) {
