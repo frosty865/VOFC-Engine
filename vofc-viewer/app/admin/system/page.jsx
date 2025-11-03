@@ -74,10 +74,10 @@ function SystemStatusPage() {
 
   useEffect(() => {
     loadStatus()
-    // Refresh every 5 seconds for live updates
+    // Refresh every 10 seconds for real-time updates (balance between freshness and server load)
     const id = setInterval(() => {
       loadStatus(true)
-    }, 5000)
+    }, 10000)
     return () => {
       clearInterval(id)
     }

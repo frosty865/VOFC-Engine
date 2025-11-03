@@ -117,7 +117,10 @@ export async function GET(request) {
       }
     }
     
-    const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || defaultFlaskUrl;
+    const flaskUrl = process.env.NEXT_PUBLIC_OLLAMA_SERVER_URL || 
+                     process.env.OLLAMA_SERVER_URL || 
+                     process.env.OLLAMA_LOCAL_URL || 
+                     defaultFlaskUrl;
 
     const status = {
       timestamp: new Date().toISOString(),
@@ -167,24 +170,13 @@ export async function GET(request) {
     // Since this is server-side code running on Vercel, we can make external HTTP requests directly
     console.log('[SYSTEM API] Checking Flask server at:', flaskUrl);
     try {
-      // Try /api/health first (more comprehensive), fallback to /health
-      let flaskResponse;
-      try {
-        flaskResponse = await fetch(`${flaskUrl}/api/health`, {
-          signal: AbortSignal.timeout(10000), // 10 second timeout
-          headers: {
-            'Accept': 'application/json',
-          }
-        });
-      } catch (e) {
-        // Fallback to /health if /api/health fails
-        flaskResponse = await fetch(`${flaskUrl}/health`, {
-          signal: AbortSignal.timeout(10000),
-          headers: {
-            'Accept': 'application/json',
-          }
-        });
-      }
+      // Use /health endpoint which has comprehensive data (not /api/health which is just basic status)
+      const flaskResponse = await fetch(`${flaskUrl}/health`, {
+        signal: AbortSignal.timeout(10000), // 10 second timeout
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
       
       console.log('[SYSTEM API] Flask response status:', flaskResponse.status, flaskResponse.ok);
       
@@ -193,6 +185,9 @@ export async function GET(request) {
         console.log('[SYSTEM API] Flask health data keys:', Object.keys(health));
         console.log('[SYSTEM API] Flask directories:', health.directories);
         console.log('[SYSTEM API] Flask server info:', health.server);
+        console.log('[SYSTEM API] Flask python info:', health.python);
+        console.log('[SYSTEM API] Flask gpu info:', health.gpu);
+        console.log('[SYSTEM API] Flask backend stats:', health.backend);
           status.services.flask = {
             status: 'online',
             url: flaskUrl,
@@ -207,20 +202,21 @@ export async function GET(request) {
           status.files.extracted_text = dirs['extracted_text']?.file_count || dirs['extracted-text']?.file_count || 0;
           status.files.errors = dirs.errors?.file_count || 0;
           
-          // Extract comprehensive Python/Flask service information
+          // Extract comprehensive Python/Flask service information from /health endpoint
           status.python = {
-            model: health.server?.model || 'unknown',
+            model: health.server?.model || health.model || MODEL_NAME || 'unknown',
             version: health.python?.version || 'unknown',
             executable: health.python?.executable || 'unknown',
             platform: health.python?.platform || {},
-            runtime_status: 'running'
+            runtime_status: health.status === 'healthy' ? 'running' : 'stopped',
+            status: health.status === 'healthy' ? 'running' : 'stopped'
           };
           
           // Extract Flask service information
           status.flask = {
             version: health.flask?.version || 'unknown',
-            environment: health.flask?.environment || 'unknown',
-            debug: health.flask?.debug || false
+            environment: process.env.FLASK_ENV || process.env.ENVIRONMENT || 'production',
+            debug: health.flask?.debug || DEBUG_MODE || false
           };
           
           // Extract Ollama models information
@@ -230,13 +226,13 @@ export async function GET(request) {
           status.services.ollama_models = health.services?.ollama_models || [];
           status.services.ollama_base_url = health.services?.ollama_url || process.env.OLLAMA_URL || 'unknown';
           
-          // Extract GPU utilization if available (only if health.gpu exists and has data)
-          if (health.gpu && typeof health.gpu === 'object') {
+          // Extract GPU utilization - the /health endpoint provides comprehensive GPU data
+          if (health.gpu && typeof health.gpu === 'object' && health.gpu.available) {
             status.gpu = {
-              available: health.gpu.available || false,
+              available: true,
               utilization: health.gpu.utilization || 0,
-              memory_used: health.gpu.memory_used || 0,
-              memory_total: health.gpu.memory_total || 0,
+              memory_used: health.gpu.memory_used || 0, // Already in GB
+              memory_total: health.gpu.memory_total || 0, // Already in GB
               devices: health.gpu.devices || []
             };
           } else {
@@ -249,7 +245,7 @@ export async function GET(request) {
             };
           }
           
-          // Extract backend statistics if available (only if health.backend exists)
+          // Extract backend statistics - the /health endpoint provides backend stats
           if (health.backend && typeof health.backend === 'object') {
             status.backend = {
               active_connections: health.backend.active_connections || 0,
@@ -258,6 +254,7 @@ export async function GET(request) {
               queue_size: health.backend.queue_size || status.files.incoming || 0
             };
           } else {
+            // Fallback: use directory file counts as queue size indicator
             status.backend = {
               active_connections: 0,
               requests_per_minute: 0,
