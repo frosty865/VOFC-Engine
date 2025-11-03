@@ -10,6 +10,11 @@ function SystemStatusPage() {
   const [error, setError] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(null)
+  const [simpleHealth, setSimpleHealth] = useState({
+    flask: 'unknown',
+    ollama: 'unknown',
+    supabase: 'unknown'
+  })
 
   const loadStatus = async (showRefreshing = false) => {
     if (showRefreshing) setRefreshing(true)
@@ -36,6 +41,40 @@ function SystemStatusPage() {
       if (showRefreshing) setRefreshing(false)
     }
   }
+
+  // Simple health check using Flask endpoint
+  useEffect(() => {
+    async function fetchSystemHealth() {
+      try {
+        // Get Flask URL from environment or use default
+        const flaskUrl = process.env.NEXT_PUBLIC_OLLAMA_SERVER_URL || 
+                       process.env.NEXT_PUBLIC_OLLAMA_LOCAL_URL || 
+                       'http://127.0.0.1:5000'
+        const res = await fetch(`${flaskUrl}/api/system/health`)
+        if (res.ok) {
+          const data = await res.json()
+          setSimpleHealth({
+            flask: data.components?.flask || 'unknown',
+            ollama: data.components?.ollama || 'unknown',
+            supabase: data.components?.supabase || 'unknown'
+          })
+        } else {
+          throw new Error(`Health check failed: ${res.status}`)
+        }
+      } catch (err) {
+        console.error('System health check failed:', err)
+        setSimpleHealth({
+          flask: 'offline',
+          ollama: 'offline',
+          supabase: 'offline'
+        })
+      }
+    }
+
+    fetchSystemHealth()
+    const interval = setInterval(fetchSystemHealth, 10000) // refresh every 10s
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     loadStatus()
@@ -154,6 +193,37 @@ function SystemStatusPage() {
       )}
 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)' }}>
+
+      {/* Simple Health Check Status */}
+      <div className="card" style={{ marginBottom: 'var(--spacing-xl)' }}>
+        <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-md)' }}>
+          Quick Health Status (Flask Endpoint)
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-md)' }}>
+          {['flask', 'ollama', 'supabase'].map(key => (
+            <div 
+              key={key} 
+              style={{
+                padding: 'var(--spacing-md)',
+                borderRadius: 'var(--border-radius-lg)',
+                backgroundColor: simpleHealth[key] === 'online' ? 'rgba(40, 167, 69, 0.1)' : 'rgba(220, 53, 69, 0.1)',
+                border: `1px solid ${simpleHealth[key] === 'online' ? 'rgba(40, 167, 69, 0.3)' : 'rgba(220, 53, 69, 0.3)'}`
+              }}
+            >
+              <h4 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--cisa-gray)', marginBottom: 'var(--spacing-xs)' }}>
+                {key.charAt(0).toUpperCase() + key.slice(1)} Server
+              </h4>
+              <p style={{ 
+                fontSize: 'var(--font-size-xs)', 
+                color: simpleHealth[key] === 'online' ? '#155724' : 'var(--cisa-red-dark)',
+                fontWeight: 600
+              }}>
+                {simpleHealth[key]}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Service Status Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--spacing-lg)' }}>

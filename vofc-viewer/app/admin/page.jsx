@@ -8,9 +8,36 @@ import Link from 'next/link'
 export default function AdminOverviewPage() {
   const [stats, setStats] = useState([])
   const [soft, setSoft] = useState([])
+  const [system, setSystem] = useState({ flask: 'checking', ollama: 'checking', supabase: 'checking' })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // ---- System health checker ----
+  useEffect(() => {
+    let isMounted = true
+    async function fetchSystemHealth() {
+      try {
+        const flaskUrl = process.env.NEXT_PUBLIC_OLLAMA_SERVER_URL || 
+                       process.env.NEXT_PUBLIC_OLLAMA_LOCAL_URL || 
+                       'https://flask.frostech.site'
+        const res = await fetch(`${flaskUrl}/api/system/health`, { cache: 'no-store' })
+        const json = await res.json()
+        if (isMounted) {
+          setSystem(json.components || {})
+        }
+      } catch (err) {
+        console.error('[System Health] Fetch failed:', err)
+        if (isMounted) {
+          setSystem({ flask: 'offline', ollama: 'offline', supabase: 'offline' })
+        }
+      }
+    }
+    fetchSystemHealth()
+    const interval = setInterval(fetchSystemHealth, 15000)
+    return () => { isMounted = false; clearInterval(interval) }
+  }, [])
+
+  // ---- Existing Admin Overview fetch ----
   useEffect(() => {
     let isMounted = true
     const load = async () => {
@@ -63,6 +90,30 @@ export default function AdminOverviewPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)' }}>
+
+      {/* ---- System Health Summary ---- */}
+      <section>
+        <h2 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-md)' }}>
+          System Health
+        </h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--spacing-lg)' }}>
+          {['flask', 'ollama', 'supabase'].map(key => (
+            <div key={key} className="card" style={{
+              backgroundColor: system[key] === 'online' ? '#e6f6ea' : '#fdecea',
+              border: `1px solid ${system[key] === 'online' ? '#00a651' : '#c00'}`,
+              transition: '0.3s all ease'
+            }}>
+              <div style={{ fontWeight: 600, color: system[key] === 'online' ? '#007a3d' : '#a00', marginBottom: 'var(--spacing-xs)' }}>
+                {key.charAt(0).toUpperCase() + key.slice(1)} Server
+              </div>
+              <div style={{ fontSize: 'var(--font-size-sm)', color: '#444' }}>
+                Status: <strong>{system[key]}</strong>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section>
         <h2 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, color: 'var(--cisa-blue)', marginBottom: 'var(--spacing-md)' }}>Model Performance Summary</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--spacing-lg)' }}>
