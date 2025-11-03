@@ -220,22 +220,41 @@ export async function GET(request) {
           status.services.ollama_models = health.services?.ollama_models || [];
           status.services.ollama_base_url = health.services?.ollama_url || process.env.OLLAMA_URL || 'unknown';
           
-          // Extract GPU utilization if available
-          status.gpu = health.gpu || {
-            available: false,
-            utilization: 0,
-            memory_used: 0,
-            memory_total: 0,
-            devices: []
-          };
+          // Extract GPU utilization if available (only if health.gpu exists and has data)
+          if (health.gpu && typeof health.gpu === 'object') {
+            status.gpu = {
+              available: health.gpu.available || false,
+              utilization: health.gpu.utilization || 0,
+              memory_used: health.gpu.memory_used || 0,
+              memory_total: health.gpu.memory_total || 0,
+              devices: health.gpu.devices || []
+            };
+          } else {
+            status.gpu = {
+              available: false,
+              utilization: 0,
+              memory_used: 0,
+              memory_total: 0,
+              devices: []
+            };
+          }
           
-          // Extract backend statistics if available
-          status.backend = health.backend || {
-            active_connections: 0,
-            requests_per_minute: 0,
-            avg_response_time: 0,
-            queue_size: 0
-          };
+          // Extract backend statistics if available (only if health.backend exists)
+          if (health.backend && typeof health.backend === 'object') {
+            status.backend = {
+              active_connections: health.backend.active_connections || 0,
+              requests_per_minute: health.backend.requests_per_minute || 0,
+              avg_response_time: health.backend.avg_response_time || 0,
+              queue_size: health.backend.queue_size || status.files.incoming || 0
+            };
+          } else {
+            status.backend = {
+              active_connections: 0,
+              requests_per_minute: 0,
+              avg_response_time: 0,
+              queue_size: status.files.incoming || 0
+            };
+          }
       } else {
         status.services.flask = {
           status: 'error',
@@ -324,10 +343,10 @@ export async function GET(request) {
       };
     }
 
-    // Processing status
+    // Processing status - use actual file counts from Flask
     status.processing = {
-      active_jobs: status.files.incoming > 0 ? status.files.incoming : 0,
-      ready: status.files.incoming > 0,
+      active_jobs: status.files.incoming || 0,
+      ready: (status.files.incoming || 0) > 0,
       last_check: status.timestamp
     };
 
