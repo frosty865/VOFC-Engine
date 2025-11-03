@@ -898,20 +898,20 @@ def process_files():
                 
                 import traceback
                 try:
-                    traceback.print_exc()
+                    tb_str = traceback.format_exc()
+                    print(tb_str[:500])  # Limit output to avoid encoding issues
                 except (OSError, UnicodeEncodeError):
-                    # Use logging instead if print fails
-                    logging.error(f"Error processing file: {error_type}: {error_msg}")
-                    logging.error(traceback.format_exc())
+                    # Fallback if print still fails
+                    print(f"ERROR: {error_type}: {error_msg}")
 
                 # Move to errors folder
                 try:
                     error_path = os.path.join(ERRORS_DIR, filename)
                     shutil.move(filepath, error_path)
                     try:
-                    print(f"Moved {safe_filename} to errors folder")
-                except (OSError, UnicodeEncodeError):
-                    print("Moved file to errors folder")
+                        print(f"Moved {safe_filename} to errors folder")
+                    except (OSError, UnicodeEncodeError):
+                        print("Moved file to errors folder")
                 except Exception as move_error:
                     print(f"WARNING: Failed to move file to errors folder: {move_error}")
 
