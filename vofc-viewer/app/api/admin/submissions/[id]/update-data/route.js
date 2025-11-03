@@ -76,13 +76,41 @@ export async function POST(request, { params }) {
     
     // Flask Server URL - Priority: OLLAMA_SERVER_URL > OLLAMA_LOCAL_URL > derived from OLLAMA_URL > default
     const ollamaApiUrl = process.env.OLLAMA_URL || 'https://ollama.frostech.site';
-    let defaultFlaskUrl = 'https://ollama.frostech.site:5000';
-    try {
-      const url = new URL(ollamaApiUrl);
-      defaultFlaskUrl = `${url.protocol}//${url.hostname}:5000`;
-    } catch {
-      // If URL parsing fails, use default
+    
+    // Detect if we're in a local development environment
+    const isLocalDev = process.env.NODE_ENV !== 'production' || 
+                       process.env.VERCEL !== '1' ||
+                       process.env.OLLAMA_LOCAL_URL;
+    
+    // Derive Flask server URL - use localhost in local dev, production URL in production
+    // Production uses Cloudflare tunnel at flask.frostech.site (no port, HTTPS)
+    let defaultFlaskUrl = isLocalDev 
+      ? 'http://127.0.0.1:5000'  // Local development
+      : 'https://flask.frostech.site';  // Production (Cloudflare tunnel)
+    
+    if (process.env.OLLAMA_URL && isLocalDev) {
+      try {
+        const url = new URL(ollamaApiUrl);
+        if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+          defaultFlaskUrl = 'http://127.0.0.1:5000';
+        }
+      } catch {
+        // If URL parsing fails, use default
+      }
+    } else if (process.env.OLLAMA_URL && !isLocalDev) {
+      // In production, prefer flask.frostech.site (Cloudflare tunnel)
+      try {
+        const url = new URL(ollamaApiUrl);
+        if (url.hostname === 'ollama.frostech.site') {
+          defaultFlaskUrl = 'https://flask.frostech.site';
+        } else {
+          defaultFlaskUrl = `${url.protocol}//flask.${url.hostname}`;
+        }
+      } catch {
+        // If URL parsing fails, use default
+      }
     }
+    
     const flaskUrl = process.env.OLLAMA_SERVER_URL || process.env.OLLAMA_LOCAL_URL || defaultFlaskUrl;
     
     let vofcData = null;
