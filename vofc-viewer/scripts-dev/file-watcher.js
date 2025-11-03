@@ -147,6 +147,9 @@ async function processFilesInFolder() {
       processingStartTime = Date.now();
       
       // Call Ollama server directly to process files
+      let processingError = null;
+      let processingComplete = false;
+      
       try {
         log(`🔗 Calling Ollama processing API: ${PROCESS_ENDPOINT}`, 'cyan');
         const response = await fetch(PROCESS_ENDPOINT, {
@@ -166,14 +169,18 @@ async function processFilesInFolder() {
             }
             // Mark files as processed
             validFiles.forEach(file => processedFiles.add(file));
+            processingComplete = true;
           } else {
-            log(`❌ Processing failed: ${result.error || result.message || 'Unknown error'}`, 'red');
+            processingError = new Error(result.error || result.message || 'Unknown error');
+            log(`❌ Processing failed: ${processingError.message}`, 'red');
           }
         } else {
           const errorText = await response.text().catch(() => 'Unknown error');
+          processingError = new Error(`HTTP ${response.status}: ${errorText}`);
           log(`❌ Processing endpoint returned ${response.status}: ${errorText}`, 'red');
         }
       } catch (error) {
+        processingError = error;
         const elapsed = processingStartTime ? Math.round((Date.now() - processingStartTime) / 1000) : 0;
         
         if (error.name === 'AbortError' || error.message.includes('timeout') || error.message.includes('aborted')) {
@@ -190,6 +197,7 @@ async function processFilesInFolder() {
             // Reset only if it's been too long
             isProcessing = false;
             processingStartTime = null;
+            return;
           }
         } else if (error.code === 'ECONNREFUSED' || error.message.includes('fetch failed') || error.message.includes('Cannot connect')) {
           // Only log connection errors if we're not already processing (might be a stale error from a previous attempt)
@@ -198,15 +206,15 @@ async function processFilesInFolder() {
             log(`   Make sure your Ollama server is running!`, 'yellow');
             log(`   Expected URL: ${PROCESSING_URL}`, 'yellow');
             log(`   Try running: python ollama/server.py (in vofc-viewer directory)`, 'yellow');
+            // Only reset on actual connection errors (not during active processing)
+            if (elapsed < 5) {
+              isProcessing = false;
+              processingStartTime = null;
+            }
           } else {
             // If we've been processing for a while, this might be a stale error, ignore it
             log(`⚠️ Connection check failed but processing may still be active (${elapsed}s)`, 'yellow');
             return; // Don't reset flag if processing is active
-          }
-          // Only reset on actual connection errors (not during active processing)
-          if (elapsed < 5) {
-            isProcessing = false;
-            processingStartTime = null;
           }
         } else {
           log(`❌ Error processing files: ${error.message}`, 'red');
@@ -219,8 +227,8 @@ async function processFilesInFolder() {
           processingStartTime = null;
         }
       } finally {
-        // Only reset if processing completed successfully
-        if (!error) {
+        // Only reset if processing completed successfully or failed with non-timeout error
+        if (processingComplete || (processingError && processingError.name !== 'AbortError' && !processingError.message.includes('timeout'))) {
           isProcessing = false;
           processingStartTime = null;
         }
