@@ -23,11 +23,13 @@ const projectRoot = path.resolve(scriptDir, '..');
 const flaskScript = path.resolve(projectRoot, 'ollama', 'server.py');
 const watcherScript = path.resolve(projectRoot, 'scripts-dev', 'file-watcher.js');
 
-// Verify paths exist and log them for debugging
-console.log(`[DEBUG] Script directory: ${scriptDir}`);
-console.log(`[DEBUG] Project root: ${projectRoot}`);
-console.log(`[DEBUG] Flask script: ${flaskScript}`);
-console.log(`[DEBUG] Watcher script: ${watcherScript}`);
+// Verify paths exist and log them for debugging (only once on startup)
+if (process.env.DEBUG_PATHS !== 'false') {
+  console.log(`[DEBUG] Script directory: ${scriptDir}`);
+  console.log(`[DEBUG] Project root: ${projectRoot}`);
+  console.log(`[DEBUG] Flask script: ${flaskScript}`);
+  console.log(`[DEBUG] Watcher script: ${watcherScript}`);
+}
 
 if (!fs.existsSync(flaskScript)) {
   console.error(`ERROR: Flask script not found at: ${flaskScript}`);
@@ -271,12 +273,18 @@ async function startWatcher() {
 
   log('Watcher', 'Starting file watcher...');
 
-  // Use absolute path and ensure proper quoting for Windows paths with spaces
-  const watcherProcess = spawn('node', [watcherScript], {
-    cwd: projectRoot,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    shell: true
-  });
+  // Use absolute path - construct command string for Windows to handle spaces properly
+  const watcherProcess = process.platform === 'win32'
+    ? spawn(`node "${watcherScript}"`, [], {
+        cwd: projectRoot,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: true
+      })
+    : spawn('node', [watcherScript], {
+        cwd: projectRoot,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: true
+      });
 
   watcherProcess.stdout.on('data', (data) => {
     const output = data.toString().trim();
