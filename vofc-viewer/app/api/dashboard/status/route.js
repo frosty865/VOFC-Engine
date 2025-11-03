@@ -9,9 +9,23 @@ export async function GET(request) {
     const status = {
       timestamp: new Date().toISOString(),
       services: {},
-      files: {},
-      processing: {},
-      python: {}
+      files: {
+        incoming: 0,
+        library: 0,
+        extracted_text: 0,
+        errors: 0
+      },
+      processing: {
+        active_jobs: 0,
+        ready: false
+      },
+      python: {
+        version: 'unknown',
+        executable: 'unknown',
+        platform: {},
+        model: 'unknown',
+        runtime_status: 'unknown'
+      }
     };
 
     // Flask Server URL - Priority: OLLAMA_SERVER_URL > OLLAMA_LOCAL_URL > derived from OLLAMA_URL > default
