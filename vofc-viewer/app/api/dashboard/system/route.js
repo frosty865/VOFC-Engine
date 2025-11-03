@@ -204,7 +204,7 @@ export async function GET(request) {
           
           // Extract comprehensive Python/Flask service information from /health endpoint
           status.python = {
-            model: health.server?.model || health.model || MODEL_NAME || 'unknown',
+            model: health.server?.model || health.model || 'unknown',
             version: health.python?.version || 'unknown',
             executable: health.python?.executable || 'unknown',
             platform: health.python?.platform || {},
