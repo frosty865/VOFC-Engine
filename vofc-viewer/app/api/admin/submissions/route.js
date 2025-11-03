@@ -1,10 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/app/lib/supabase-admin.js'
 
 export const dynamic = 'force-dynamic'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 export async function GET(request) {
   // Check admin authentication using Supabase token
@@ -25,14 +22,13 @@ export async function GET(request) {
     }
     
     // Verify token and check admin role
-    if (!supabaseUrl || !supabaseServiceKey) {
+    if (!supabaseAdmin) {
       return NextResponse.json(
-        { error: 'Server configuration error' },
+        { error: 'Server configuration error: Supabase admin client not available' },
         { status: 500 }
       )
     }
     
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(accessToken)
     
     if (userError || !user) {
@@ -73,11 +69,11 @@ export async function GET(request) {
   }
 
   try {
-    if (!supabaseUrl || !supabaseServiceKey) {
+    if (!supabaseAdmin) {
       return NextResponse.json({ error: 'Missing Supabase configuration' }, { status: 500 })
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabase = supabaseAdmin
 
     const url = new URL(request.url)
     const status = url.searchParams.get('status') || 'pending_review'

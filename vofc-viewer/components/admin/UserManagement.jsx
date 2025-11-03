@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase-client.js';
+import { supabase } from '@/app/lib/supabase-client.js';
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);

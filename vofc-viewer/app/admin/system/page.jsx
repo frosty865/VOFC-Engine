@@ -1,30 +1,20 @@
 'use client'
 
-console.log('[SYSTEM DASHBOARD] MODULE LOADING - File is being imported/executed')
-
 import { useEffect, useState } from 'react'
 import { fetchWithAuth } from '../../lib/fetchWithAuth'
 import '../../../styles/cisa.css'
 
-console.log('[SYSTEM DASHBOARD] Imports completed, defining component...')
-
 function SystemStatusPage() {
-  console.log('[SYSTEM DASHBOARD] Component function called - rendering...')
-  
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(null)
-  
-  console.log('[SYSTEM DASHBOARD] State:', { loading, hasStatus: !!status, hasError: !!error })
 
   const loadStatus = async (showRefreshing = false) => {
     if (showRefreshing) setRefreshing(true)
     try {
-      console.log('[SYSTEM DASHBOARD] Fetching system status...')
       const res = await fetchWithAuth('/api/dashboard/system', { cache: 'no-store' })
-      console.log('[SYSTEM DASHBOARD] Response status:', res.status, res.ok)
       
       if (!res.ok) {
         const errorText = await res.text()
@@ -33,22 +23,6 @@ function SystemStatusPage() {
       }
       
       const data = await res.json()
-      console.log('[SYSTEM DASHBOARD] Received data:', {
-        hasServices: !!data.services,
-        flaskStatus: data.services?.flask?.status,
-        ollamaStatus: data.services?.ollama?.status,
-        supabaseStatus: data.services?.supabase?.status,
-        hasFiles: !!data.files,
-        fileCounts: data.files,
-        hasParsing: !!data.parsing,
-        parsingCounts: data.parsing ? {
-          total: data.parsing.total_submissions,
-          pending: data.parsing.pending_review,
-          approved: data.parsing.approved
-        } : null,
-        timestamp: data.timestamp
-      })
-      console.log('[SYSTEM DASHBOARD] Full data object:', data)
       
       setStatus(data)
       setError(null)
@@ -64,15 +38,12 @@ function SystemStatusPage() {
   }
 
   useEffect(() => {
-    console.log('[SYSTEM DASHBOARD] useEffect running - starting data fetch...')
     loadStatus()
     // Refresh every 5 seconds for live updates
     const id = setInterval(() => {
-      console.log('[SYSTEM DASHBOARD] Interval tick - refreshing data...')
       loadStatus(true)
     }, 5000)
     return () => {
-      console.log('[SYSTEM DASHBOARD] useEffect cleanup - clearing interval')
       clearInterval(id)
     }
   }, [])
@@ -628,5 +599,4 @@ function SystemStatusPage() {
   )
 }
 
-console.log('[SYSTEM DASHBOARD] Exporting SystemStatusPage component...')
 export default SystemStatusPage

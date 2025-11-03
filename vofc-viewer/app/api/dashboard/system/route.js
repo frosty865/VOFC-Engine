@@ -1,19 +1,20 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/app/lib/supabase-admin.js';
 
 export const dynamic = 'force-dynamic';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 /**
  * System Health Status - Checks all local services
  */
 export async function GET(request) {
   // Check admin authentication using Supabase token
-  let supabaseAdmin = null;
-  
   try {
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        { error: 'Server configuration error: Supabase admin client not available', timestamp: new Date().toISOString() },
+        { status: 500 }
+      )
+    }
     // Get token from Authorization header
     const authHeader = request.headers.get('authorization');
     let accessToken = null;
@@ -30,15 +31,6 @@ export async function GET(request) {
     }
     
     // Verify token and check admin role
-    if (!supabaseUrl || !supabaseServiceKey) {
-      console.error('Missing Supabase environment variables');
-      return NextResponse.json(
-        { error: 'Server configuration error', timestamp: new Date().toISOString() },
-        { status: 500 }
-      );
-    }
-    
-    supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(accessToken);
     
     if (userError || !user) {

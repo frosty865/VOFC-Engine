@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser, getUserProfile } from '../lib/auth';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '@/app/lib/supabase-client.js';
 
 export default function UserProfile() {
     const [user, setUser] = useState(null);
@@ -42,32 +42,62 @@ export default function UserProfile() {
             setProfile(userProfile);
 
             // Get user's active submissions (from submissions table)
-            const { data: submissions, error } = await supabase
-                .from('submissions')
-                .select('*')
-                .eq('submitter_email', currentUser.email || '')
-                .order('created_at', { ascending: false });
+            // Try submitter_email first, fallback to checking data field if column doesn't exist
+            try {
+              const { data: submissions, error } = await supabase
+                  .from('submissions')
+                  .select('*')
+                  .eq('submitter_email', currentUser.email || '')
+                  .order('created_at', { ascending: false });
 
-            if (error) {
-                console.error('Error loading submissions:', error);
-                return;
+              if (error) {
+                // If column doesn't exist, try filtering client-side
+                const { data: allSubmissions } = await supabase
+                    .from('submissions')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+                
+                // Filter client-side by checking data field or other fields
+                const userSubmissions = (allSubmissions || []).filter(sub => {
+                  if (sub.submitter_email === currentUser.email) return true;
+                  if (sub.data) {
+                    try {
+                      const data = typeof sub.data === 'string' ? JSON.parse(sub.data) : sub.data;
+                      return data.submitter_email === currentUser.email || 
+                             data.submitter === currentUser.email;
+                    } catch {}
+                  }
+                  return false;
+                });
+                setUserSubmissions(userSubmissions);
+              } else {
+                setUserSubmissions(submissions || []);
+              }
+            } catch (err) {
+              console.error('Error loading submissions:', err);
+              setUserSubmissions([]);
             }
-
-            setUserSubmissions(submissions || []);
 
             // Get rejected submissions (from rejected_submissions table)
-            const { data: rejectedSubmissions, error: rejectedError } = await supabase
-                .from('rejected_submissions')
-                .select('*')
-                .eq('submitter_email', currentUser.email || '')
-                .order('rejected_at', { ascending: false });
+            try {
+              const { data: rejectedSubmissions, error: rejectedError } = await supabase
+                  .from('rejected_submissions')
+                  .select('*')
+                  .eq('submitter_email', currentUser.email || '')
+                  .order('rejected_at', { ascending: false });
 
-            if (rejectedError) {
-                console.error('Error loading rejected submissions:', rejectedError);
-                return;
+              if (rejectedError) {
+                setRejectedSubmissions([]);
+                setReturnedSubmissions([]);
+              } else {
+                setRejectedSubmissions(rejectedSubmissions || []);
+                setReturnedSubmissions(rejectedSubmissions || []);
+              }
+            } catch (err) {
+              console.error('Error loading rejected submissions:', err);
+              setRejectedSubmissions([]);
+              setReturnedSubmissions([]);
             }
-
-            setReturnedSubmissions(rejectedSubmissions || []);
 
         } catch (error) {
             console.error('Error loading user data:', error);

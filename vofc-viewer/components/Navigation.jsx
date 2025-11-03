@@ -2,7 +2,7 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../app/lib/supabaseClient';
+import { supabase } from '@/app/lib/supabase-client.js';
 // Removed localStorage dependencies - now using secure server-side authentication
 import '../styles/cisa.css';
 import PropTypes from 'prop-types';
@@ -14,13 +14,10 @@ export default function Navigation({ simple = false }) {
   const [showSubmissionsDropdown, setShowSubmissionsDropdown] = useState(false);
 
   const loadUser = useCallback(async () => {
-    console.log('[Navigation] loadUser() STARTED');
     try {
       // Include Supabase access token so /api/auth/verify can validate
-      console.log('[Navigation] Getting Supabase session...');
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      console.log('[Navigation] Session retrieved', { hasToken: !!token, hasSession: !!session });
       
       if (!token) {
         // No session token, user not authenticated
@@ -45,7 +42,6 @@ export default function Navigation({ simple = false }) {
             role: normalizedRole,
             is_admin: result.user.is_admin || normalizedRole === 'admin' || normalizedRole === 'spsa'
           };
-          console.log('[Navigation] User authenticated:', { email: userObj.email, role: userObj.role, is_admin: userObj.is_admin });
           setCurrentUser(userObj);
           setLoading(false);
           return;

@@ -98,19 +98,32 @@ export default function ReviewSubmissionsPage() {
 
   const loadSubmissions = async () => {
     try {
+      setError(null)
       const res = await fetchWithAuth('/api/admin/submissions?status=pending_review', {
         cache: 'no-store'
       })
+      
+      // Log response status for debugging
       if (!res.ok) {
+        const errorText = await res.text()
         const errorData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-        throw new Error(errorData.error || `HTTP ${res.status}`)
+        console.error(`[Admin Review] API error: ${res.status}`, errorText.substring(0, 200))
+        
+        if (res.status === 401) {
+          throw new Error('Authentication failed. Please sign in again.')
+        } else if (res.status === 403) {
+          throw new Error('Access denied. Admin role required.')
+        } else {
+          throw new Error(errorData.error || `HTTP ${res.status}: Server error`)
+        }
       }
+      
       const data = await res.json()
       setSubmissions(Array.isArray(data) ? data : [])
       setError(null)
     } catch (e) {
       setError(e.message)
-      console.error('Error loading submissions:', e)
+      console.error('[Admin Review] Error loading submissions:', e)
     } finally {
       setLoading(false)
     }
@@ -442,14 +455,6 @@ export default function ReviewSubmissionsPage() {
                       </div>
                       <div className="space-y-6 max-h-[600px] overflow-y-auto">
                         {vulnerabilities.map((vuln, idx) => {
-                          console.log(`🔍 Rendering vulnerability ${idx}:`, {
-                            vuln,
-                            vulnId: vuln.id,
-                            vulnTitle: vuln.title,
-                            vulnVulnerability: vuln.vulnerability,
-                            hasOptions: !!vuln.options_for_consideration,
-                            optionsCount: vuln.options_for_consideration?.length || 0
-                          });
                           // Try multiple ways to match vulnerability ID
                           const vulnId = vuln.id || vuln.title || vuln.vulnerability || `vuln-${idx}`;
                           const vulnKey = vuln.id || vuln.title || vuln.vulnerability || `vuln-${idx}`;

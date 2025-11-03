@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import { supabase } from '../app/lib/supabaseClient'
+import { supabase } from '@/app/lib/supabase-client.js'
 
 /**
  * RoleGate Component
@@ -11,72 +11,108 @@ import { supabase } from '../app/lib/supabaseClient'
  * Uses /api/auth/verify for secure role lookup via Supabase service role.
  */
 export default function RoleGate({ children }) {
-  console.log('[ROLEGATE] Component rendering, checking access...')
   const [allowed, setAllowed] = useState(false)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
-    console.log('[ROLEGATE] useEffect running - verifying user access...')
+    let isMounted = true
+    let timeoutId = null
+
     const verifyUser = async () => {
       try {
-        console.log('[ROLEGATE] Getting Supabase session...')
-        const { data: { session } } = await supabase.auth.getSession()
-        const token = session?.access_token
-        console.log('[ROLEGATE] Session:', { hasSession: !!session, hasToken: !!token })
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
         
-        console.log('[ROLEGATE] Calling /api/auth/verify...')
+        if (sessionError) {
+          console.error('[ROLEGATE] Session error:', sessionError)
+          if (isMounted) {
+            setLoading(false)
+            router.replace('/login')
+          }
+          return
+        }
+
+        if (!session) {
+          // No session - redirect to login
+          if (isMounted) {
+            setLoading(false)
+            router.replace('/login')
+          }
+          return
+        }
+
+        const token = session?.access_token
+        
         const res = await fetch('/api/auth/verify', {
           method: 'GET',
           credentials: 'include',
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         })
-        console.log('[ROLEGATE] Verify response:', { status: res.status, ok: res.ok })
         
-        if (!res.ok) throw new Error('Verification failed')
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+          console.error('[ROLEGATE] Verify failed:', res.status, errorData)
+          if (isMounted) {
+            setLoading(false)
+            if (res.status === 401) {
+              router.replace('/login')
+            } else {
+              router.replace('/dashboard')
+            }
+          }
+          return
+        }
 
-        const { user } = await res.json()
-        console.log('[ROLEGATE] User from verify:', { role: user?.role, group: user?.group })
-        let role = user?.role || user?.group || 'user'
+        const result = await res.json()
+        if (!result.success || !result.user) {
+          if (isMounted) {
+            setLoading(false)
+            router.replace('/dashboard')
+          }
+          return
+        }
 
-        if (['admin', 'spsa'].includes(String(role).toLowerCase())) {
-          console.log('[ROLEGATE] ✅ Access granted for role:', role)
-          setAllowed(true)
+        const { user } = result
+        const role = String(user?.role || user?.group || 'user').toLowerCase()
+
+        if (['admin', 'spsa'].includes(role)) {
+          if (isMounted) {
+            setAllowed(true)
+            setLoading(false)
+          }
         } else {
-          console.warn(`[ROLEGATE] ❌ Access denied for role: ${role} - redirecting`)
-          router.replace('/dashboard')
+          if (isMounted) {
+            setLoading(false)
+            router.replace('/dashboard')
+          }
         }
       } catch (err) {
-        console.error('[ROLEGATE] Verify error, trying fallback:', err)
-        // Fallback to client session info for gating if verify fails
-        try {
-          const { data: userData } = await supabase.auth.getUser()
-          const u = userData?.user
-          const role = (u?.user_metadata?.role || 'user').toLowerCase()
-          console.log('[ROLEGATE] Fallback role check:', role)
-          if (['admin', 'spsa'].includes(role)) {
-            console.log('[ROLEGATE] ✅ Fallback access granted')
-            setAllowed(true)
-            return
-          }
-        } catch (fallbackErr) {
-          console.error('[ROLEGATE] Fallback error:', fallbackErr)
+        console.error('[ROLEGATE] Verify error:', err)
+        if (isMounted) {
+          setLoading(false)
+          router.replace('/login')
         }
-        console.error('[ROLEGATE] ❌ Auth verify error:', err)
-        router.replace('/login')
-      } finally {
-        console.log('[ROLEGATE] Setting loading to false')
-        setLoading(false)
       }
     }
 
-    verifyUser()
-  }, [router])
+    // Set timeout to prevent infinite loading
+    timeoutId = setTimeout(() => {
+      if (isMounted) {
+        console.warn('[ROLEGATE] Verification timeout')
+        setLoading(false)
+        router.replace('/dashboard')
+      }
+    }, 10000) // 10 second timeout
 
-  console.log('[ROLEGATE] Render state:', { loading, allowed })
+    verifyUser()
+
+    return () => {
+      isMounted = false
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [router])
   
   if (loading) {
-    console.log('[ROLEGATE] Showing loading screen...')
     return (
       <div className="flex items-center justify-center min-h-screen text-gray-600">
         <Loader2 className="w-5 h-5 mr-2 animate-spin" /> Checking access...
@@ -85,11 +121,9 @@ export default function RoleGate({ children }) {
   }
 
   if (!allowed) {
-    console.log('[ROLEGATE] ❌ Access denied - not rendering children')
     return null
   }
   
-  console.log('[ROLEGATE] ✅ Access granted - rendering children')
   return <>{children}</>
 }
 

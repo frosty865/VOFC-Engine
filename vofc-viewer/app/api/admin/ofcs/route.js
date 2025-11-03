@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-client.js';
+import { supabaseAdmin } from '@/app/lib/supabase-admin.js';
 import { AuthService } from '../../../lib/auth-server';
 
 // Get all OFCs (admin only)

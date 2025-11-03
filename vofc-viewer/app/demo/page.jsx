@@ -28,11 +28,9 @@ export default function VulnerabilityDashboard() {
   const loadData = async () => {
     try {
       setLoading(true);
-      console.log('🔄 Loading vulnerability dashboard data...');
       
       // Fetch vulnerabilities with their OFCs and sources
       const vulnsData = await fetchVulnerabilities();
-      console.log('📊 Loaded vulnerabilities:', vulnsData?.length);
       
       // Fetch sectors and subsectors for filtering
       let sectorsData = [];

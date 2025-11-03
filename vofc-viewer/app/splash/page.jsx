@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser, logout } from '../lib/auth';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '@/app/lib/supabase-client.js';
 import { trackVOFCEvent } from '../../components/AnalyticsProvider';
 // import SessionTimeoutWarning from '../../components/SessionTimeoutWarning';
 import '../../styles/cisa.css';

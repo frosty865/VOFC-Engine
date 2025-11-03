@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient'
+import { supabase } from './supabase-client.js'
 
 /**
  * Fetch wrapper that automatically includes Supabase auth token

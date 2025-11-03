@@ -1,16 +1,11 @@
 // Handles admin user CRUD. All endpoints require admin authentication.
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../lib/auth-middleware';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/app/lib/supabase-admin.js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseServiceKey) {
+if (!supabaseAdmin) {
   console.error('Missing Supabase environment variables in admin users API');
 }
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 // Get all users (admin only)
 function authErrorResponse(error) {

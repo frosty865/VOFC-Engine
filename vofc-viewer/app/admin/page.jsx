@@ -16,14 +16,26 @@ export default function AdminOverviewPage() {
     const load = async () => {
       try {
         const res = await fetchWithAuth('/api/dashboard/overview', { cache: 'no-store' })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        
+        // Log response status for debugging
+        if (!res.ok) {
+          const errorText = await res.text()
+          console.error(`[Admin Overview] API error: ${res.status}`, errorText.substring(0, 200))
+          throw new Error(`HTTP ${res.status}: ${res.status === 401 ? 'Unauthorized' : res.status === 403 ? 'Forbidden' : 'Server Error'}`)
+        }
+        
         const json = await res.json()
         if (isMounted) {
           setStats(json.stats || [])
           setSoft(json.soft || [])
+          setError(null) // Clear any previous errors
         }
       } catch (e) {
-        if (isMounted) setError(e.message)
+        console.error('[Admin Overview] Load error:', e)
+        if (isMounted) {
+          setError(e.message)
+          // If unauthorized, redirect might be handled by RoleGate
+        }
       } finally {
         if (isMounted) setLoading(false)
       }
@@ -34,8 +46,18 @@ export default function AdminOverviewPage() {
   }, [])
 
   if (error) return (
-    <div className="alert alert-danger">
-      <p style={{ margin: 0 }}>Error: {error}</p>
+    <div className="alert alert-danger" style={{ 
+      padding: 'var(--spacing-lg)', 
+      backgroundColor: '#fee', 
+      border: '1px solid #f00',
+      borderRadius: 'var(--border-radius)',
+      marginBottom: 'var(--spacing-lg)'
+    }}>
+      <h3 style={{ margin: '0 0 var(--spacing-sm) 0', color: '#c00' }}>Error Loading Admin Data</h3>
+      <p style={{ margin: 0, color: '#800' }}>{error}</p>
+      <p style={{ margin: 'var(--spacing-sm) 0 0 0', fontSize: 'var(--font-size-sm)', color: '#666' }}>
+        This may indicate an authentication issue. Check the browser console for details.
+      </p>
     </div>
   )
 

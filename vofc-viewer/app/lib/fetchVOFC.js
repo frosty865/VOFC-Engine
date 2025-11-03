@@ -3,7 +3,7 @@
  */
 
 // Use singleton Supabase client to avoid multiple instances
-import { supabase } from './supabaseClient';
+import { supabase } from './supabase-client.js';
 
 // Database Schema Discovery Function - Query actual column information
 export async function discoverDatabaseSchema() {

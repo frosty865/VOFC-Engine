@@ -44,9 +44,7 @@ export default function VOFCViewer() {
   // Load sectors from sectors table
   const loadSectors = useCallback(async () => {
     try {
-      console.log('Loading sectors from database...');
       const sectorsData = await fetchSectors();
-      console.log('Sectors loaded:', sectorsData);
       setSectors(sectorsData || []);
     } catch (error) {
       console.error('Error loading sectors:', error);
@@ -90,9 +88,7 @@ export default function VOFCViewer() {
   const loadSubsectors = useCallback(async (sectorId) => {
     try {
       if (sectorId) {
-        console.log('Loading subsectors for sector ID:', sectorId);
         const subsectorsData = await fetchSubsectorsBySector(sectorId);
-        console.log('Subsectors loaded:', subsectorsData);
         setSubsectors(subsectorsData || []);
       } else {
         setSubsectors([]);
