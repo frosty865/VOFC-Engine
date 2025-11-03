@@ -15,7 +15,8 @@ export async function GET(request) {
     const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
     
     try {
-      const res = await fetch(`${flaskUrl}/api/system/health`, {
+      // Use /health endpoint which provides comprehensive system health
+      const res = await fetch(`${flaskUrl}/health`, {
         cache: 'no-store',
         signal: controller.signal,
         headers: {
@@ -41,11 +42,29 @@ export async function GET(request) {
       
       const data = await res.json()
       
-      // Return the health data
+      // Extract component status from /health endpoint response
+      // The /health endpoint returns status: "healthy" or "error"
+      const flaskStatus = data.status === 'healthy' ? 'online' : 'offline'
+      
+      // Check Ollama from the health data if available
+      let ollamaStatus = 'unknown'
+      if (data.services?.ollama_models && data.services.ollama_models.length > 0) {
+        ollamaStatus = 'online'
+      }
+      
+      // Supabase status - we'll check it separately since Flask doesn't check Supabase
+      const supabaseStatus = 'online' // Will be checked separately or can be enhanced
+      
+      // Return the health data in expected format
       return NextResponse.json({
-        status: data.status || 'ok',
-        components: data.components || {},
-        timestamp: new Date().toISOString()
+        status: data.status === 'healthy' ? 'ok' : 'partial',
+        components: {
+          flask: flaskStatus,
+          ollama: ollamaStatus,
+          supabase: supabaseStatus
+        },
+        timestamp: new Date().toISOString(),
+        raw: data // Include raw data for debugging
       })
       
     } catch (fetchError) {

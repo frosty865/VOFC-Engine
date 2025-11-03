@@ -263,12 +263,22 @@ export async function GET(request) {
             };
           }
       } else {
+        // Try to get error details
+        let errorText = ''
+        try {
+          errorText = await flaskResponse.text()
+        } catch (e) {
+          errorText = 'Could not read error response'
+        }
+        
+        console.error('[SYSTEM API] Flask health endpoint returned error:', flaskResponse.status, errorText.substring(0, 200))
+        
         status.services.flask = {
           status: 'error',
           url: flaskUrl,
           status_code: flaskResponse.status,
-          error: `HTTP ${flaskResponse.status}`,
-          note: 'Flask server responded with an error. Check server logs.'
+          error: `HTTP ${flaskResponse.status}: ${errorText.substring(0, 100)}`,
+          note: `Flask server at ${flaskUrl}/health responded with error. Check server logs.`
         };
       }
     } catch (e) {
