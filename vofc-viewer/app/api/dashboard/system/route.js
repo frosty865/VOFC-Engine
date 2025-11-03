@@ -171,14 +171,16 @@ export async function GET(request) {
       }
     };
 
+    // Get Vercel base URL for internal API calls (must be defined before use)
+    const vercelBaseUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}`
+      : process.env.NEXT_PUBLIC_VERCEL_URL || 
+        (isLocalDev ? 'http://localhost:3000' : 'https://www.zophielgroup.com');
+
     // 2. Check Flask Server (Python backend) - Use proxy route
     try {
       // Use internal Vercel API route to proxy Flask health check
-      const baseUrl = process.env.VERCEL_URL 
-        ? `https://${process.env.VERCEL_URL}`
-        : process.env.NEXT_PUBLIC_VERCEL_URL || 'http://localhost:3000';
-      
-      const flaskProxyResponse = await fetch(`${baseUrl}/api/proxy/flask/health`, {
+      const flaskProxyResponse = await fetch(`${vercelBaseUrl}/api/proxy/flask/health`, {
         signal: AbortSignal.timeout(10000),
         headers: {
           'Accept': 'application/json',
