@@ -5,11 +5,15 @@ import { fetchWithAuth } from '../../lib/fetchWithAuth'
 import '../../../styles/cisa.css'
 
 export default function SystemStatusPage() {
+  console.log('[SYSTEM DASHBOARD] Component mounting/rendering...')
+  
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(null)
+  
+  console.log('[SYSTEM DASHBOARD] State:', { loading, hasStatus: !!status, hasError: !!error })
 
   const loadStatus = async (showRefreshing = false) => {
     if (showRefreshing) setRefreshing(true)
@@ -56,10 +60,17 @@ export default function SystemStatusPage() {
   }
 
   useEffect(() => {
+    console.log('[SYSTEM DASHBOARD] useEffect running - starting data fetch...')
     loadStatus()
     // Refresh every 5 seconds for live updates
-    const id = setInterval(() => loadStatus(true), 5000)
-    return () => clearInterval(id)
+    const id = setInterval(() => {
+      console.log('[SYSTEM DASHBOARD] Interval tick - refreshing data...')
+      loadStatus(true)
+    }, 5000)
+    return () => {
+      console.log('[SYSTEM DASHBOARD] useEffect cleanup - clearing interval')
+      clearInterval(id)
+    }
   }, [])
 
   const getStatusColor = (serviceStatus) => {

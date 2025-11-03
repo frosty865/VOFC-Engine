@@ -11,6 +11,7 @@ import { supabase } from '../app/lib/supabaseClient'
  * Uses /api/auth/verify for secure role lookup via Supabase service role.
  */
 export default function RoleGate({ children }) {
+  console.log('[ROLEGATE] Component rendering, checking access...')
   const [allowed, setAllowed] = useState(false)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
