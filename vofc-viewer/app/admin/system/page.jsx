@@ -8,30 +8,32 @@ export default function SystemStatusPage() {
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastUpdate, setLastUpdate] = useState(null)
+
+  const loadStatus = async (showRefreshing = false) => {
+    if (showRefreshing) setRefreshing(true)
+    try {
+      const res = await fetchWithAuth('/api/dashboard/system', { cache: 'no-store' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setStatus(data)
+      setError(null)
+      setLastUpdate(new Date())
+    } catch (e) {
+      setError(e.message)
+      console.error('Error loading system status:', e)
+    } finally {
+      setLoading(false)
+      if (showRefreshing) setRefreshing(false)
+    }
+  }
 
   useEffect(() => {
-    let isMounted = true
-    const load = async () => {
-      try {
-        const res = await fetchWithAuth('/api/dashboard/system', { cache: 'no-store' })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json()
-        if (isMounted) {
-          setStatus(data)
-          setError(null)
-        }
-      } catch (e) {
-        if (isMounted) {
-          setError(e.message)
-          console.error('Error loading system status:', e)
-        }
-      } finally {
-        if (isMounted) setLoading(false)
-      }
-    }
-    load()
-    const id = setInterval(load, 30000)
-    return () => { isMounted = false; clearInterval(id) }
+    loadStatus()
+    // Refresh every 5 seconds for live updates
+    const id = setInterval(() => loadStatus(true), 5000)
+    return () => clearInterval(id)
   }, [])
 
   const getStatusColor = (serviceStatus) => {
@@ -65,7 +67,7 @@ export default function SystemStatusPage() {
     }
   }
 
-  if (loading) {
+  if (loading && !status) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '256px' }}>
         <div style={{
@@ -81,12 +83,12 @@ export default function SystemStatusPage() {
     )
   }
 
-  if (error) {
+  if (error && !status) {
     return (
       <div className="alert alert-danger">
         <p style={{ fontWeight: 600, margin: 0, marginBottom: 'var(--spacing-sm)' }}>Error loading system status: {error}</p>
         <button 
-          onClick={() => window.location.reload()}
+          onClick={() => loadStatus(true)}
           className="btn btn-danger btn-sm"
           style={{ marginTop: 'var(--spacing-sm)' }}
         >
