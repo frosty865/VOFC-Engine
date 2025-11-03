@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser } from './lib/auth';
-import { fetchVulnerabilities } from './lib/fetchVOFC';
+import { fetchVulnerabilities, fetchSectors, fetchSubsectorsBySector } from './lib/fetchVOFC';
 
 export default function VOFCViewer() {
   const router = useRouter();
@@ -12,11 +12,11 @@ export default function VOFCViewer() {
   const [filteredVulnerabilities, setFilteredVulnerabilities] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDiscipline, setSelectedDiscipline] = useState('');
-  const [selectedSection, setSelectedSection] = useState('');
-  const [selectedSubsection, setSelectedSubsection] = useState('');
+  const [selectedSector, setSelectedSector] = useState('');
+  const [selectedSubsector, setSelectedSubsector] = useState('');
   const [disciplines, setDisciplines] = useState([]);
-  const [sections, setSections] = useState([]);
-  const [subsections, setSubsections] = useState([]);
+  const [sectors, setSectors] = useState([]);
+  const [subsectors, setSubsectors] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedVulnerability, setSelectedVulnerability] = useState(null);
@@ -58,13 +58,8 @@ export default function VOFCViewer() {
       const uniqueDisciplines = [...new Set(vulnsData?.map(v => v.discipline).filter(Boolean) || [])];
       setDisciplines(uniqueDisciplines.sort());
       
-      // Extract unique sections
-      const uniqueSections = [...new Set(vulnsData?.map(v => v.section).filter(Boolean) || [])];
-      setSections(uniqueSections.sort());
-      
-      // Extract unique subsections
-      const uniqueSubsections = [...new Set(vulnsData?.map(v => v.subsection).filter(Boolean) || [])];
-      setSubsections(uniqueSubsections.sort());
+      // Load sectors and subsectors from tables
+      await loadSectors();
       
     } catch (error) {
       console.error('Error loading dashboard data:', error);
@@ -81,35 +76,53 @@ export default function VOFCViewer() {
     return [...new Set(disciplines)].sort();
   }, [vulnerabilities]);
 
-  const getUniqueSections = useCallback(() => {
-    const sections = vulnerabilities.map(v => v.section).filter(Boolean);
-    return [...new Set(sections)].sort();
-  }, [vulnerabilities]);
-
-  const getUniqueSubsections = useCallback(() => {
-    // Filter subsections based on selected section if one is chosen
-    let filtered = vulnerabilities;
-    if (selectedSection) {
-      filtered = filtered.filter(v => v.section === selectedSection);
+  // Load sectors from sectors table
+  const loadSectors = useCallback(async () => {
+    try {
+      const sectorsData = await fetchSectors();
+      setSectors(sectorsData || []);
+    } catch (error) {
+      console.error('Error loading sectors:', error);
+      setSectors([]);
     }
-    const subsections = filtered.map(v => v.subsection).filter(Boolean);
-    return [...new Set(subsections)].sort();
-  }, [vulnerabilities, selectedSection]);
+  }, []);
 
-  // Reset subsection when section changes (unless it's still valid)
-  useEffect(() => {
-    if (selectedSection && selectedSubsection) {
-      // Check if the selected subsection is still valid for the current section
-      const validSubsections = vulnerabilities
-        .filter(v => v.section === selectedSection)
-        .map(v => v.subsection)
-        .filter(Boolean);
-      
-      if (!validSubsections.includes(selectedSubsection)) {
-        setSelectedSubsection('');
+  // Load subsectors based on selected sector
+  const loadSubsectors = useCallback(async (sectorId) => {
+    try {
+      if (sectorId) {
+        const subsectorsData = await fetchSubsectorsBySector(sectorId);
+        setSubsectors(subsectorsData || []);
+      } else {
+        setSubsectors([]);
       }
+    } catch (error) {
+      console.error('Error loading subsectors:', error);
+      setSubsectors([]);
     }
-  }, [selectedSection, vulnerabilities, selectedSubsection]);
+  }, []);
+
+  // Load subsectors when sector changes
+  useEffect(() => {
+    if (selectedSector && sectors.length > 0) {
+      // Find sector ID from sectors array - check both name and ID matching
+      const sector = sectors.find(s => 
+        s.name === selectedSector || 
+        String(s.id) === String(selectedSector) ||
+        s.id === selectedSector
+      );
+      if (sector && sector.id) {
+        loadSubsectors(sector.id);
+      } else {
+        // If no match found, clear subsectors
+        setSubsectors([]);
+        setSelectedSubsector('');
+      }
+    } else {
+      setSubsectors([]);
+      setSelectedSubsector('');
+    }
+  }, [selectedSector, sectors, loadSubsectors]);
 
   useEffect(() => {
     setMounted(true);
@@ -128,7 +141,9 @@ export default function VOFCViewer() {
     if (searchTerm) {
       filtered = filtered.filter(v => 
         v.vulnerability?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        v.discipline?.toLowerCase().includes(searchTerm.toLowerCase())
+        v.discipline?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.sector?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.subsector?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
@@ -136,16 +151,38 @@ export default function VOFCViewer() {
       filtered = filtered.filter(v => v.discipline === selectedDiscipline);
     }
 
-    if (selectedSection) {
-      filtered = filtered.filter(v => v.section === selectedSection);
+    if (selectedSector) {
+      // Find the selected sector object
+      const sector = sectors.find(s => s.name === selectedSector || String(s.id) === String(selectedSector));
+      if (sector) {
+        // Filter by sector name, sector_id, or ID matching
+        filtered = filtered.filter(v => {
+          // Check multiple possible field formats
+          return v.sector === sector.name || 
+                 v.sector === String(sector.id) || 
+                 v.sector_id === sector.id ||
+                 String(v.sector_id) === String(sector.id);
+        });
+      }
     }
 
-    if (selectedSubsection) {
-      filtered = filtered.filter(v => v.subsection === selectedSubsection);
+    if (selectedSubsector) {
+      // Find the selected subsector object
+      const subsector = subsectors.find(s => s.name === selectedSubsector || String(s.id) === String(selectedSubsector));
+      if (subsector) {
+        // Filter by subsector name, subsector_id, or ID matching
+        filtered = filtered.filter(v => {
+          // Check multiple possible field formats
+          return v.subsector === subsector.name || 
+                 v.subsector === String(subsector.id) || 
+                 v.subsector_id === subsector.id ||
+                 String(v.subsector_id) === String(subsector.id);
+        });
+      }
     }
 
     setFilteredVulnerabilities(filtered);
-  }, [vulnerabilities, searchTerm, selectedDiscipline, selectedSection, selectedSubsection]);
+  }, [vulnerabilities, searchTerm, selectedDiscipline, selectedSector, selectedSubsector, sectors, subsectors]);
 
 
   if (!mounted) {
@@ -256,47 +293,48 @@ export default function VOFCViewer() {
               </select>
             </div>
 
-            {/* Section */}
+            {/* Sector */}
             <div className="form-group">
-              <label className="form-label" htmlFor="section-select">
-                Section
+              <label className="form-label" htmlFor="sector-select">
+                Sector
               </label>
               <select
-                id="section-select"
-                value={selectedSection}
-                onChange={(e) => setSelectedSection(e.target.value)}
+                id="sector-select"
+                value={selectedSector}
+                onChange={(e) => setSelectedSector(e.target.value)}
                 className="form-select"
               >
-                <option value="">All Sections</option>
-                {getUniqueSections().map(section => (
-                  <option key={section} value={section}>
-                    {section}
+                <option value="">All Sectors</option>
+                {sectors.map(sector => (
+                  <option key={sector.id} value={sector.name || sector.id}>
+                    {sector.name || `Sector ${sector.id}`}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Subsection */}
+            {/* Subsector */}
             <div className="form-group">
-              <label className="form-label" htmlFor="subsection-select">
-                Subsection
+              <label className="form-label" htmlFor="subsector-select">
+                Subsector
               </label>
               <select
-                id="subsection-select"
-                value={selectedSubsection}
-                onChange={(e) => setSelectedSubsection(e.target.value)}
+                id="subsector-select"
+                value={selectedSubsector}
+                onChange={(e) => setSelectedSubsector(e.target.value)}
                 className="form-select"
+                disabled={!selectedSector}
               >
-                <option value="">All Subsections</option>
-                {getUniqueSubsections().map(subsection => (
-                  <option key={subsection} value={subsection}>
-                    {subsection}
+                <option value="">All Subsectors</option>
+                {subsectors.map(subsector => (
+                  <option key={subsector.id} value={subsector.name || subsector.id}>
+                    {subsector.name || `Subsector ${subsector.id}`}
                   </option>
                 ))}
               </select>
-              {selectedSection && (
+              {selectedSector && subsectors.length === 0 && (
                 <small className="text-gray-500 text-xs mt-1 block">
-                  Showing subsections for selected section
+                  No subsectors available for this sector
                 </small>
               )}
             </div>
@@ -308,8 +346,8 @@ export default function VOFCViewer() {
                 onClick={() => {
                   setSearchTerm('');
                   setSelectedDiscipline('');
-                  setSelectedSection('');
-                  setSelectedSubsection('');
+                  setSelectedSector('');
+                  setSelectedSubsector('');
                 }}
                 className="btn btn-secondary w-full"
               >
