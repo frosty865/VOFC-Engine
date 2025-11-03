@@ -173,6 +173,7 @@ export async function GET(request) {
 
     // 2. Check Flask Server (Python backend) - Direct connection from Vercel server
     // Since this is server-side code running on Vercel, we can make external HTTP requests directly
+    console.log('[SYSTEM API] Checking Flask server at:', flaskUrl);
     try {
       const flaskResponse = await fetch(`${flaskUrl}/health`, {
         signal: AbortSignal.timeout(10000), // 10 second timeout
@@ -181,8 +182,13 @@ export async function GET(request) {
         }
       });
       
+      console.log('[SYSTEM API] Flask response status:', flaskResponse.status, flaskResponse.ok);
+      
       if (flaskResponse.ok) {
         const health = await flaskResponse.json();
+        console.log('[SYSTEM API] Flask health data keys:', Object.keys(health));
+        console.log('[SYSTEM API] Flask directories:', health.directories);
+        console.log('[SYSTEM API] Flask server info:', health.server);
           status.services.flask = {
             status: 'online',
             url: flaskUrl,
@@ -281,6 +287,7 @@ export async function GET(request) {
 
     // 3. Check Ollama API - Direct connection from Vercel server
     // Since this is server-side code running on Vercel, we can make external HTTP requests directly
+    console.log('[SYSTEM API] Checking Ollama API at:', ollamaApiUrl);
     try {
       const ollamaResponse = await fetch(`${ollamaApiUrl}/api/tags`, {
         signal: AbortSignal.timeout(10000), // 10 second timeout
@@ -289,8 +296,11 @@ export async function GET(request) {
         }
       });
       
+      console.log('[SYSTEM API] Ollama response status:', ollamaResponse.status, ollamaResponse.ok);
+      
       if (ollamaResponse.ok) {
         const models = await ollamaResponse.json();
+        console.log('[SYSTEM API] Ollama models:', models.models?.length || 0);
         status.services.ollama = {
           status: 'online',
           url: ollamaApiUrl,
@@ -299,6 +309,7 @@ export async function GET(request) {
           models: models.models?.map(m => m.name) || []
         };
       } else {
+        console.error('[SYSTEM API] Ollama returned error status:', ollamaResponse.status);
         status.services.ollama = {
           status: 'error',
           url: ollamaApiUrl,
@@ -307,6 +318,7 @@ export async function GET(request) {
         };
       }
     } catch (e) {
+      console.error('[SYSTEM API] Ollama connection error:', e.message);
       status.services.ollama = {
         status: 'offline',
         url: ollamaApiUrl,
@@ -354,11 +366,14 @@ export async function GET(request) {
     };
 
     // Add parsing and processing statistics from database
+    console.log('[SYSTEM API] Fetching database statistics...');
     try {
       // Get submission statistics
       const { count: totalSubmissions, error: subError } = await supabaseAdmin
         .from('submissions')
         .select('*', { count: 'exact', head: true });
+      
+      console.log('[SYSTEM API] Total submissions:', totalSubmissions, subError ? `(error: ${subError.message})` : '');
       
       const { count: pendingSubmissions } = await supabaseAdmin
         .from('submissions')
@@ -401,6 +416,18 @@ export async function GET(request) {
         .order('created_at', { ascending: false })
         .limit(10);
 
+      console.log('[SYSTEM API] Database stats:', {
+        totalSubmissions,
+        pendingSubmissions,
+        approvedSubmissions,
+        rejectedSubmissions,
+        totalVulnerabilities,
+        totalOfcs,
+        totalLearningEvents,
+        approvedLearningEvents,
+        recentSubmissionsCount: recentSubmissions?.length || 0
+      });
+
       status.parsing = {
         total_submissions: totalSubmissions || 0,
         pending_review: pendingSubmissions || 0,
@@ -417,7 +444,12 @@ export async function GET(request) {
       };
 
     } catch (statsError) {
-      console.warn('Error fetching parsing statistics:', statsError);
+      console.error('[SYSTEM API] Error fetching parsing statistics:', statsError);
+      console.error('[SYSTEM API] Stats error details:', {
+        message: statsError.message,
+        name: statsError.name,
+        stack: statsError.stack
+      });
       status.parsing = {
         total_submissions: 0,
         pending_review: 0,
