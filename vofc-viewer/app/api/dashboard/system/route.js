@@ -131,7 +131,10 @@ export async function GET(request) {
     // Always check Flask server - production must have it configured and accessible
     try {
       const flaskResponse = await fetch(`${flaskUrl}/health`, {
-        signal: AbortSignal.timeout(5000) // Increased timeout for production
+        signal: AbortSignal.timeout(10000), // 10 second timeout for production
+        headers: {
+          'Accept': 'application/json',
+        }
       });
       
         if (flaskResponse.ok) {
@@ -196,7 +199,10 @@ export async function GET(request) {
     // 3. Check Ollama API
     try {
       const ollamaResponse = await fetch(`${ollamaApiUrl}/api/tags`, {
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(10000), // 10 second timeout
+        headers: {
+          'Accept': 'application/json',
+        }
       });
       
       if (ollamaResponse.ok) {
