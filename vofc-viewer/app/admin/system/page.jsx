@@ -14,15 +14,41 @@ export default function SystemStatusPage() {
   const loadStatus = async (showRefreshing = false) => {
     if (showRefreshing) setRefreshing(true)
     try {
+      console.log('[SYSTEM DASHBOARD] Fetching system status...')
       const res = await fetchWithAuth('/api/dashboard/system', { cache: 'no-store' })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      console.log('[SYSTEM DASHBOARD] Response status:', res.status, res.ok)
+      
+      if (!res.ok) {
+        const errorText = await res.text()
+        console.error('[SYSTEM DASHBOARD] Response not OK:', res.status, errorText)
+        throw new Error(`HTTP ${res.status}: ${errorText.substring(0, 200)}`)
+      }
+      
       const data = await res.json()
+      console.log('[SYSTEM DASHBOARD] Received data:', {
+        hasServices: !!data.services,
+        flaskStatus: data.services?.flask?.status,
+        ollamaStatus: data.services?.ollama?.status,
+        supabaseStatus: data.services?.supabase?.status,
+        hasFiles: !!data.files,
+        fileCounts: data.files,
+        hasParsing: !!data.parsing,
+        parsingCounts: data.parsing ? {
+          total: data.parsing.total_submissions,
+          pending: data.parsing.pending_review,
+          approved: data.parsing.approved
+        } : null,
+        timestamp: data.timestamp
+      })
+      console.log('[SYSTEM DASHBOARD] Full data object:', data)
+      
       setStatus(data)
       setError(null)
       setLastUpdate(new Date())
     } catch (e) {
+      console.error('[SYSTEM DASHBOARD] Error loading system status:', e)
+      console.error('[SYSTEM DASHBOARD] Error stack:', e.stack)
       setError(e.message)
-      console.error('Error loading system status:', e)
     } finally {
       setLoading(false)
       if (showRefreshing) setRefreshing(false)

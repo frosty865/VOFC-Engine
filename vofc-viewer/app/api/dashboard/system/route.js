@@ -266,6 +266,9 @@ export async function GET(request) {
       }
     } catch (e) {
       // Connection failed - this is a critical error in production
+      console.error('[SYSTEM API] Flask connection error:', e.message);
+      console.error('[SYSTEM API] Flask error type:', e.name);
+      console.error('[SYSTEM API] Flask error stack:', e.stack);
       status.services.flask = {
         status: 'offline',
         url: flaskUrl,
@@ -430,10 +433,22 @@ export async function GET(request) {
       };
     }
 
+    // DEBUG: Log the full status object before returning
+    console.log('[SYSTEM API] Returning status:', JSON.stringify(status, null, 2));
+    console.log('[SYSTEM API] Services:', {
+      flask: status.services?.flask?.status,
+      ollama: status.services?.ollama?.status,
+      supabase: status.services?.supabase?.status
+    });
+    console.log('[SYSTEM API] Files:', status.files);
+    console.log('[SYSTEM API] Parsing:', status.parsing);
+    console.log('[SYSTEM API] Processing:', status.processing);
+    
     return NextResponse.json(status);
     
   } catch (e) {
-    console.error('Error in /api/dashboard/system:', e);
+    console.error('[SYSTEM API] Error in /api/dashboard/system:', e);
+    console.error('[SYSTEM API] Stack trace:', e.stack);
     return NextResponse.json(
       { error: e.message || 'Internal server error', timestamp: new Date().toISOString() },
       { status: 500 }
