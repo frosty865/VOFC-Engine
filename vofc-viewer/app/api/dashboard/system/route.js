@@ -215,8 +215,8 @@ export async function GET(request) {
           // Extract Flask service information
           status.flask = {
             version: health.flask?.version || 'unknown',
-            environment: process.env.FLASK_ENV || process.env.ENVIRONMENT || 'production',
-            debug: health.flask?.debug || DEBUG_MODE || false
+            environment: health.flask?.environment || process.env.FLASK_ENV || process.env.ENVIRONMENT || 'production',
+            debug: health.flask?.debug || false
           };
           
           // Extract Ollama models information
