@@ -1313,17 +1313,14 @@ def health():
                     gpu_info["memory_used"] = total_mem_used // (1024 * 1024 * 1024)  # GB
                     gpu_info["memory_total"] = total_mem_total // (1024 * 1024 * 1024)  # GB
             except ImportError:
-                # pynvml not installed - try psutil as fallback for basic system info
-                try:
-                    import psutil
-                    # psutil doesn't have GPU info, but we can indicate it's not available
-                    pass
-                except ImportError:
-                    pass
+                # pynvml not installed - this is fine, GPU just won't be available
+                pass
             except Exception as e:
-                # GPU detection failed
+                # GPU detection failed - log but don't crash
                 if DEBUG_MODE:
                     print(f"GPU detection error: {e}")
+                # Continue without GPU info
+                pass
         except Exception:
             pass
         
