@@ -801,7 +801,10 @@ def process_files():
                 print(f"Extracted text saved to {extracted_path}")
 
                 # Step 2: Run VOFC Engine with citation extraction
-                print(f"Analyzing extracted text for {filename} ...")
+                try:
+                    print(f"Analyzing extracted text for {safe_filename} ...")
+                except (OSError, UnicodeEncodeError):
+                    print("Analyzing extracted text...")
                 
                 # Import process_submission instead of just process_text_with_vofc_engine
                 # to get citation extraction
@@ -888,15 +891,27 @@ def process_files():
             except Exception as e:
                 error_msg = str(e)
                 error_type = type(e).__name__
-                print(f"Failed {filename}: {error_type}: {error_msg}")
+                try:
+                    print(f"Failed {safe_filename}: {error_type}: {error_msg}")
+                except (OSError, UnicodeEncodeError):
+                    print(f"Failed file (encoding issue): {error_type}: {error_msg}")
+                
                 import traceback
-                traceback.print_exc()
+                try:
+                    traceback.print_exc()
+                except (OSError, UnicodeEncodeError):
+                    # Use logging instead if print fails
+                    logging.error(f"Error processing file: {error_type}: {error_msg}")
+                    logging.error(traceback.format_exc())
 
                 # Move to errors folder
                 try:
                     error_path = os.path.join(ERRORS_DIR, filename)
                     shutil.move(filepath, error_path)
-                    print(f"Moved {filename} to errors folder")
+                    try:
+                    print(f"Moved {safe_filename} to errors folder")
+                except (OSError, UnicodeEncodeError):
+                    print("Moved file to errors folder")
                 except Exception as move_error:
                     print(f"WARNING: Failed to move file to errors folder: {move_error}")
 
