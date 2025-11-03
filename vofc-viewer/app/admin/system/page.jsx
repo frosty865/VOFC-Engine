@@ -103,13 +103,45 @@ export default function SystemStatusPage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, color: 'var(--cisa-blue)', margin: 0 }}>System Health</h2>
-        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>
-          Last updated: {status.timestamp ? new Date(status.timestamp).toLocaleTimeString() : 'Never'}
-        </p>
+    <div style={{ padding: 'var(--spacing-lg)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
+        <h1 style={{ fontSize: 'var(--font-size-xxl)', fontWeight: 700, color: 'var(--cisa-blue)', margin: 0 }}>
+          System Health Dashboard
+        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)' }}>
+          {lastUpdate && (
+            <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)' }}>
+              Last updated: {lastUpdate.toLocaleTimeString()}
+            </span>
+          )}
+          {refreshing && (
+            <div style={{
+              width: '16px',
+              height: '16px',
+              border: '2px solid var(--cisa-gray-light)',
+              borderTopColor: 'var(--cisa-blue)',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite'
+            }}></div>
+          )}
+          <button
+            onClick={() => loadStatus(true)}
+            className="btn btn-primary btn-sm"
+            disabled={refreshing}
+            style={{ opacity: refreshing ? 0.6 : 1 }}
+          >
+            {refreshing ? 'Refreshing...' : '🔄 Refresh'}
+          </button>
+        </div>
       </div>
+      
+      {error && status && (
+        <div className="alert alert-warning" style={{ marginBottom: 'var(--spacing-lg)' }}>
+          <p style={{ margin: 0 }}>⚠️ Warning: {error} (showing last known status)</p>
+        </div>
+      )}
+
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)' }}>
 
       {/* Service Status Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--spacing-lg)' }}>
