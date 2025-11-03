@@ -44,36 +44,55 @@ export default function UserProfile() {
             // Get user's active submissions (from submissions table)
             // Try submitter_email first, fallback to checking data field if column doesn't exist
             try {
+              // First, attempt query with submitter_email column
+              // If column doesn't exist, PostgREST will return 400 Bad Request
               const { data: submissions, error } = await supabase
                   .from('submissions')
                   .select('*')
                   .eq('submitter_email', currentUser.email || '')
                   .order('created_at', { ascending: false });
 
+              // Check if error is due to missing column (400) or other issues
               if (error) {
-                // If column doesn't exist, try filtering client-side
-                const { data: allSubmissions } = await supabase
-                    .from('submissions')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-                
-                // Filter client-side by checking data field or other fields
-                const userSubmissions = (allSubmissions || []).filter(sub => {
-                  if (sub.submitter_email === currentUser.email) return true;
-                  if (sub.data) {
-                    try {
-                      const data = typeof sub.data === 'string' ? JSON.parse(sub.data) : sub.data;
-                      return data.submitter_email === currentUser.email || 
-                             data.submitter === currentUser.email;
-                    } catch {}
+                // If 400 Bad Request or column-related error, fallback to client-side filtering
+                if (error.code === 'PGRST116' || error.message?.includes('column') || error.status === 400 || error.code === '42883') {
+                  // Column doesn't exist - fetch all and filter client-side
+                  const { data: allSubmissions, error: fetchAllError } = await supabase
+                      .from('submissions')
+                      .select('*')
+                      .order('created_at', { ascending: false });
+                  
+                  if (fetchAllError) {
+                    console.error('Error fetching all submissions:', fetchAllError);
+                    setUserSubmissions([]);
+                  } else {
+                    // Filter client-side by checking data field or other fields
+                    const userSubmissions = (allSubmissions || []).filter(sub => {
+                      // Check direct column first (if it exists in some rows)
+                      if (sub.submitter_email === currentUser.email) return true;
+                      // Check data JSON field
+                      if (sub.data) {
+                        try {
+                          const data = typeof sub.data === 'string' ? JSON.parse(sub.data) : sub.data;
+                          return data.submitter_email === currentUser.email || 
+                                 data.submitter === currentUser.email;
+                        } catch {}
+                      }
+                      return false;
+                    });
+                    setUserSubmissions(userSubmissions);
                   }
-                  return false;
-                });
-                setUserSubmissions(userSubmissions);
+                } else {
+                  // Other error - log and set empty
+                  console.error('Error loading submissions:', error);
+                  setUserSubmissions([]);
+                }
               } else {
+                // Success - use the filtered results
                 setUserSubmissions(submissions || []);
               }
             } catch (err) {
+              // Catch any unexpected errors (network, etc.)
               console.error('Error loading submissions:', err);
               setUserSubmissions([]);
             }
@@ -87,15 +106,41 @@ export default function UserProfile() {
                   .order('rejected_at', { ascending: false });
 
               if (rejectedError) {
-                setRejectedSubmissions([]);
-                setReturnedSubmissions([]);
+                // If 400 Bad Request or column-related error, fallback to client-side filtering
+                if (rejectedError.code === 'PGRST116' || rejectedError.message?.includes('column') || rejectedError.status === 400 || rejectedError.code === '42883') {
+                  // Column doesn't exist - fetch all and filter client-side
+                  const { data: allRejected, error: fetchAllError } = await supabase
+                      .from('rejected_submissions')
+                      .select('*')
+                      .order('rejected_at', { ascending: false });
+                  
+                  if (fetchAllError) {
+                    console.error('Error fetching all rejected submissions:', fetchAllError);
+                    setReturnedSubmissions([]);
+                  } else {
+                    // Filter client-side
+                    const userRejected = (allRejected || []).filter(sub => {
+                      if (sub.submitter_email === currentUser.email) return true;
+                      if (sub.data) {
+                        try {
+                          const data = typeof sub.data === 'string' ? JSON.parse(sub.data) : sub.data;
+                          return data.submitter_email === currentUser.email || 
+                                 data.submitter === currentUser.email;
+                        } catch {}
+                      }
+                      return false;
+                    });
+                    setReturnedSubmissions(userRejected);
+                  }
+                } else {
+                  console.error('Error loading rejected submissions:', rejectedError);
+                  setReturnedSubmissions([]);
+                }
               } else {
-                setRejectedSubmissions(rejectedSubmissions || []);
                 setReturnedSubmissions(rejectedSubmissions || []);
               }
             } catch (err) {
               console.error('Error loading rejected submissions:', err);
-              setRejectedSubmissions([]);
               setReturnedSubmissions([]);
             }
 
