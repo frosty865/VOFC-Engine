@@ -37,9 +37,10 @@ export async function GET(request) {
                        process.env.OLLAMA_LOCAL_URL;
     
     // Derive Flask server URL - use localhost in local dev, production URL in production
+    // Production uses Cloudflare tunnel at flask.frostech.site (no port, HTTPS)
     let defaultFlaskUrl = isLocalDev 
       ? 'http://127.0.0.1:5000'  // Local development
-      : 'https://ollama.frostech.site:5000';  // Production
+      : 'https://flask.frostech.site';  // Production (Cloudflare tunnel)
     
     // If OLLAMA_URL is set and not production, try to derive from it
     if (process.env.OLLAMA_URL && isLocalDev) {
@@ -52,9 +53,16 @@ export async function GET(request) {
         // If URL parsing fails, use default
       }
     } else if (process.env.OLLAMA_URL && !isLocalDev) {
+      // In production, prefer flask.frostech.site (Cloudflare tunnel)
       try {
         const url = new URL(ollamaApiUrl);
-        defaultFlaskUrl = `${url.protocol}//${url.hostname}:5000`;
+        // If OLLAMA_URL is ollama.frostech.site, use flask.frostech.site for Flask
+        if (url.hostname === 'ollama.frostech.site') {
+          defaultFlaskUrl = 'https://flask.frostech.site';
+        } else {
+          // Otherwise try to derive (but Cloudflare tunnel doesn't use ports)
+          defaultFlaskUrl = `${url.protocol}//flask.${url.hostname}`;
+        }
       } catch {
         // If URL parsing fails, use default
       }
