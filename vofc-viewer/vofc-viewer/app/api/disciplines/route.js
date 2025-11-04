@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '../../lib/supabaseClient';
-import { applyCacheHeaders, CacheStrategies } from '../middleware/cache.js';
+import { applyCacheHeaders, CacheStrategies } from '@/app/api/middleware/cache.js';
 
 // Disciplines rarely change - cache for 1 hour with ISR
 export const revalidate = 3600; // 1 hour

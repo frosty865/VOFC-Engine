@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { applyCacheHeaders, CacheStrategies } from '../middleware/cache.js';
+import { applyCacheHeaders, CacheStrategies } from '@/app/api/middleware/cache.js';
 
 /**
  * Get real-time status of all services and processing information

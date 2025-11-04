@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { checkFlaskHealth, checkOllamaHealth, getFlaskUrl, getOllamaUrl } from '@/app/lib/server-utils'
 import { createClient } from '@supabase/supabase-js'
-import { applyCacheHeaders, CacheStrategies } from '../middleware/cache.js'
+import { applyCacheHeaders, CacheStrategies } from '@/app/api/middleware/cache.js'
 
 // Health checks should be dynamic but cached for 30 seconds
 export const dynamic = 'force-dynamic'
