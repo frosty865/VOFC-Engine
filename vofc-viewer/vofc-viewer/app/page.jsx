@@ -4,16 +4,8 @@ import { useRouter } from 'next/navigation';
 import { getCurrentUser } from './lib/auth';
 import { fetchVulnerabilities, fetchSectors, fetchSubsectorsBySector } from './lib/fetchVOFC';
 
-// ISR: This page can be statically generated with revalidation
-// Since it's client-side, we'll add metadata export for static optimization
-export const metadata = {
-  title: 'VOFC Viewer - Vulnerability Options for Consideration',
-  description: 'Browse and search vulnerabilities and their corresponding options for consideration',
-};
-
-// Revalidate every hour (3600 seconds)
 // Note: Since this is a client component, ISR happens at the API route level
-export const revalidate = 3600;
+// API routes are already optimized with caching (see API_AND_ISR_OPTIMIZATION.md)
 
 export default function VOFCViewer() {
   const router = useRouter();
@@ -58,10 +50,8 @@ export default function VOFCViewer() {
       console.log('[loadSectors] Starting to load sectors...');
       
       // Try API route first (uses admin client, bypasses RLS)
-      // Use cached fetch for better performance
-      const response = await fetch('/api/sectors', { 
-        next: { revalidate: 3600 } // Cache for 1 hour
-      });
+      // API route is already cached for 1 hour (see cache middleware)
+      const response = await fetch('/api/sectors', { cache: 'default' });
       
       if (!response.ok) {
         throw new Error(`Failed to fetch sectors: ${response.statusText}`);
