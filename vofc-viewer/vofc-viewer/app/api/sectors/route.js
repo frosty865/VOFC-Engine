@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/app/lib/supabase-admin.js'
+import { applyCacheHeaders, CacheStrategies } from '../middleware/cache'
 
-export const dynamic = 'force-dynamic'
+// Sectors rarely change - cache for 1 hour with ISR
+export const revalidate = 3600 // 1 hour
 
 export async function GET(request) {
   try {
@@ -34,7 +36,9 @@ export async function GET(request) {
 
     console.log(`[API /api/sectors] Fetched ${normalizedSectors.length} sectors`)
     
-    return NextResponse.json({ sectors: normalizedSectors })
+    const response = NextResponse.json({ sectors: normalizedSectors })
+    // Cache for 1 hour (sectors rarely change)
+    return applyCacheHeaders(response, CacheStrategies.LONG)
   } catch (err) {
     console.error('[API /api/sectors] Exception:', err)
     return NextResponse.json(

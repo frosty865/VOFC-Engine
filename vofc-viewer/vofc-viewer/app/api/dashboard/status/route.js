@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
+import { applyCacheHeaders, CacheStrategies } from '../middleware/cache';
 
 /**
  * Get real-time status of all services and processing information
  * Returns service health, file counts, and active processing status
+ * 
+ * Cache: 30 seconds (frequently changing data)
  */
+export const revalidate = 30;
+
 export async function GET(request) {
   try {
     const status = {
@@ -243,10 +248,13 @@ export async function GET(request) {
       };
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       status
     });
+    
+    // Apply 30-second cache for dashboard status
+    return applyCacheHeaders(response, CacheStrategies.SHORT);
 
   } catch (error) {
     return NextResponse.json({

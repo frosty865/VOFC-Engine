@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
 import { checkFlaskHealth, checkOllamaHealth, getFlaskUrl, getOllamaUrl } from '@/app/lib/server-utils'
 import { createClient } from '@supabase/supabase-js'
+import { applyCacheHeaders, CacheStrategies } from '../middleware/cache'
 
+// Health checks should be dynamic but cached for 30 seconds
 export const dynamic = 'force-dynamic'
-export const revalidate = 0
+export const revalidate = 30 // Revalidate every 30 seconds
 
 /**
  * Check Supabase connectivity
@@ -86,7 +88,7 @@ export async function GET() {
                         ? 'ok' 
                         : 'error'
   
-  return NextResponse.json({
+  const response = NextResponse.json({
     status: overallStatus,
     timestamp: new Date().toISOString(),
     components,
@@ -109,4 +111,7 @@ export async function GET() {
     // Include full Flask response if available
     ...(flask.status === 'ok' ? flask : {}),
   }, { status: 200 })
+  
+  // Apply caching headers (30 second cache for health checks)
+  return applyCacheHeaders(response, CacheStrategies.SHORT)
 }

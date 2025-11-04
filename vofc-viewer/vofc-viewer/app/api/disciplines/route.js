@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '../../lib/supabaseClient';
+import { applyCacheHeaders, CacheStrategies } from '../middleware/cache';
+
+// Disciplines rarely change - cache for 1 hour with ISR
+export const revalidate = 3600; // 1 hour
 
 // Get all disciplines
 export async function GET(request) {
@@ -29,10 +33,12 @@ export async function GET(request) {
       throw error;
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       disciplines: data || []
     });
+    // Cache for 1 hour (disciplines rarely change)
+    return applyCacheHeaders(response, CacheStrategies.LONG);
 
   } catch (error) {
     console.error('Error fetching disciplines:', error);

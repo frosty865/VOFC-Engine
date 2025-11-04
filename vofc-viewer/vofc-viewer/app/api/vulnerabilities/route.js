@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/app/lib/supabase-admin.js';
+import { applyCacheHeaders, CacheStrategies } from '../middleware/cache';
+
+// Vulnerabilities change moderately - cache for 5 minutes with ISR
+export const revalidate = 300; // 5 minutes
 
 export async function GET(request) {
   try {
@@ -139,7 +143,9 @@ export async function GET(request) {
 
     console.log(`✅ Returning ${vulnerabilitiesWithOFCs.length} vulnerabilities with OFCs`);
 
-    return NextResponse.json(vulnerabilitiesWithOFCs);
+    const response = NextResponse.json(vulnerabilitiesWithOFCs);
+    // Cache for 5 minutes (vulnerabilities change moderately)
+    return applyCacheHeaders(response, CacheStrategies.MEDIUM);
 
   } catch (error) {
     console.error('❌ Vulnerabilities API error:', error);
