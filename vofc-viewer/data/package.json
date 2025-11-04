@@ -1,0 +1,36 @@
+{
+  "name": "vofc-engine-tools",
+  "version": "1.0.0",
+  "description": "Tools for VOFC Engine database management",
+  "main": "create-submission-tables.js",
+  "scripts": {
+    "create-tables": "node create-submission-tables.js",
+    "migrate-data": "node vofc-viewer/scripts/migrate-to-structured-tables.js",
+    "setup-submissions": "npm run create-tables && npm run migrate-data",
+    "heuristic-parse": "node heuristic-parser-tool.js",
+    "heuristic-test": "node heuristic-parser-tool.js --test",
+    "heuristic-process": "node heuristic-parser-tool.js --process",
+    "heuristic-install": "node heuristic-parser-tool.js --install",
+    "full-setup": "npm run create-tables && npm run migrate-data && npm run heuristic-parse",
+    "complete-setup": "node create-submission-tables.js",
+    "ai-backend": "cd vofc-viewer/apps/backend && npm start",
+    "ai-install": "cd vofc-viewer/apps/backend && npm install",
+    "ai-test": "curl -X GET http://localhost:4000/api/ai-tools/test-connection",
+    "ai-reindex": "node ai-reindex.js",
+    "find-ollama": "node find-ollama.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^16.3.1"
+  },
+  "keywords": [
+    "vofc",
+    "database",
+    "submissions",
+    "supabase",
+    "ai",
+    "ollama"
+  ],
+  "author": "VOFC Engine Team",
+  "license": "MIT"
+}

@@ -1,0 +1,363 @@
+{
+  "database_relationships": {
+    "description": "VOFC Engine Database Relationships and Foreign Key Mappings",
+    "version": "2.0.0",
+    "last_updated": "2024-01-15",
+    
+    "core_tables": {
+      "vulnerabilities": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "discipline_id": "disciplines.id"
+        },
+        "referenced_by": [
+          "vulnerability_ofc_links.vulnerability_id",
+          "submission_vulnerabilities.vulnerability_id"
+        ]
+      },
+      "options_for_consideration": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "discipline_id": "disciplines.id"
+        },
+        "referenced_by": [
+          "vulnerability_ofc_links.ofc_id",
+          "ofc_sources.ofc_id",
+          "submission_options_for_consideration.ofc_id"
+        ]
+      },
+      "sources": {
+        "primary_key": "id",
+        "foreign_keys": {},
+        "referenced_by": [
+          "ofc_sources.source_id",
+          "submission_sources.source_id"
+        ]
+      },
+      "disciplines": {
+        "primary_key": "id",
+        "foreign_keys": {},
+        "referenced_by": [
+          "vulnerabilities.discipline_id",
+          "options_for_consideration.discipline_id"
+        ]
+      }
+    },
+    
+    "submission_tables": {
+      "submissions": {
+        "primary_key": "id",
+        "foreign_keys": {},
+        "referenced_by": [
+          "submission_vulnerabilities.submission_id",
+          "submission_options_for_consideration.submission_id",
+          "submission_sources.submission_id"
+        ]
+      },
+      "submission_vulnerabilities": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "submission_id": "submissions.id",
+          "vulnerability_id": "vulnerabilities.id"
+        },
+        "referenced_by": [
+          "submission_vulnerability_ofc_links.vulnerability_id"
+        ]
+      },
+      "submission_options_for_consideration": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "submission_id": "submissions.id",
+          "ofc_id": "options_for_consideration.id"
+        },
+        "referenced_by": [
+          "submission_vulnerability_ofc_links.ofc_id",
+          "submission_ofc_sources.ofc_id"
+        ]
+      },
+      "submission_sources": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "submission_id": "submissions.id",
+          "source_id": "sources.id"
+        },
+        "referenced_by": []
+      },
+      "submission_vulnerability_ofc_links": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "vulnerability_id": "submission_vulnerabilities.id",
+          "ofc_id": "submission_options_for_consideration.id"
+        },
+        "referenced_by": []
+      },
+      "submission_ofc_sources": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "ofc_id": "submission_options_for_consideration.id",
+          "source_id": "submission_sources.id"
+        },
+        "referenced_by": []
+      }
+    },
+    
+    "enhanced_processing_tables": {
+      "document_processing_enhanced": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "batch_id": "batch_jobs.id",
+          "agency_id": "agencies.id"
+        },
+        "referenced_by": [
+          "processing_logs.document_id",
+          "confidence_analyses.document_id",
+          "learning_events_enhanced.document_id",
+          "learning_feedback.document_id"
+        ],
+        "filename_relationship": "document_processing_enhanced.filename"
+      },
+      "batch_jobs": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "created_by": "auth.users.id"
+        },
+        "referenced_by": [
+          "document_processing_enhanced.batch_id",
+          "batch_job_progress.batch_id"
+        ]
+      },
+      "processing_logs": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "document_id": "document_processing_enhanced.id",
+          "batch_job_id": "batch_jobs.id"
+        },
+        "referenced_by": []
+      },
+      "confidence_analyses": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "document_id": "document_processing_enhanced.id"
+        },
+        "referenced_by": []
+      },
+      "security_validations": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "agency_id": "agencies.id"
+        },
+        "referenced_by": [],
+        "filename_relationship": "security_validations.filename"
+      },
+      "learning_events_enhanced": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "document_id": "document_processing_enhanced.id"
+        },
+        "referenced_by": []
+      },
+      "learning_feedback": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "document_id": "document_processing_enhanced.id",
+          "user_id": "auth.users.id"
+        },
+        "referenced_by": [
+          "learning_model_updates.feedback_id"
+        ]
+      },
+      "heuristic_patterns": {
+        "primary_key": "id",
+        "foreign_keys": {},
+        "referenced_by": []
+      },
+      "learning_insights": {
+        "primary_key": "id",
+        "foreign_keys": {},
+        "referenced_by": []
+      },
+      "learning_model_updates": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "document_id": "document_processing_enhanced.id",
+          "feedback_id": "learning_feedback.id"
+        },
+        "referenced_by": []
+      },
+      "batch_job_progress": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "batch_id": "batch_jobs.id"
+        },
+        "referenced_by": []
+      }
+    },
+    
+    "security_tables": {
+      "agencies": {
+        "primary_key": "id",
+        "foreign_keys": {},
+        "referenced_by": [
+          "user_agency_relationships.agency_id",
+          "document_processing_enhanced.agency_id",
+          "security_validations.agency_id",
+          "security_audit_trail.agency_id"
+        ]
+      },
+      "user_roles": {
+        "primary_key": "id",
+        "foreign_keys": {},
+        "referenced_by": [
+          "user_agency_relationships.role_id"
+        ]
+      },
+      "user_agency_relationships": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "user_id": "auth.users.id",
+          "agency_id": "agencies.id",
+          "role_id": "user_roles.id"
+        },
+        "referenced_by": []
+      },
+      "security_audit_trail": {
+        "primary_key": "id",
+        "foreign_keys": {
+          "user_id": "auth.users.id",
+          "agency_id": "agencies.id"
+        },
+        "referenced_by": []
+      },
+      "data_classifications": {
+        "primary_key": "id",
+        "foreign_keys": {},
+        "referenced_by": []
+      }
+    },
+    
+    "relationship_patterns": {
+      "document_processing": {
+        "filename": "document_processing_enhanced.filename",
+        "description": "Primary document processing table with filename as key identifier"
+      },
+      "learning_events": {
+        "document_id": "document_processing_enhanced.id",
+        "filename": "document_processing_enhanced.filename",
+        "description": "Learning events linked to document processing via document_id"
+      },
+      "security_validations": {
+        "filename": "security_validations.filename",
+        "description": "Security validations linked to documents via filename"
+      },
+      "batch_processing": {
+        "batch_id": "batch_jobs.id",
+        "description": "Batch processing relationships via batch_id"
+      },
+      "user_agency_access": {
+        "user_id": "auth.users.id",
+        "agency_id": "agencies.id",
+        "description": "Multi-agency access control relationships"
+      }
+    },
+    
+    "api_route_relationships": {
+      "document_processing": {
+        "/api/documents/process": {
+          "uses": ["document_processing_enhanced", "batch_jobs", "processing_logs"],
+          "relationships": ["filename", "batch_id"]
+        },
+        "/api/documents/process-batch-enhanced": {
+          "uses": ["batch_jobs", "document_processing_enhanced", "processing_logs"],
+          "relationships": ["batch_id", "filename"]
+        },
+        "/api/documents/validate-security": {
+          "uses": ["security_validations", "document_processing_enhanced"],
+          "relationships": ["filename"]
+        }
+      },
+      "learning_system": {
+        "/api/learning/enhanced": {
+          "uses": ["learning_events_enhanced", "document_processing_enhanced"],
+          "relationships": ["document_id", "filename"]
+        },
+        "/api/learning/confidence-scoring": {
+          "uses": ["confidence_analyses", "document_processing_enhanced"],
+          "relationships": ["document_id"]
+        },
+        "/api/learning/heuristic-patterns": {
+          "uses": ["heuristic_patterns"],
+          "relationships": []
+        },
+        "/api/learning/feedback": {
+          "uses": ["learning_feedback", "document_processing_enhanced", "auth.users"],
+          "relationships": ["document_id", "user_id"]
+        }
+      },
+      "security_compliance": {
+        "/api/security/comprehensive-validation": {
+          "uses": ["security_validations", "agencies"],
+          "relationships": ["filename", "agency_id"]
+        },
+        "/api/security/monitoring": {
+          "uses": ["security_audit_trail", "security_validations", "agencies"],
+          "relationships": ["user_id", "agency_id"]
+        }
+      },
+      "submission_system": {
+        "/api/submissions": {
+          "uses": ["submissions", "submission_vulnerabilities", "submission_options_for_consideration", "submission_sources"],
+          "relationships": ["submission_id"]
+        },
+        "/api/submissions/[id]/approve": {
+          "uses": ["submissions", "vulnerabilities", "options_for_consideration", "sources"],
+          "relationships": ["submission_id"]
+        }
+      }
+    },
+    
+    "data_flow_patterns": {
+      "document_processing_flow": {
+        "1_upload": "document_processing_enhanced.filename",
+        "2_security_validation": "security_validations.filename",
+        "3_batch_processing": "batch_jobs.id -> document_processing_enhanced.batch_id",
+        "4_ollama_processing": "document_processing_enhanced.id -> learning_events_enhanced.document_id",
+        "5_confidence_scoring": "document_processing_enhanced.id -> confidence_analyses.document_id",
+        "6_learning_feedback": "document_processing_enhanced.id -> learning_feedback.document_id"
+      },
+      "submission_flow": {
+        "1_create_submission": "submissions.id",
+        "2_add_vulnerabilities": "submission_vulnerabilities.submission_id",
+        "3_add_ofcs": "submission_options_for_consideration.submission_id",
+        "4_add_sources": "submission_sources.submission_id",
+        "5_approve_submission": "submissions.id -> vulnerabilities.id, options_for_consideration.id"
+      }
+    },
+    
+    "constraints_and_indexes": {
+      "unique_constraints": [
+        "document_processing_enhanced.filename",
+        "security_validations.checksum",
+        "user_agency_relationships.user_id + agency_id",
+        "heuristic_patterns.pattern_name"
+      ],
+      "foreign_key_constraints": [
+        "document_processing_enhanced.batch_id -> batch_jobs.id",
+        "processing_logs.document_id -> document_processing_enhanced.id",
+        "confidence_analyses.document_id -> document_processing_enhanced.id",
+        "learning_events_enhanced.document_id -> document_processing_enhanced.id",
+        "learning_feedback.document_id -> document_processing_enhanced.id",
+        "user_agency_relationships.user_id -> auth.users.id",
+        "user_agency_relationships.agency_id -> agencies.id"
+      ],
+      "performance_indexes": [
+        "document_processing_enhanced.filename",
+        "document_processing_enhanced.status",
+        "document_processing_enhanced.batch_id",
+        "processing_logs.document_id",
+        "learning_events_enhanced.document_id",
+        "security_audit_trail.user_id",
+        "security_audit_trail.created_at"
+      ]
+    }
+  }
+}

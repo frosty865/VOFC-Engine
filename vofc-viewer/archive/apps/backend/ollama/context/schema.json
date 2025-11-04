@@ -1,0 +1,13 @@
+{
+  "tables": {
+    "vulnerabilities": ["id", "category", "vulnerability", "sector", "subsector"],
+    "options_for_consideration": ["id", "option_text", "vulnerability_id"],
+    "sources": ["id", "reference_number", "source_text"],
+    "vulnerability_ofc_links": ["vulnerability_id", "ofc_id"],
+    "ofc_sources": ["ofc_id", "source_id"]
+  },
+  "rules": {
+    "citations": "Must exist in 'sources.reference_number'",
+    "categories": "Must map to official CI sectors"
+  }
+}

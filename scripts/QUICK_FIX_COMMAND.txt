@@ -1,0 +1,19 @@
+# Quick Fix Command - Copy and paste in PowerShell (as Administrator)
+
+# Stop service
+Stop-Service VOFC-Flask -Force
+
+# Update NSSM with short path (no spaces)
+$nssm = "C:\Users\frost\Downloads\nssm-2.24-101-g897c7ad\nssm-2.24-101-g897c7ad\win64\nssm.exe"
+& $nssm set VOFC-Flask AppParameters "C:\Users\frost\OneDrive\Desktop\Projects\VOFCEN~1\VOFC-V~1\VOFC-V~1\ollama\server.py"
+
+# Start service
+Start-Service VOFC-Flask
+
+# Check status
+Get-Service VOFC-Flask
+
+# Test Flask (wait a few seconds first)
+Start-Sleep -Seconds 5
+curl http://127.0.0.1:5000/api/system/health
+

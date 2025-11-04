@@ -22,34 +22,115 @@ const PROCESSED_DIR = path.join(process.env.USERPROFILE || process.env.HOME, 'Ap
 
 // Generate a question from a vulnerability statement
 function generateQuestion(vulnerability) {
-  const vulnText = vulnerability.vulnerability || vulnerability.title || ''
+  let vulnText = vulnerability.vulnerability || vulnerability.title || ''
   
   // If it's already a question, return it
   if (vulnText.trim().endsWith('?')) {
     return vulnText
   }
   
-  // Convert statement to question
+  // Remove trailing period and clean up
+  vulnText = vulnText.trim().replace(/\.$/, '').trim()
+  
+  // Convert statement to question by extracting the key concept
   const lower = vulnText.toLowerCase()
   
-  // Common patterns
-  if (lower.includes('inadequate') || lower.includes('limited') || lower.includes('lack')) {
-    if (lower.includes('security')) {
-      return `Are there adequate security measures in place to address ${vulnText.toLowerCase()}?`
+  // Extract the core concept (remove common vulnerability verbs and phrases)
+  let coreConcept = vulnText
+  
+  // Special handling for "open access" patterns
+  if (lower.includes('open access') || lower.includes('unauthorized access') || lower.includes('unrestricted access')) {
+    if (lower.includes('open access')) {
+      coreConcept = 'open access points'
+    } else if (lower.includes('unauthorized access')) {
+      coreConcept = 'unauthorized access'
+    } else {
+      coreConcept = 'unrestricted access'
     }
-    return `Are there adequate measures in place to address ${vulnText.toLowerCase()}?`
+  } else {
+    // Remove common vulnerability prefixes, but keep the key noun
+    const prefixPatterns = [
+      { pattern: /^large concentrations of /i, keep: 'student concentrations' },
+      { pattern: /^inadequate /i, keep: null },
+      { pattern: /^insufficient /i, keep: null },
+      { pattern: /^limited /i, keep: null },
+      { pattern: /^lack of /i, keep: null },
+      { pattern: /^poor /i, keep: null },
+      { pattern: /^weak /i, keep: null },
+    ]
+    
+    for (const { pattern, keep } of prefixPatterns) {
+      if (pattern.test(coreConcept)) {
+        if (keep) {
+          coreConcept = keep
+          break
+        } else {
+          coreConcept = coreConcept.replace(pattern, '')
+        }
+      }
+    }
   }
   
-  if (lower.includes('open') || lower.includes('unrestricted')) {
-    return `How does the organization control and secure ${vulnText.toLowerCase()}?`
+  // Remove everything after common vulnerability verbs and phrases
+  // This extracts the subject/object before the verb
+  const verbPatterns = [
+    /\b(creates?|allows?|exposes?|hinders?|increases?|gather|gathers?|create|allow|expose|hinder|increase|prevent|prevents?|enable|enables?|entry|entry)\b.*$/i,
+  ]
+  
+  for (const pattern of verbPatterns) {
+    const match = coreConcept.match(new RegExp(`^(.+?)\\s+${pattern.source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'))
+    if (match && match[1].trim().length > 5) {
+      coreConcept = match[1].trim()
+    }
+  }
+  
+  // Remove trailing prepositional phrases
+  coreConcept = coreConcept.replace(/\b(without|with|during|for|to|on|in|at|into|onto)\b.*$/i, '').trim()
+  
+  // If we extracted a good core concept, use it; otherwise use the original
+  // But ensure it's not too short or too long
+  if (coreConcept.length > 5 && coreConcept.length < vulnText.length * 0.9 && coreConcept.length > vulnText.length * 0.2) {
+    vulnText = coreConcept
+  } else {
+    // Fallback: try to extract just the first noun phrase (up to 8 words)
+    const words = vulnText.split(/\s+/)
+    const firstPhrase = words.slice(0, Math.min(8, words.length)).join(' ')
+    // Remove leading vulnerability indicators
+    const cleaned = firstPhrase.replace(/^(inadequate|insufficient|limited|lack of|poor|weak|unauthorized|open|unrestricted)\s+/i, '')
+    if (cleaned.length > 10 && cleaned.length < firstPhrase.length) {
+      vulnText = cleaned
+    }
+  }
+  
+  // Convert to lowercase for question generation
+  const questionBase = vulnText.toLowerCase()
+  
+  // Generate question based on vulnerability type
+  if (lower.includes('inadequate') || lower.includes('insufficient') || lower.includes('limited') || lower.includes('lack')) {
+    if (lower.includes('security')) {
+      return `Are there adequate security measures in place to address ${questionBase}?`
+    }
+    return `Are there adequate measures in place to address ${questionBase}?`
+  }
+  
+  if (lower.includes('open') || lower.includes('unrestricted') || lower.includes('unauthorized')) {
+    return `How does the organization control and secure ${questionBase}?`
   }
   
   if (lower.includes('cyber') || lower.includes('network')) {
-    return `What cybersecurity measures are in place to protect against ${vulnText.toLowerCase()}?`
+    return `What cybersecurity measures are in place to protect against ${questionBase}?`
+  }
+  
+  if (lower.includes('concentration') || lower.includes('gather') || lower.includes('outside')) {
+    return `How does the organization manage ${questionBase}?`
+  }
+  
+  if (lower.includes('communication') || lower.includes('coordination')) {
+    return `How does the organization ensure adequate ${questionBase}?`
   }
   
   // Generic question format
-  return `How does the organization address ${vulnText.toLowerCase()}?`
+  return `How does the organization address ${questionBase}?`
 }
 
 // Ensure vulnerability is a clear statement with proper sentence capitalization
@@ -223,9 +304,10 @@ async function reprocessJsonFiles() {
             }
           }
           
-          // Generate question if missing
-          if (!updated.question) {
-            updated.question = generateQuestion(updated)
+          // Always regenerate question to ensure proper format
+          const newQuestion = generateQuestion(updated)
+          if (updated.question !== newQuestion) {
+            updated.question = newQuestion
             needsUpdate = true
           }
           
