@@ -1,58 +1,44 @@
 import { NextResponse } from 'next/server'
+import { safeFetch, getFlaskUrl, createSafeErrorResponse, createSafeSuccessResponse } from '@/app/lib/server-utils'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export async function POST() {
-  // Get Flask URL from environment variables
-  const FLASK_URL = process.env.NEXT_PUBLIC_FLASK_URL || 
-                   process.env.NEXT_PUBLIC_OLLAMA_SERVER_URL || 
-                   process.env.OLLAMA_SERVER_URL || 
-                   process.env.OLLAMA_LOCAL_URL || 
-                   (process.env.NODE_ENV === 'development' || !process.env.VERCEL ? 'http://localhost:5000' : 'https://flask.frostech.site')
+  const FLASK_URL = getFlaskUrl()
   
   try {
-    const controller = new AbortController()
-    // Long timeout since processing can take a while
-    const timeoutId = setTimeout(() => controller.abort(), 3600000) // 1 hour timeout
-    
-    const res = await fetch(`${FLASK_URL}/api/files/process-extracted`, {
+    const result = await safeFetch(`${FLASK_URL}/api/files/process-extracted`, {
       method: 'POST',
-      cache: 'no-store',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      }
+      timeout: 3600000, // 1 hour timeout for long processing
     })
     
-    clearTimeout(timeoutId)
-    
-    if (!res.ok) {
-      const errorText = await res.text().catch(() => 'No error details')
-      throw new Error(`HTTP ${res.status}: ${errorText.substring(0, 200)}`)
-    }
-    
-    const data = await res.json()
-    return NextResponse.json(data)
-    
-  } catch (err) {
-    if (err.name === 'AbortError') {
+    if (!result.success) {
       return NextResponse.json(
-        { 
-          success: false,
-          error: 'Request timeout - processing may still be running',
-        },
-        { status: 408 }
+        createSafeErrorResponse(
+          result.error || 'Flask server unavailable',
+          'error',
+          { flask_url: FLASK_URL }
+        ),
+        { status: 200 } // Return 200 so frontend can handle gracefully
       )
     }
     
     return NextResponse.json(
-      { 
-        success: false,
-        error: err.message || 'Failed to process extracted text files',
-      },
-      { status: 500 }
+      createSafeSuccessResponse(result.data, 'Processing completed'),
+      { status: 200 }
+    )
+    
+  } catch (err) {
+    console.error('Process extracted error:', err.message)
+    
+    return NextResponse.json(
+      createSafeErrorResponse(
+        err.message || 'Failed to process extracted text files',
+        'error',
+        { flask_url: FLASK_URL }
+      ),
+      { status: 200 } // Return 200 so frontend can handle gracefully
     )
   }
 }

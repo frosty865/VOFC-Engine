@@ -1,58 +1,56 @@
 import { NextResponse } from 'next/server'
+import { safeFetch, getFlaskUrl, createSafeErrorResponse } from '@/app/lib/server-utils'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export async function GET() {
-  // Get Flask URL from environment variables
-  const FLASK_URL = process.env.NEXT_PUBLIC_FLASK_URL || 
-                   process.env.NEXT_PUBLIC_OLLAMA_SERVER_URL || 
-                   process.env.OLLAMA_SERVER_URL || 
-                   process.env.OLLAMA_LOCAL_URL || 
-                   (process.env.NODE_ENV === 'development' || !process.env.VERCEL ? 'http://localhost:5000' : 'https://flask.frostech.site')
+  const FLASK_URL = getFlaskUrl()
   
   try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000)
-    
-    const res = await fetch(`${FLASK_URL}/api/progress`, {
-      cache: 'no-store',
-      signal: controller.signal,
-      headers: {
-        'Accept': 'application/json',
-      }
+    const result = await safeFetch(`${FLASK_URL}/api/progress`, {
+      timeout: 5000,
     })
     
-    clearTimeout(timeoutId)
-    
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`)
-    }
-    
-    const data = await res.json()
-    return NextResponse.json(data)
-    
-  } catch (err) {
-    if (err.name === 'AbortError') {
+    if (!result.success) {
+      // Return safe default response
       return NextResponse.json(
-        { 
-          status: 'error', 
-          message: 'Request timeout',
-          current_file: null,
-          progress_percent: 0
-        },
-        { status: 500 }
+        createSafeErrorResponse(
+          result.error || 'Flask server unavailable',
+          'idle',
+          {
+            current_file: null,
+            progress_percent: 0,
+          }
+        ),
+        { status: 200 } // Return 200 so frontend can handle gracefully
       )
     }
     
+    const data = result.data
+    // Ensure response has required fields
+    if (!data.status) {
+      data.status = 'idle'
+    }
+    if (typeof data.progress_percent !== 'number') {
+      data.progress_percent = 0
+    }
+    
+    return NextResponse.json(data, { status: 200 })
+    
+  } catch (err) {
+    console.error('Progress API error:', err.message)
+    
     return NextResponse.json(
-      { 
-        status: 'idle',
-        message: err.message || 'Failed to fetch progress',
-        current_file: null,
-        progress_percent: 0
-      },
-      { status: 500 }
+      createSafeErrorResponse(
+        err.message || 'Failed to fetch progress',
+        'idle',
+        {
+          current_file: null,
+          progress_percent: 0,
+        }
+      ),
+      { status: 200 } // Return 200 so frontend can handle gracefully
     )
   }
 }

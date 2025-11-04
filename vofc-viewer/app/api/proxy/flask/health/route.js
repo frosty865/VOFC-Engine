@@ -1,53 +1,49 @@
 import { NextResponse } from 'next/server';
+import { safeFetch, getFlaskUrl, createSafeErrorResponse, createSafeSuccessResponse } from '@/app/lib/server-utils';
 
 /**
  * Proxy route to Flask health endpoint
  * This allows Vercel to communicate with Flask through the Cloudflare tunnel
  */
 export async function GET(request) {
+  const flaskUrl = getFlaskUrl();
+  
   try {
-    // Get Flask URL from environment or default
-    const flaskUrl = process.env.OLLAMA_SERVER_URL || 
-                     process.env.OLLAMA_LOCAL_URL || 
-                     (process.env.VERCEL === '1' 
-                       ? 'https://flask.frostech.site' 
-                       : 'http://127.0.0.1:5000');
-    
-    const response = await fetch(`${flaskUrl}/health`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(10000), // 10 second timeout
-      headers: {
-        'Accept': 'application/json',
-      }
+    const result = await safeFetch(`${flaskUrl}/health`, {
+      timeout: 10000,
     });
     
-    if (!response.ok) {
+    if (!result.success) {
       return NextResponse.json(
-        { 
-          error: `Flask health check failed: HTTP ${response.status}`,
-          status: 'error',
-          url: flaskUrl
-        },
-        { status: response.status }
+        createSafeErrorResponse(
+          result.error || 'Flask server unavailable',
+          'offline',
+          { url: flaskUrl }
+        ),
+        { status: 200 } // Return 200 so frontend can handle gracefully
       );
     }
     
-    const data = await response.json();
-    return NextResponse.json({
-      success: true,
-      data: data,
-      url: flaskUrl
-    });
+    return NextResponse.json(
+      createSafeSuccessResponse(
+        {
+          data: result.data,
+          url: flaskUrl,
+        },
+        'Flask server is online'
+      ),
+      { status: 200 }
+    );
     
   } catch (error) {
     console.error('Flask proxy error:', error);
     return NextResponse.json(
-      { 
-        success: false,
-        error: error.message || 'Failed to connect to Flask server',
-        status: 'offline'
-      },
-      { status: 503 }
+      createSafeErrorResponse(
+        error.message || 'Failed to connect to Flask server',
+        'offline',
+        { url: flaskUrl }
+      ),
+      { status: 200 } // Return 200 so frontend can handle gracefully
     );
   }
 }

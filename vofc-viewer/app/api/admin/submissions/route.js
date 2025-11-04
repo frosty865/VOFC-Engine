@@ -77,6 +77,7 @@ export async function GET(request) {
 
     const url = new URL(request.url)
     const status = url.searchParams.get('status') || 'pending_review'
+    const source = url.searchParams.get('source') // Optional source filter
 
     let query = supabase
       .from('submissions')
@@ -87,6 +88,12 @@ export async function GET(request) {
     if (status) {
       query = query.eq('status', status)
     }
+    
+    // Include file_processing source submissions (processed folder files)
+    // Don't filter by source unless explicitly requested
+    if (source) {
+      query = query.eq('source', source)
+    }
 
     const { data, error: dbError } = await query
 
@@ -95,9 +102,14 @@ export async function GET(request) {
       return NextResponse.json({ error: dbError.message }, { status: 500 })
     }
 
-    console.log(`[Admin Submissions API] Found ${data?.length || 0} submissions with status="${status}"`)
+    console.log(`[Admin Submissions API] Found ${data?.length || 0} submissions with status="${status}"${source ? ` and source="${source}"` : ''}`)
     
-    return NextResponse.json(Array.isArray(data) ? data : [])
+    // Return in expected format for SubmissionReview component
+    return NextResponse.json({
+      success: true,
+      allSubmissions: Array.isArray(data) ? data : [],
+      submissions: Array.isArray(data) ? data : []
+    })
   } catch (e) {
     console.error('Admin submissions API error:', e)
     return NextResponse.json({ error: e.message }, { status: 500 })

@@ -18,9 +18,10 @@ export async function GET(request) {
     }
 
     // Build query for vulnerabilities with filters
+    // Use 'vulnerability' column (NOT vulnerability_text which doesn't exist)
     let vulnerabilitiesQuery = supabaseAdmin
       .from('submission_vulnerabilities')
-      .select('id, vulnerability_text, question, what, so_what, sector, subsector, discipline, created_at')
+      .select('id, vulnerability, title, description, question, what, so_what, sector, subsector, discipline, created_at')
       .order('created_at', { ascending: false });
 
     // Apply filters

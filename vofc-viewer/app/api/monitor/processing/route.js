@@ -124,41 +124,43 @@ async function getFileProcessingStatus() {
 
 async function getOllamaStatus() {
   try {
-    const ollamaBaseUrl = process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site';
-    const ollamaModel = process.env.OLLAMA_MODEL || 'vofc-engine:latest';
+    const { checkOllamaHealth, getOllamaUrl } = await import('@/app/lib/server-utils');
+    const healthData = await checkOllamaHealth();
     
-    // Test Ollama connectivity
-    const response = await fetch(`${ollamaBaseUrl}/api/tags`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
-    });
-
-    if (!response.ok) {
+    if (healthData.status === 'offline') {
       return {
         status: 'offline',
-        error: `HTTP ${response.status}: ${response.statusText}`,
-        url: ollamaBaseUrl
+        error: healthData.message,
+        url: healthData.url,
+        model: process.env.OLLAMA_MODEL || 'vofc-engine:latest',
+        available_models: [],
+        target_model_found: false,
+        queue_size: 0
       };
     }
 
-    const data = await response.json();
-    const models = data.models || [];
+    const models = healthData.models || [];
     const targetModel = models.find(m => m.name.includes('vofc') || m.name.includes('engine'));
 
     return {
       status: 'online',
-      url: ollamaBaseUrl,
-      model: ollamaModel,
+      url: healthData.url,
+      model: process.env.OLLAMA_MODEL || 'vofc-engine:latest',
       available_models: models.map(m => m.name),
       target_model_found: !!targetModel,
-      target_model_info: targetModel
+      target_model_info: targetModel,
+      queue_size: 0
     };
 
   } catch (error) {
+    const { getOllamaUrl } = await import('@/app/lib/server-utils');
     return {
       status: 'offline',
       error: error.message,
-      url: process.env.OLLAMA_URL || process.env.OLLAMA_API_BASE_URL || process.env.OLLAMA_BASE_URL || 'https://ollama.frostech.site'
+      url: getOllamaUrl(),
+      available_models: [],
+      target_model_found: false,
+      queue_size: 0
     };
   }
 }

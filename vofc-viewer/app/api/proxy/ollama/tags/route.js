@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { safeFetch, getOllamaUrl, checkOllamaHealth, createSafeErrorResponse, createSafeSuccessResponse } from '@/app/lib/server-utils';
 
 /**
  * Proxy route to Ollama API /api/tags endpoint
@@ -6,47 +7,40 @@ import { NextResponse } from 'next/server';
  */
 export async function GET(request) {
   try {
-    // Get Ollama URL from environment or default
-    const ollamaUrl = process.env.OLLAMA_URL || 
-                      (process.env.VERCEL === '1' 
-                        ? 'https://ollama.frostech.site' 
-                        : 'http://localhost:11434');
+    const healthData = await checkOllamaHealth();
     
-    const response = await fetch(`${ollamaUrl}/api/tags`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(10000), // 10 second timeout
-      headers: {
-        'Accept': 'application/json',
-      }
-    });
-    
-    if (!response.ok) {
+    if (healthData.status === 'offline') {
       return NextResponse.json(
-        { 
-          error: `Ollama API check failed: HTTP ${response.status}`,
-          status: 'error',
-          url: ollamaUrl
-        },
-        { status: response.status }
+        createSafeErrorResponse(
+          healthData.message || 'Ollama server unavailable',
+          'offline',
+          { url: healthData.url, models: [] }
+        ),
+        { status: 200 } // Return 200 so frontend can handle gracefully
       );
     }
     
-    const data = await response.json();
-    return NextResponse.json({
-      success: true,
-      data: data,
-      url: ollamaUrl
-    });
+    return NextResponse.json(
+      createSafeSuccessResponse(
+        {
+          data: { models: healthData.models },
+          url: healthData.url,
+        },
+        'Ollama server is online'
+      ),
+      { status: 200 }
+    );
     
   } catch (error) {
     console.error('Ollama proxy error:', error);
+    const ollamaUrl = getOllamaUrl();
     return NextResponse.json(
-      { 
-        success: false,
-        error: error.message || 'Failed to connect to Ollama API',
-        status: 'offline'
-      },
-      { status: 503 }
+      createSafeErrorResponse(
+        error.message || 'Failed to connect to Ollama API',
+        'offline',
+        { url: ollamaUrl, models: [] }
+      ),
+      { status: 200 } // Return 200 so frontend can handle gracefully
     );
   }
 }

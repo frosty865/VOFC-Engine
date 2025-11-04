@@ -1,82 +1,99 @@
 import { NextResponse } from 'next/server'
+import { checkFlaskHealth, checkOllamaHealth, getFlaskUrl, getOllamaUrl } from '@/app/lib/server-utils'
+import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export async function GET() {
-  // Get Flask URL from environment variables
-  // Priority: explicit env var > localhost (for dev) > remote URL (for prod)
-  const FLASK_URL = process.env.NEXT_PUBLIC_FLASK_URL || 
-                   process.env.NEXT_PUBLIC_OLLAMA_SERVER_URL || 
-                   process.env.OLLAMA_SERVER_URL || 
-                   process.env.OLLAMA_LOCAL_URL || 
-                   (process.env.NODE_ENV === 'development' || !process.env.VERCEL ? 'http://localhost:5000' : 'https://flask.frostech.site')
-  
-  console.log('[System Health API Proxy] Using Flask URL:', FLASK_URL)
-  
+/**
+ * Check Supabase connectivity
+ */
+async function checkSupabaseHealth() {
   try {
-    // Proxy request to Flask /api/system/health endpoint
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     
-    const healthUrl = `${FLASK_URL}/api/system/health`
-    console.log('[System Health API Proxy] Fetching from:', healthUrl)
-    
-    const res = await fetch(healthUrl, {
-      cache: 'no-store',
-      signal: controller.signal,
-      headers: {
-        'Accept': 'application/json',
-      }
-    })
-    
-    clearTimeout(timeoutId)
-    
-    if (!res.ok) {
-      const errorText = await res.text().catch(() => 'No error details')
-      console.error('[System Health API Proxy] Flask returned error:', res.status, errorText)
-      throw new Error(`HTTP ${res.status}: ${errorText.substring(0, 100)}`)
+    if (!supabaseUrl || !supabaseKey) {
+      return { status: 'unknown', message: 'Supabase credentials not configured' }
     }
     
-    const data = await res.json()
-    console.log('[System Health API Proxy] Flask response received:', JSON.stringify(data).substring(0, 200))
+    const supabase = createClient(supabaseUrl, supabaseKey)
     
-    // Return the health data directly from Flask
-    return NextResponse.json(data)
+    // Simple query to test connection
+    const { data, error } = await supabase.from('submissions').select('id').limit(1)
     
+    if (error && error.code !== 'PGRST116') {
+      return { status: 'offline', message: error.message }
+    }
+    
+    return { status: 'online', message: 'Supabase is accessible' }
   } catch (err) {
-    console.error('[System Health API Proxy] Error:', err.message)
-    console.error('[System Health API Proxy] Error type:', err.name)
-    
-    // Handle timeout
-    if (err.name === 'AbortError') {
-      return NextResponse.json(
-        { 
-          status: 'error', 
-          message: 'Request timeout', 
-          components: { 
-            flask: 'offline (timeout)', 
-            ollama: 'unknown', 
-            supabase: 'unknown' 
-          } 
-        },
-        { status: 500 }
-      )
-    }
-    
-    // Handle other errors
-    return NextResponse.json(
-      { 
-        status: 'error', 
-        message: err.message || 'Failed to connect to Flask server', 
-        components: { 
-          flask: 'offline', 
-          ollama: 'unknown', 
-          supabase: 'unknown' 
-        },
-        flaskUrl: FLASK_URL // Include for debugging
-      },
-      { status: 500 }
-    )
+    return { status: 'offline', message: err.message || 'Supabase connection failed' }
   }
+}
+
+export async function GET() {
+  const FLASK_URL = getFlaskUrl()
+  const OLLAMA_URL = getOllamaUrl()
+  
+  // Check all servers independently
+  const [flaskHealth, ollamaHealth, supabaseHealth] = await Promise.allSettled([
+    checkFlaskHealth(),
+    checkOllamaHealth(),
+    checkSupabaseHealth(),
+  ])
+  
+  // Extract results
+  const flask = flaskHealth.status === 'fulfilled' ? flaskHealth.value : { 
+    status: 'offline', 
+    components: { flask: 'offline' },
+    error: flaskHealth.reason?.message || 'Flask check failed'
+  }
+  
+  const ollama = ollamaHealth.status === 'fulfilled' ? ollamaHealth.value : { 
+    status: 'offline',
+    message: ollamaHealth.reason?.message || 'Ollama check failed'
+  }
+  
+  const supabase = supabaseHealth.status === 'fulfilled' ? supabaseHealth.value : { 
+    status: 'offline',
+    message: supabaseHealth.reason?.message || 'Supabase check failed'
+  }
+  
+  // Build response - use Flask's component data if available, otherwise use independent checks
+  const components = {
+    flask: flask.components?.flask || (flask.status === 'ok' ? 'online' : 'offline'),
+    ollama: flask.components?.ollama || (ollama.status === 'online' ? 'online' : 'offline'),
+    supabase: flask.components?.supabase || (supabase.status === 'online' ? 'online' : 'offline'),
+  }
+  
+  // Overall status - ok if at least Flask is working, or if we got good data
+  const overallStatus = flask.status === 'ok' || 
+                       (components.flask === 'online' || components.ollama === 'online' || components.supabase === 'online')
+                        ? 'ok' 
+                        : 'error'
+  
+  return NextResponse.json({
+    status: overallStatus,
+    timestamp: new Date().toISOString(),
+    components,
+    details: {
+      flask: {
+        status: components.flask,
+        url: FLASK_URL,
+        message: flask.message || flask.error,
+      },
+      ollama: {
+        status: components.ollama,
+        url: OLLAMA_URL,
+        message: ollama.message || ollama.error,
+      },
+      supabase: {
+        status: components.supabase,
+        message: supabase.message || supabase.error,
+      },
+    },
+    // Include full Flask response if available
+    ...(flask.status === 'ok' ? flask : {}),
+  }, { status: 200 })
 }

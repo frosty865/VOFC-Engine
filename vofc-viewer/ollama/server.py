@@ -138,40 +138,113 @@ def get_processing_progress():
     """Get current document processing progress"""
     if request.method == 'OPTIONS':
         return '', 200
-    progress = get_progress()
-    return jsonify(progress), 200
+    
+    try:
+        progress = get_progress()
+        # Ensure progress has all required fields
+        if not isinstance(progress, dict):
+            progress = {
+                "status": "idle",
+                "message": "No active processing",
+                "current_file": None,
+                "progress_percent": 0
+            }
+        # Ensure progress_percent exists
+        if "progress_percent" not in progress:
+            progress["progress_percent"] = 0
+        return jsonify(progress), 200
+    except Exception as e:
+        logging.error(f"Error in get_processing_progress: {e}", exc_info=True)
+        return jsonify({
+            "status": "error",
+            "message": f"Failed to get progress: {str(e)}",
+            "current_file": None,
+            "progress_percent": 0
+        }), 500
 
 @app.route("/api/system/health", methods=["GET", "OPTIONS"])
 def system_health():
     """System health check endpoint with CORS support"""
     if request.method == 'OPTIONS':
         return '', 200
+    
     import requests
-    ollama_url = "http://localhost:11434/api/tags"
+    from datetime import datetime
+    
+    # Get Ollama URL from environment (supports production)
+    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    ollama_url = f"{ollama_host}/api/tags"
     supabase_url = os.getenv("SUPABASE_URL", "") or os.getenv("NEXT_PUBLIC_SUPABASE_URL", "")
-    status = {"flask": "online"}
+    
+    # Initialize components status
+    components = {
+        "flask": "online",
+        "ollama": "unknown",
+        "supabase": "unknown"
+    }
 
     # Check Ollama
     try:
         r = requests.get(ollama_url, timeout=3)
         if r.status_code == 200:
-            status["ollama"] = "online"
+            components["ollama"] = "online"
         else:
-            status["ollama"] = f"error ({r.status_code})"
+            components["ollama"] = "error"
+    except requests.exceptions.Timeout:
+        components["ollama"] = "timeout"
+    except requests.exceptions.ConnectionError:
+        components["ollama"] = "offline"
     except Exception as e:
-        status["ollama"] = f"offline ({str(e)})"
+        components["ollama"] = "error"
 
     # Check Supabase connectivity (optional)
     try:
         if supabase_url:
-            r = requests.get(f"{supabase_url}/rest/v1/?apikey=" + os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""), timeout=3)
-            status["supabase"] = "online" if r.status_code < 400 else f"error ({r.status_code})"
+            supabase_check_url = f"{supabase_url}/rest/v1/"
+            headers = {}
+            api_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "") or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "")
+            if api_key:
+                headers["apikey"] = api_key
+                headers["Authorization"] = f"Bearer {api_key}"
+            
+            r = requests.get(supabase_check_url, headers=headers, timeout=3)
+            if r.status_code < 400:
+                components["supabase"] = "online"
+            else:
+                components["supabase"] = "error"
         else:
-            status["supabase"] = "not_configured"
+            components["supabase"] = "not_configured"
+    except requests.exceptions.Timeout:
+        components["supabase"] = "timeout"
+    except requests.exceptions.ConnectionError:
+        components["supabase"] = "offline"
     except Exception as e:
-        status["supabase"] = f"offline ({str(e)})"
+        components["supabase"] = "error"
 
-    return jsonify({"status": "ok", "components": status}), 200
+    # Determine overall status
+    overall_status = "ok"
+    if components["flask"] != "online":
+        overall_status = "error"
+    elif components["ollama"] == "offline" or components["supabase"] == "offline":
+        overall_status = "degraded"
+
+    return jsonify({
+        "status": overall_status,
+        "timestamp": datetime.now().isoformat(),
+        "components": components,
+        "flask": {
+            "status": components["flask"],
+            "url": f"http://{SERVER_HOST}:{SERVER_PORT}"
+        },
+        "ollama": {
+            "status": components["ollama"],
+            "url": ollama_host
+        },
+        "supabase": {
+            "status": components["supabase"],
+            "configured": bool(supabase_url)
+        }
+    }), 200
 
 # Helper function to create submission record in Supabase
 def create_submission_record(submission_id, filename, vuln_count, ofc_count, filepath=None, vofc_data=None):
@@ -1024,7 +1097,8 @@ def process_files():
                     except ImportError:
                         # Fallback to old method if import fails
                         # Pass doc_id for audit logging (F. Local Logging + Auditing)
-                        vofc_result = process_text_with_vofc_engine(text, doc_id=safe_name)
+                        # Pass filename as doc_title for UFC/MIL-STD detection
+                        vofc_result = process_text_with_vofc_engine(text, doc_id=safe_name, doc_title=filename)
                         # Add empty sources
                         if 'sources' not in vofc_result:
                             vofc_result['sources'] = []
@@ -1043,6 +1117,11 @@ def process_files():
                             'sources': result.get('sources', []),
                             'links': result.get('links', {})
                         }
+                        
+                        # If process_submission doesn't use enhanced extraction, use direct call
+                        if not vofc_result.get('vulnerabilities'):
+                            from heuristic_pipeline import process_text_with_vofc_engine
+                            vofc_result = process_text_with_vofc_engine(text, doc_id=safe_name, doc_title=filename)
                 else:
                     # Use process_submission for citation extraction
                     submission_id = str(uuid.uuid4())
@@ -1071,12 +1150,40 @@ def process_files():
                     json.dump(vofc_result, j, indent=2)
                 print(f"JSON written: {json_path}")
 
-                # Step 4: Move original PDF and extracted text to library
-                library_pdf_path = os.path.join(LIBRARY_DIR, filename)
+                # Step 4: Move original PDF to processed folder, extracted text to library
+                # Files go to processed/ first, then can be moved to library/ after review
+                # Ensure processed directory exists
+                os.makedirs(PROCESSED_DIR, exist_ok=True)
+                os.makedirs(LIBRARY_DIR, exist_ok=True)
+                
+                processed_pdf_path = os.path.join(PROCESSED_DIR, filename)
                 library_txt_path = os.path.join(LIBRARY_DIR, txt_name)
-                shutil.move(filepath, library_pdf_path)
-                shutil.move(extracted_path, library_txt_path)
-                print(f"Moved {filename} + {txt_name} to library")
+                
+                # Check if source file exists before moving
+                if not os.path.exists(filepath):
+                    print(f"WARNING: Source file not found: {filepath}. It may have already been moved.")
+                else:
+                    # Check if destination already exists (avoid overwrite errors)
+                    if os.path.exists(processed_pdf_path):
+                        # Add timestamp to avoid collision
+                        base, ext = os.path.splitext(filename)
+                        timestamp = int(time.time())
+                        processed_pdf_path = os.path.join(PROCESSED_DIR, f"{base}_{timestamp}{ext}")
+                    
+                    shutil.move(filepath, processed_pdf_path)
+                    print(f"Moved {filename} to processed folder: {processed_pdf_path}")
+                
+                # Move extracted text
+                if os.path.exists(extracted_path):
+                    if os.path.exists(library_txt_path):
+                        # Add timestamp to avoid collision
+                        base, ext = os.path.splitext(txt_name)
+                        timestamp = int(time.time())
+                        library_txt_path = os.path.join(LIBRARY_DIR, f"{base}_{timestamp}{ext}")
+                    shutil.move(extracted_path, library_txt_path)
+                    print(f"Moved {txt_name} to library: {library_txt_path}")
+                else:
+                    print(f"WARNING: Extracted text file not found: {extracted_path}")
 
                 # Step 5: Create submission record in Supabase
                 submission_id = str(uuid.uuid4())
@@ -1088,7 +1195,7 @@ def process_files():
                     filename=filename,
                     vuln_count=vuln_count,
                     ofc_count=ofc_count,
-                    filepath=library_pdf_path,
+                    filepath=processed_pdf_path,  # Use processed path, not library
                     vofc_data=vofc_result  # Include full extracted data
                 )
 
@@ -1120,14 +1227,29 @@ def process_files():
 
                 # Move to errors folder
                 try:
+                    os.makedirs(ERRORS_DIR, exist_ok=True)
                     error_path = os.path.join(ERRORS_DIR, filename)
-                    shutil.move(filepath, error_path)
-                    try:
-                        print(f"Moved {safe_filename} to errors folder")
-                    except (OSError, UnicodeEncodeError):
-                        print("Moved file to errors folder")
+                    
+                    # Check if source file exists
+                    if not os.path.exists(filepath):
+                        print(f"WARNING: Source file not found: {filepath}. It may have already been moved.")
+                    else:
+                        # Check if destination already exists (avoid overwrite errors)
+                        if os.path.exists(error_path):
+                            # Add timestamp to avoid collision
+                            base, ext = os.path.splitext(filename)
+                            timestamp = int(time.time())
+                            error_path = os.path.join(ERRORS_DIR, f"{base}_{timestamp}{ext}")
+                        
+                        shutil.move(filepath, error_path)
+                        try:
+                            print(f"Moved {safe_filename} to errors folder: {error_path}")
+                        except (OSError, UnicodeEncodeError):
+                            print("Moved file to errors folder")
                 except Exception as move_error:
                     print(f"WARNING: Failed to move file to errors folder: {move_error}")
+                    import traceback
+                    print(traceback.format_exc())
 
                 errors += 1
                 results.append({
@@ -1502,7 +1624,12 @@ def health():
                     for i in range(device_count):
                         try:
                             handle = nvml.nvmlDeviceGetHandleByIndex(i)
-                            name = nvml.nvmlDeviceGetName(handle).decode('utf-8')
+                            name_bytes = nvml.nvmlDeviceGetName(handle)
+                            # Handle both bytes and string types (different pynvml versions)
+                            if isinstance(name_bytes, bytes):
+                                name = name_bytes.decode('utf-8')
+                            else:
+                                name = str(name_bytes)
                             util = nvml.nvmlDeviceGetUtilizationRates(handle)
                             mem_info = nvml.nvmlDeviceGetMemoryInfo(handle)
                             

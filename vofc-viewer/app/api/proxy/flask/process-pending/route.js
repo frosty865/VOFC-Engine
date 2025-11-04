@@ -1,88 +1,55 @@
 import { NextResponse } from 'next/server'
+import { safeFetch, getFlaskUrl, createSafeErrorResponse, createSafeSuccessResponse } from '@/app/lib/server-utils'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST() {
+  const flaskUrl = getFlaskUrl()
+  
+  console.log(`[Flask Proxy] Calling Flask process-pending at: ${flaskUrl}/process-pending`)
+  
   try {
-    // Get Flask server URL from environment or use default
-    const defaultFlaskUrl = 'http://localhost:5000'
-    const flaskUrl = process.env.OLLAMA_SERVER_URL || 
-                     process.env.OLLAMA_LOCAL_URL || 
-                     process.env.FLASK_URL ||
-                     defaultFlaskUrl
+    const result = await safeFetch(`${flaskUrl}/process-pending`, {
+      method: 'POST',
+      timeout: 60000, // 60 second timeout
+    })
     
-    console.log(`[Flask Proxy] Calling Flask process-pending at: ${flaskUrl}/process-pending`)
-    
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 second timeout
-    
-    try {
-      const response = await fetch(`${flaskUrl}/process-pending`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        signal: controller.signal
-      })
-      
-      clearTimeout(timeoutId)
-      
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`[Flask Proxy] Flask returned error: ${response.status} - ${errorText}`)
-        return NextResponse.json(
-          { 
-            success: false, 
-            error: `Flask server returned ${response.status}: ${errorText}`,
-            flask_url: flaskUrl
-          },
-          { status: response.status }
-        )
-      }
-      
-      const data = await response.json()
-      console.log('[Flask Proxy] Flask process-pending response:', data)
-      
-      return NextResponse.json({
-        success: true,
-        message: data.status === 'ok' ? 'Processing completed' : data.status,
-        processed: data.processed?.length || 0,
-        status: data.status,
-        flask_response: data
-      })
-      
-    } catch (fetchError) {
-      clearTimeout(timeoutId)
-      
-      if (fetchError.name === 'AbortError') {
-        console.error('[Flask Proxy] Request timed out after 60 seconds')
-        return NextResponse.json(
-          { 
-            success: false, 
-            error: 'Request to Flask server timed out',
-            flask_url: flaskUrl
-          },
-          { status: 504 }
-        )
-      }
-      
-      console.error('[Flask Proxy] Network error calling Flask:', fetchError.message)
+    if (!result.success) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: `Cannot reach Flask server: ${fetchError.message}`,
-          flask_url: flaskUrl,
-          hint: 'Make sure the Flask server is running and accessible'
-        },
-        { status: 503 }
+        createSafeErrorResponse(
+          result.error || 'Flask server unavailable',
+          'error',
+          { flask_url: flaskUrl, processed: 0 }
+        ),
+        { status: 200 } // Return 200 so frontend can handle gracefully
       )
     }
+    
+    const data = result.data
+    console.log('[Flask Proxy] Flask process-pending response:', data)
+    
+    return NextResponse.json(
+      createSafeSuccessResponse(
+        {
+          message: data.status === 'ok' ? 'Processing completed' : data.status,
+          processed: data.processed?.length || 0,
+          status: data.status,
+          flask_response: data,
+        },
+        'Processing request sent'
+      ),
+      { status: 200 }
+    )
     
   } catch (error) {
     console.error('[Flask Proxy] Error in process-pending proxy:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
+      createSafeErrorResponse(
+        error.message || 'Failed to process pending files',
+        'error',
+        { flask_url: flaskUrl, processed: 0 }
+      ),
+      { status: 200 } // Return 200 so frontend can handle gracefully
     )
   }
 }

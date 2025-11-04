@@ -119,7 +119,11 @@ export default function ReviewSubmissionsPage() {
       }
       
       const data = await res.json()
-      setSubmissions(Array.isArray(data) ? data : [])
+      // Handle both response formats: direct array or {success, submissions, allSubmissions}
+      const submissionsList = Array.isArray(data) 
+        ? data 
+        : (data.submissions || data.allSubmissions || [])
+      setSubmissions(submissionsList)
       setError(null)
     } catch (e) {
       setError(e.message)
@@ -498,16 +502,24 @@ export default function ReviewSubmissionsPage() {
                                         </span>
                                       )}
                                     </div>
-                                    {/* Question */}
-                                    {vuln.question && (
+                                    {/* Assessment Question */}
+                                    {vuln.question ? (
                                       <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                        <div className="text-xs font-semibold text-blue-700 mb-1 uppercase tracking-wide">Question</div>
+                                        <div className="text-xs font-semibold text-blue-700 mb-1 uppercase tracking-wide">Assessment Question</div>
                                         <p className="text-sm font-medium text-blue-900">{vuln.question}</p>
                                       </div>
+                                    ) : (
+                                      <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                                        ⚠️ Missing assessment question
+                                      </div>
                                     )}
+                                    {/* Vulnerability Statement (Answer) */}
                                     <h5 className="text-base font-bold text-gray-900 mt-2">
                                       {vuln.title || vuln.vulnerability || 'Untitled Vulnerability'}
                                     </h5>
+                                    <p className="text-xs text-gray-500 italic mt-1">
+                                      (Vulnerability Statement - Answer to the question)
+                                    </p>
                                     {/* Structured What and So What */}
                                     {(vuln.what || vuln.so_what) ? (
                                       <div className="mt-3 space-y-2">
@@ -527,26 +539,30 @@ export default function ReviewSubmissionsPage() {
                                     ) : vuln.description ? (
                                       <p className="text-sm text-gray-600 mt-2">{vuln.description}</p>
                                     ) : null}
-                                    {/* Sector, Subsector, Discipline metadata */}
-                                    {(vuln.sector || vuln.subsector || vuln.discipline) && (
-                                      <div className="mt-2 flex flex-wrap gap-2">
-                                        {vuln.sector && (
-                                          <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs">
-                                            Sector: {vuln.sector}
-                                          </span>
-                                        )}
-                                        {vuln.subsector && (
-                                          <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded text-xs">
-                                            Subsector: {vuln.subsector}
-                                          </span>
-                                        )}
-                                        {vuln.discipline && (
-                                          <span className="px-2 py-1 bg-teal-100 text-teal-800 rounded text-xs">
-                                            Discipline: {vuln.discipline}
-                                          </span>
-                                        )}
-                                      </div>
-                                    )}
+                                    {/* Sector, Subsector, Discipline metadata - Always show */}
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                        vuln.sector 
+                                          ? 'bg-purple-100 text-purple-800' 
+                                          : 'bg-gray-100 text-gray-500 italic'
+                                      }`}>
+                                        Sector: {vuln.sector || 'Not specified'}
+                                      </span>
+                                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                        vuln.subsector 
+                                          ? 'bg-indigo-100 text-indigo-800' 
+                                          : 'bg-gray-100 text-gray-500 italic'
+                                      }`}>
+                                        Subsector: {vuln.subsector || 'Not specified'}
+                                      </span>
+                                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                        vuln.discipline 
+                                          ? 'bg-teal-100 text-teal-800' 
+                                          : 'bg-gray-100 text-gray-500 italic'
+                                      }`}>
+                                        Discipline: {vuln.discipline || 'Not specified'}
+                                      </span>
+                                    </div>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <div className="text-xs text-gray-500">

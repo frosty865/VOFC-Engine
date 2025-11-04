@@ -174,32 +174,70 @@ export async function POST(request, { params }) {
         // --- Vulnerabilities ---
         if (parsed.vulnerabilities && parsed.vulnerabilities.length > 0) {
           const vulnPayload = parsed.vulnerabilities.map(v => {
-            // Build vulnerability_text from structured fields if available
-            let vulnerabilityText = v.vulnerability_text || v.vulnerability || '';
-            if (!vulnerabilityText && (v.question || v.what || v.so_what)) {
+            // Build description from structured fields if available
+            // Use vulnerability or title (NOT vulnerability_text which doesn't exist in schema)
+            const vulnStatement = v.vulnerability || v.title || '';
+            
+            // Build full description text
+            let vulnerabilityText = '';
+            if (v.question || v.what || v.so_what || vulnStatement) {
               const parts = [];
-              if (v.question) parts.push(`Question: ${v.question}`);
+              if (v.question) parts.push(`Assessment Question: ${v.question}`);
+              if (vulnStatement) parts.push(`Vulnerability Statement: ${vulnStatement}`);
               if (v.what) parts.push(`What: ${v.what}`);
               if (v.so_what) parts.push(`So What: ${v.so_what}`);
               vulnerabilityText = parts.join('\n\n');
+            } else {
+              vulnerabilityText = v.description || '';
             }
             
+            // Schema has 'vulnerability' (NOT NULL), 'title', and 'description'
             return {
               submission_id: submissionId,
-              vulnerability_text: vulnerabilityText || '',
-              question: v.question || null,
-              what: v.what || null,
-              so_what: v.so_what || null,
-              sector: v.sector || null,
-              subsector: v.subsector || null,
-              discipline: v.discipline || null
+              vulnerability: vulnStatement, // Required NOT NULL column
+              title: vulnStatement, // Also set title for consistency
+              description: vulnerabilityText,
+              category: v.category || null,
+              severity: v.severity || null
             };
           });
 
-          const { error: vulnErr } = await supabase
+          // Insert vulnerabilities with basic fields first
+          const { data: insertedVulns, error: vulnErr } = await supabase
             .from('submission_vulnerabilities')
-            .insert(vulnPayload);
-
+            .insert(vulnPayload)
+            .select('id');
+          
+          // If insert succeeded and we have structured fields, try to update them
+          if (insertedVulns && !vulnErr && insertedVulns.length > 0) {
+            // Update with structured fields for each vulnerability
+            for (let i = 0; i < insertedVulns.length && i < parsed.vulnerabilities.length; i++) {
+              const v = parsed.vulnerabilities[i]
+              const insertedId = insertedVulns[i].id
+              
+              const updatePayload = {}
+              if (v.question) updatePayload.question = v.question
+              if (v.what) updatePayload.what = v.what
+              if (v.so_what) updatePayload.so_what = v.so_what
+              if (v.sector) updatePayload.sector = v.sector
+              if (v.subsector) updatePayload.subsector = v.subsector
+              if (v.discipline) updatePayload.discipline = v.discipline
+              
+              if (Object.keys(updatePayload).length > 0) {
+                // Try to update (will fail silently if columns don't exist)
+                await supabase
+                  .from('submission_vulnerabilities')
+                  .update(updatePayload)
+                  .eq('id', insertedId)
+                  .then(({ error }) => {
+                    if (error && error.code !== 'PGRST116') {
+                      console.warn('Could not update structured fields (columns may not exist):', error.message)
+                    }
+                  })
+              }
+            }
+          }
+          
           if (vulnErr) {
             console.error('Error inserting vulnerabilities:', vulnErr);
             throw vulnErr;
