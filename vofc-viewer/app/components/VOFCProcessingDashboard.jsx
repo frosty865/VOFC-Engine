@@ -7,22 +7,23 @@ export default function VOFCProcessingDashboard() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
+  const [processing, setProcessing] = useState(false);
+
+  const loadStatus = async () => {
+    try {
+      const response = await fetch('/api/dashboard/status');
+      const data = await response.json();
+      if (data.success) {
+        setStatus(data.status);
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Failed to load status:', error);
+    }
+  };
 
   // Load status every 5 seconds
   useEffect(() => {
-    const loadStatus = async () => {
-      try {
-        const response = await fetch('/api/dashboard/status');
-        const data = await response.json();
-        if (data.success) {
-          setStatus(data.status);
-          setLoading(false);
-        }
-      } catch (error) {
-        console.error('Failed to load status:', error);
-      }
-    };
-
     loadStatus();
     const interval = setInterval(loadStatus, 5000);
     return () => clearInterval(interval);
@@ -100,6 +101,86 @@ export default function VOFCProcessingDashboard() {
     }
   };
 
+  const handleProcessPending = async () => {
+    if (processing) return;
+    
+    setProcessing(true);
+    addLog('🔄 Starting batch processing of pending files...', 'system');
+    
+    // Try Flask backend first (processes files directly from incoming folder)
+    try {
+      addLog('📡 Attempting to connect to Flask backend...', 'system');
+      const flaskResponse = await fetch('/api/proxy/flask/process-pending', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const flaskResult = await flaskResponse.json();
+      
+      if (flaskResult.success) {
+        const processedCount = flaskResult.processed || 0;
+        addLog(`✅ Flask processing complete: ${processedCount} file(s) processed`, 'success');
+        if (flaskResult.flask_response?.processed) {
+          flaskResult.flask_response.processed.forEach(subId => {
+            addLog(`✅ Submission ${subId} processed successfully`, 'success');
+          });
+        }
+        // Reload status after a short delay
+        setTimeout(() => {
+          loadStatus();
+        }, 3000);
+        setProcessing(false);
+        return;
+      } else {
+        addLog(`⚠️ Flask processing failed: ${flaskResult.error || 'Unknown error'}`, 'warning');
+        if (flaskResult.hint) {
+          addLog(`💡 Hint: ${flaskResult.hint}`, 'warning');
+        }
+        // Fall through to try Next.js API route
+      }
+    } catch (flaskError) {
+      console.warn('Flask backend not available, trying Next.js API route:', flaskError);
+      addLog('⚠️ Flask backend not available, trying alternative method...', 'warning');
+    }
+    
+    // Fallback: Try Next.js API route (processes files from database)
+    try {
+      addLog('📋 Attempting to process via Next.js API...', 'system');
+      const response = await fetch('/api/documents/process-pending', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        addLog(`✅ Processing complete: ${result.processed || 0} files processed, ${result.failed || 0} failed`, 'success');
+        if (result.results && result.results.length > 0) {
+          result.results.forEach(r => {
+            if (r.success) {
+              addLog(`✅ ${r.filename}: ${r.count || 0} vulnerabilities extracted`, 'success');
+            } else {
+              addLog(`❌ ${r.filename}: ${r.error || 'Failed'}`, 'error');
+            }
+          });
+        } else if (result.message) {
+          addLog(`ℹ️ ${result.message}`, 'info');
+        }
+        // Reload status after a short delay
+        setTimeout(() => {
+          loadStatus();
+        }, 2000);
+      } else {
+        addLog(`❌ Processing failed: ${result.error || 'Unknown error'}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error processing pending files:', error);
+      addLog(`❌ Error: ${error.message}`, 'error');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -153,6 +234,40 @@ export default function VOFCProcessingDashboard() {
         <StatCard label="Errors" value={status?.files?.errors || 0} color="red" icon="❌" />
         <StatCard label="Active Jobs" value={status?.processing?.active_jobs || 0} color={status?.processing?.active_jobs > 0 ? 'yellow' : 'gray'} icon="⚙️" />
       </div>
+
+      {/* Process Pending Files Button */}
+      {(status?.files?.incoming > 0 || status?.processing?.active_jobs > 0) && (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">File Processing Control</h2>
+              <p className="text-sm text-gray-600">
+                {status?.files?.incoming || 0} file(s) waiting in incoming folder. Click to start processing.
+              </p>
+            </div>
+            <button
+              onClick={handleProcessPending}
+              disabled={processing}
+              className={`px-6 py-3 rounded-lg font-semibold text-white transition-all ${
+                processing
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
+              }`}
+            >
+              {processing ? (
+                <>
+                  <span className="inline-block animate-spin mr-2">⏳</span>
+                  Processing...
+                </>
+              ) : (
+                <>
+                  🚀 Process Pending Files ({status?.files?.incoming || 0})
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Real-time Activity Log */}
       <div className="bg-white rounded-lg shadow-lg p-6">

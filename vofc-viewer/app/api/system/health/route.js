@@ -4,12 +4,13 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export async function GET() {
-  // Get Flask URL from environment variables - use Cloudflare Tunnel URL
+  // Get Flask URL from environment variables
+  // Priority: explicit env var > localhost (for dev) > remote URL (for prod)
   const FLASK_URL = process.env.NEXT_PUBLIC_FLASK_URL || 
                    process.env.NEXT_PUBLIC_OLLAMA_SERVER_URL || 
                    process.env.OLLAMA_SERVER_URL || 
                    process.env.OLLAMA_LOCAL_URL || 
-                   'https://flask.frostech.site'
+                   (process.env.NODE_ENV === 'development' || !process.env.VERCEL ? 'http://localhost:5000' : 'https://flask.frostech.site')
   
   console.log('[System Health API Proxy] Using Flask URL:', FLASK_URL)
   
@@ -18,7 +19,10 @@ export async function GET() {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
     
-    const res = await fetch(`${FLASK_URL}/api/system/health`, {
+    const healthUrl = `${FLASK_URL}/api/system/health`
+    console.log('[System Health API Proxy] Fetching from:', healthUrl)
+    
+    const res = await fetch(healthUrl, {
       cache: 'no-store',
       signal: controller.signal,
       headers: {
@@ -29,12 +33,13 @@ export async function GET() {
     clearTimeout(timeoutId)
     
     if (!res.ok) {
-      console.error('[System Health API Proxy] Flask returned error:', res.status)
-      throw new Error(`HTTP ${res.status}`)
+      const errorText = await res.text().catch(() => 'No error details')
+      console.error('[System Health API Proxy] Flask returned error:', res.status, errorText)
+      throw new Error(`HTTP ${res.status}: ${errorText.substring(0, 100)}`)
     }
     
     const data = await res.json()
-    console.log('[System Health API Proxy] Flask response:', data)
+    console.log('[System Health API Proxy] Flask response received:', JSON.stringify(data).substring(0, 200))
     
     // Return the health data directly from Flask
     return NextResponse.json(data)

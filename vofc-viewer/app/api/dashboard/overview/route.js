@@ -40,50 +40,70 @@ export async function GET(request) {
       }]
     }
 
-    // Try to get recent submissions (for soft matches display)
-    // Handle missing submitter_email column gracefully
+    // Try to get recent activity (submissions, OFCs, or soft matches)
+    // Format: { text, new_text, title, similarity, source_doc, created_at }
     let soft = []
     try {
-      const { data: submissions, error: submissionsError } = await supabaseAdmin
-        .from('submissions')
+      // First, try the softmatches view which has the right format
+      const { data: softData, error: softError } = await supabaseAdmin
+        .from('v_recent_softmatches')
         .select('*')
-        .eq('submitter_email', 'admin@vofc.gov')
         .order('created_at', { ascending: false })
         .limit(10)
-
-      if (submissionsError) {
-        // If column doesn't exist (400 error), try alternative approaches
-        if (submissionsError.status === 400 || submissionsError.code === 'PGRST116' || submissionsError.code === '42883') {
-          // Try using the view instead
-          const { data: softData, error: softError } = await supabaseAdmin
-            .from('v_recent_softmatches')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(5)
-          
-          if (!softError && softData) {
-            soft = softData
-          } else {
-            // Last resort: get recent submissions without filter
-            const { data: recentSubmissions, error: recentError } = await supabaseAdmin
-              .from('submissions')
-              .select('*')
-              .order('created_at', { ascending: false })
-              .limit(10)
-            
-            if (!recentError && recentSubmissions) {
-              soft = recentSubmissions
-            }
-          }
-        } else {
-          throw submissionsError
-        }
+      
+      if (!softError && softData && softData.length > 0) {
+        soft = softData
       } else {
-        soft = submissions || []
+        // Try to get recent submissions and format them properly
+        const { data: recentSubmissions, error: submissionsError } = await supabaseAdmin
+          .from('submissions')
+          .select('id, type, status, data, created_at, updated_at')
+          .order('created_at', { ascending: false })
+          .limit(10)
+        
+        if (!submissionsError && recentSubmissions) {
+          // Format submissions data for display
+          soft = recentSubmissions.map(sub => {
+            let parsedData = {}
+            try {
+              parsedData = typeof sub.data === 'string' ? JSON.parse(sub.data) : sub.data || {}
+            } catch (e) {
+              parsedData = {}
+            }
+            
+            return {
+              id: sub.id,
+              text: parsedData.document_name || parsedData.vulnerability_text || parsedData.option_text || 'Submission',
+              new_text: parsedData.new_text,
+              title: parsedData.document_name || parsedData.title || `${sub.type || 'Submission'}`,
+              similarity: parsedData.similarity,
+              source_doc: parsedData.source_title || parsedData.source_text || parsedData.file_path,
+              created_at: sub.created_at,
+              type: sub.type,
+              status: sub.status
+            }
+          })
+        } else if (submissionsError && submissionsError.code !== 'PGRST116' && submissionsError.code !== '42883') {
+          // Try to get recent OFCs as fallback
+          const { data: ofcs, error: ofcsError } = await supabaseAdmin
+            .from('options_for_consideration')
+            .select('id, option_text, created_at, updated_at')
+            .order('created_at', { ascending: false })
+            .limit(10)
+          
+          if (!ofcsError && ofcs) {
+            soft = ofcs.map(ofc => ({
+              id: ofc.id,
+              text: ofc.option_text,
+              title: ofc.option_text?.substring(0, 100) || 'OFC',
+              created_at: ofc.created_at
+            }))
+          }
+        }
       }
     } catch (e) {
       // Fallback to empty array if all queries fail
-      console.error('[Dashboard Overview] Error fetching submissions/soft matches:', e)
+      console.error('[Dashboard Overview] Error fetching recent activity:', e)
       soft = []
     }
 

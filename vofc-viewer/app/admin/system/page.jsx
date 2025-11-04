@@ -516,7 +516,14 @@ function SystemStatusPage() {
             </div>
           ) : (
             <div style={{ padding: 'var(--spacing-lg)', backgroundColor: 'var(--cisa-gray-lighter)', borderRadius: 'var(--border-radius-lg)', textAlign: 'center' }}>
-              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', margin: 0 }}>GPU not available or not detected</p>
+              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--cisa-gray)', margin: 0, marginBottom: 'var(--spacing-xs)' }}>
+                GPU not detected
+              </p>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--cisa-gray)', opacity: 0.7, margin: 0 }}>
+                {typeof status.gpu !== 'undefined' 
+                  ? 'CPU processing mode is active. Install nvidia-ml-py to detect GPU if available.'
+                  : 'GPU information not available'}
+              </p>
             </div>
           )}
         </div>

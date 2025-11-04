@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 import uuid
+import time
 import requests
 from datetime import datetime
 from pathlib import Path
@@ -58,6 +59,10 @@ EXTRACTED_TEXT_DIR = os.getenv(
     'OLLAMA_EXTRACTED_TEXT_DIR',
     os.path.join(BASE_DIR, 'extracted_text')
 )
+PROGRESS_FILE = os.getenv(
+    'OLLAMA_PROGRESS_FILE',
+    os.path.join(BASE_DIR, 'processing_progress.json')
+)
 MODEL_NAME = os.getenv('OLLAMA_MODEL', 'vofc-engine:latest')
 SERVER_HOST = os.getenv('SERVER_HOST', '127.0.0.1')
 SERVER_PORT = int(os.getenv('SERVER_PORT', '5000'))
@@ -71,6 +76,51 @@ SUPABASE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '')
 for directory in [UPLOAD_DIR, PROCESSED_DIR, LIBRARY_DIR, ERRORS_DIR, EXTRACTED_TEXT_DIR]:
     os.makedirs(directory, exist_ok=True)
 
+# Helper function to update processing progress
+def update_progress(status, message, current_file=None, total_files=0, current_step=None, step_total=None):
+    """Update processing progress file."""
+    progress_data = {
+        "status": status,  # "idle", "processing", "completed", "error"
+        "message": message,
+        "current_file": current_file,
+        "total_files": total_files,
+        "current_step": current_step,
+        "step_total": step_total,
+        "timestamp": datetime.now().isoformat(),
+        "progress_percent": 0
+    }
+    
+    # Calculate progress percentage
+    if step_total and current_step:
+        progress_data["progress_percent"] = min(100, int((current_step / step_total) * 100))
+    elif total_files > 0 and current_step:
+        progress_data["progress_percent"] = min(100, int((current_step / total_files) * 100))
+    
+    try:
+        with open(PROGRESS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(progress_data, f, indent=2)
+    except Exception as e:
+        logging.warning(f"Failed to write progress file: {e}")
+
+def get_progress():
+    """Get current processing progress."""
+    try:
+        if os.path.exists(PROGRESS_FILE):
+            with open(PROGRESS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        logging.warning(f"Failed to read progress file: {e}")
+    return {
+        "status": "idle",
+        "message": "No active processing",
+        "current_file": None,
+        "total_files": 0,
+        "current_step": None,
+        "step_total": None,
+        "timestamp": datetime.now().isoformat(),
+        "progress_percent": 0
+    }
+
 @app.route("/api/health", methods=["GET", "OPTIONS"])
 def health_check():
     """Health check endpoint with CORS support"""
@@ -82,6 +132,14 @@ def health_check():
         "model": MODEL_NAME,
         "upload_dir": UPLOAD_DIR
     }), 200
+
+@app.route("/api/progress", methods=["GET", "OPTIONS"])
+def get_processing_progress():
+    """Get current document processing progress"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    progress = get_progress()
+    return jsonify(progress), 200
 
 @app.route("/api/system/health", methods=["GET", "OPTIONS"])
 def system_health():
@@ -778,8 +836,12 @@ def process_file_with_heuristic_pipeline(filepath, filename):
         
         # Move extracted text file to EXTRACTED_TEXT_DIR for additional analysis
         if file_ext == '.pdf' and os.path.exists(text_file):
-            # Save text file with clean name (remove _temp suffix)
-            text_filename = f"{os.path.splitext(filename)[0]}.txt"
+            # G. Improve Temporary File Handling - use safe name
+            safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', os.path.splitext(filename)[0])
+            safe_name = safe_name[:100]  # Limit length
+            if not safe_name:
+                safe_name = f"document_{uuid.uuid4().hex[:8]}"
+            text_filename = f"{safe_name}.txt"
             saved_text_path = os.path.join(EXTRACTED_TEXT_DIR, text_filename)
             shutil.move(text_file, saved_text_path)
             print(f"   Saved extracted text to: {saved_text_path}")
@@ -802,12 +864,48 @@ def process_file_with_heuristic_pipeline(filepath, filename):
         traceback.print_exc()
         raise RuntimeError(error_msg) from e
 
+# I. Queue Management - limit concurrent processing
+MAX_CONCURRENT_DOCS = int(os.getenv('MAX_CONCURRENT_DOCS', '3'))
+PROCESSING_QUEUE = []
+_active_processing = 0
+
+def get_pending_documents():
+    """Get list of pending documents from incoming folder."""
+    if not os.path.exists(UPLOAD_DIR):
+        return []
+    return [
+        os.path.join(UPLOAD_DIR, f)
+        for f in os.listdir(UPLOAD_DIR)
+        if os.path.isfile(os.path.join(UPLOAD_DIR, f))
+        and not f.endswith('_temp.txt')
+    ]
+
+def process_document_safe(filepath):
+    """
+    Safely process a single document with error handling.
+    Used for queue-based processing.
+    """
+    global _active_processing
+    filename = os.path.basename(filepath)
+    try:
+        _active_processing += 1
+        # Process document (reuse existing logic)
+        result = process_file_with_heuristic_pipeline(filepath, filename)
+        return result
+    except Exception as e:
+        logging.error(f"Error processing {filename}: {e}")
+        return {"success": False, "error": str(e)}
+    finally:
+        _active_processing -= 1
+
 @app.route('/api/files/process', methods=['POST'])
 def process_files():
     """
     Process all files in the incoming folder using heuristic pipeline.
     Flow: incoming/ → extracted_text/ → library/
     Note: This endpoint can take 10-30+ minutes for large documents with LLM processing.
+    
+    I. Queue Management: Processes documents serially with delay to prevent Ollama overload.
     """
     try:
         # --- Validate incoming directory ---
@@ -860,20 +958,48 @@ def process_files():
                     "processed": 0
                 }), 500
 
+        # Update progress: Starting processing
+        update_progress("processing", f"Starting batch processing of {len(incoming_files)} file(s)", total_files=len(incoming_files))
+        
+        # I. Queue Management - process serially with delay to prevent Ollama overload
+        # Process documents one at a time (not concurrently) to avoid overwhelming Ollama
+        # Add delay between documents to prevent memory/context issues
+        
         # --- Process each file ---
-        for filepath in incoming_files:
+        for file_index, filepath in enumerate(incoming_files, 1):
+            # Add delay between documents (except for the first one)
+            if file_index > 1:
+                time.sleep(2)  # Prevents overload on Ollama
             filename = os.path.basename(filepath)
+            # G. Improve Temporary File Handling - sanitize filename
+            safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', os.path.splitext(filename)[0])
+            safe_name = safe_name[:100]  # Limit length
+            if not safe_name:
+                safe_name = f"document_{uuid.uuid4().hex[:8]}"
+            
             # Sanitize filename for safe printing (handle encoding issues)
             safe_filename = filename.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
             file_basename = os.path.splitext(filename)[0]
+            
+            # Update progress: Current file
+            update_progress(
+                "processing",
+                f"Processing file {file_index} of {len(incoming_files)}: {safe_filename}",
+                current_file=safe_filename,
+                total_files=len(incoming_files),
+                current_step=file_index,
+                step_total=len(incoming_files)
+            )
+            
             try:
-                print(f"Processing {safe_filename} ...")
+                print(f"Processing {safe_filename} ({file_index}/{len(incoming_files)}) ...")
             except (OSError, UnicodeEncodeError):
                 # Fallback for problematic filenames
-                print(f"Processing file (name may contain special characters) ...")
+                print(f"Processing file {file_index}/{len(incoming_files)} (name may contain special characters) ...")
 
             try:
                 # Step 1: Extract text from PDF
+                update_progress("processing", f"Extracting text from {safe_filename}...", current_file=safe_filename, total_files=len(incoming_files), current_step=file_index, step_total=len(incoming_files))
                 text = extract_text_from_pdf(filepath)
                 txt_name = filename.replace(".pdf", "_temp.txt")
                 extracted_path = os.path.join(EXTRACTED_TEXT_DIR, txt_name)
@@ -882,6 +1008,7 @@ def process_files():
                 print(f"Extracted text saved to {extracted_path}")
 
                 # Step 2: Run VOFC Engine with citation extraction
+                update_progress("processing", f"Analyzing document with VOFC Engine: {safe_filename}...", current_file=safe_filename, total_files=len(incoming_files), current_step=file_index, step_total=len(incoming_files))
                 try:
                     print(f"Analyzing extracted text for {safe_filename} ...")
                 except (OSError, UnicodeEncodeError):
@@ -896,7 +1023,8 @@ def process_files():
                         from pipeline.heuristic_pipeline import process_submission
                     except ImportError:
                         # Fallback to old method if import fails
-                        vofc_result = process_text_with_vofc_engine(text)
+                        # Pass doc_id for audit logging (F. Local Logging + Auditing)
+                        vofc_result = process_text_with_vofc_engine(text, doc_id=safe_name)
                         # Add empty sources
                         if 'sources' not in vofc_result:
                             vofc_result['sources'] = []
@@ -930,6 +1058,11 @@ def process_files():
                         'sources': result.get('sources', []),
                         'links': result.get('links', {})
                     }
+                
+                # Update progress: Analysis complete
+                vuln_count = len(vofc_result.get('vulnerabilities', []))
+                ofc_count = len(vofc_result.get('ofcs', []))
+                update_progress("processing", f"Analysis complete: Found {vuln_count} vulnerabilities, {ofc_count} OFCs", current_file=safe_filename, total_files=len(incoming_files), current_step=file_index, step_total=len(incoming_files))
 
                 # Step 3: Save JSON output to library
                 json_filename = f"{file_basename}.json"
@@ -1005,6 +1138,8 @@ def process_files():
                 })
 
         # --- Final summary ---
+        update_progress("completed", f"Processing completed: {processed} successful, {errors} errors", total_files=len(incoming_files))
+        
         return jsonify({
             "success": True,
             "message": f"Processing completed: {processed} successful, {errors} errors",
@@ -1017,6 +1152,11 @@ def process_files():
     except Exception as e:
         import traceback
         traceback.print_exc()
+        try:
+            total = len(incoming_files) if 'incoming_files' in locals() and incoming_files else 0
+            update_progress("error", f"Processing failed: {str(e)}", total_files=total)
+        except:
+            pass
         return jsonify({
             "success": False,
             "error": str(e),
@@ -1408,7 +1548,7 @@ def health():
         # Backend statistics (tracking request metrics)
         # Note: In production, you'd want to use a proper metrics library
         backend_stats = {
-            "active_connections": len(app.url_map.iter_rules()) if hasattr(app, 'url_map') else 0,
+            "active_connections": len(list(app.url_map.iter_rules())) if hasattr(app, 'url_map') else 0,
             "requests_per_minute": 0,  # Would need middleware to track
             "avg_response_time": 0,  # Would need middleware to track
             "queue_size": dirs.get("incoming", {}).get("file_count", 0)

@@ -1,0 +1,44 @@
+{
+  "timestamp": "2025-11-03T19:40:33",
+  "project_path": "C:\\Users\\frost\\OneDrive\\Desktop\\Projects\\VOFC Engine",
+  "models": [
+    {
+      "model": "vofc-engine:latest",
+      "loaded": true,
+      "pulled": false,
+      "responding": true
+    },
+    {
+      "model": "mistral:latest",
+      "loaded": true,
+      "pulled": false,
+      "responding": true
+    },
+    {
+      "model": "llama3:latest",
+      "loaded": true,
+      "pulled": false,
+      "responding": true
+    },
+    {
+      "model": "nomic-embed-text:latest",
+      "loaded": true,
+      "pulled": false,
+      "responding": true
+    }
+  ],
+  "apis": [
+    {
+      "endpoint": "Flask System Health",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "endpoint": "Flask Document Processor",
+      "status": "ERROR",
+      "ok": false,
+      "error": "Response status code does not indicate success: 404 (NOT FOUND)."
+    }
+  ],
+  "setup_complete": true
+}

@@ -41,13 +41,36 @@ export default function VOFCViewer() {
     }
   }, [router]);
 
-  // Load sectors from sectors table
+  // Load sectors from sectors table via API route (bypasses RLS)
   const loadSectors = useCallback(async () => {
     try {
+      console.log('[loadSectors] Starting to load sectors...');
+      
+      // Try API route first (uses admin client, bypasses RLS)
+      const response = await fetch('/api/sectors', { cache: 'no-store' });
+      if (response.ok) {
+        const result = await response.json();
+        const sectorsData = result.sectors || [];
+        console.log('[loadSectors] Received sectors from API:', sectorsData);
+        setSectors(sectorsData);
+        
+        if (sectorsData.length === 0) {
+          console.warn('[loadSectors] API returned 0 sectors - table may be empty');
+        }
+        return;
+      }
+      
+      // Fallback to direct client fetch
+      console.log('[loadSectors] API route failed, trying direct client fetch...');
       const sectorsData = await fetchSectors();
+      console.log('[loadSectors] Received sectors data from client:', sectorsData);
       setSectors(sectorsData || []);
+      
+      if (!sectorsData || sectorsData.length === 0) {
+        console.warn('[loadSectors] No sectors returned - this may indicate an issue with the database or RLS policies');
+      }
     } catch (error) {
-      console.error('Error loading sectors:', error);
+      console.error('[loadSectors] Error loading sectors:', error);
       setSectors([]);
     }
   }, []);
@@ -84,17 +107,33 @@ export default function VOFCViewer() {
     return [...new Set(disciplines)].sort();
   }, [vulnerabilities]);
 
-  // Load subsectors based on selected sector
+  // Load subsectors based on selected sector via API route (bypasses RLS)
   const loadSubsectors = useCallback(async (sectorId) => {
     try {
-      if (sectorId) {
-        const subsectorsData = await fetchSubsectorsBySector(sectorId);
-        setSubsectors(subsectorsData || []);
-      } else {
+      if (!sectorId) {
         setSubsectors([]);
+        return;
       }
+
+      console.log(`[loadSubsectors] Loading subsectors for sectorId: ${sectorId}`);
+      
+      // Try API route first (uses admin client, bypasses RLS)
+      const response = await fetch(`/api/subsectors?sectorId=${sectorId}`, { cache: 'no-store' });
+      if (response.ok) {
+        const result = await response.json();
+        const subsectorsData = result.subsectors || [];
+        console.log(`[loadSubsectors] Received ${subsectorsData.length} subsectors from API`);
+        setSubsectors(subsectorsData);
+        return;
+      }
+      
+      // Fallback to direct client fetch
+      console.log('[loadSubsectors] API route failed, trying direct client fetch...');
+      const subsectorsData = await fetchSubsectorsBySector(sectorId);
+      console.log(`[loadSubsectors] Received ${subsectorsData?.length || 0} subsectors from client`);
+      setSubsectors(subsectorsData || []);
     } catch (error) {
-      console.error('Error loading subsectors:', error);
+      console.error('[loadSubsectors] Error loading subsectors:', error);
       setSubsectors([]);
     }
   }, []);
@@ -102,9 +141,9 @@ export default function VOFCViewer() {
   // Load subsectors when sector changes
   useEffect(() => {
     if (selectedSector && sectors.length > 0) {
-      // Find sector ID from sectors array - check both name and ID matching
+      // Find sector ID from sectors array - check both sector_name and ID matching
       const sector = sectors.find(s => 
-        s.name === selectedSector || 
+        s.sector_name === selectedSector || 
         String(s.id) === String(selectedSector) ||
         s.id === selectedSector
       );
@@ -126,10 +165,16 @@ export default function VOFCViewer() {
     checkAuth();
   }, [checkAuth]);
 
+  // Load sectors immediately on mount - they should be accessible automatically
+  useEffect(() => {
+    loadSectors();
+  }, [loadSectors]);
+
   useEffect(() => {
     if (authenticated) {
       loadData();
-      loadSectors(); // Load sectors after authentication
+      // Also ensure sectors are loaded when authenticated (in case initial load failed)
+      loadSectors();
     }
   }, [authenticated, loadData, loadSectors]);
 
@@ -151,12 +196,12 @@ export default function VOFCViewer() {
 
     if (selectedSector) {
       // Find the selected sector object
-      const sector = sectors.find(s => s.name === selectedSector || String(s.id) === String(selectedSector));
+      const sector = sectors.find(s => s.sector_name === selectedSector || String(s.id) === String(selectedSector));
       if (sector) {
         // Filter by sector name, sector_id, or ID matching
         filtered = filtered.filter(v => {
           // Check multiple possible field formats
-          return v.sector === sector.name || 
+          return v.sector === sector.sector_name || 
                  v.sector === String(sector.id) || 
                  v.sector_id === sector.id ||
                  String(v.sector_id) === String(sector.id);
@@ -307,8 +352,8 @@ export default function VOFCViewer() {
                   <option value="" disabled>Loading sectors...</option>
                 ) : (
                   sectors.map(sector => (
-                    <option key={sector.id} value={sector.name || sector.id}>
-                      {sector.name || `Sector ${sector.id}`}
+                    <option key={sector.id} value={sector.sector_name || sector.id}>
+                      {sector.sector_name || `Sector ${sector.id}`}
                     </option>
                   ))
                 )}

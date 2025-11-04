@@ -12,6 +12,7 @@ export default function AdminOverviewPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [lastRefresh, setLastRefresh] = useState(null)
+  const [progress, setProgress] = useState(null)
 
   // System health checker - uses Next.js API route proxy to avoid CORS issues
   const fetchSystemHealth = useCallback(async () => {
@@ -84,14 +85,34 @@ export default function AdminOverviewPage() {
     }
   }, [])
 
+  // Progress fetcher
+  const fetchProgress = useCallback(async () => {
+    try {
+      const res = await fetch('/api/proxy/flask/progress', { 
+        cache: 'no-store',
+        headers: { 'Accept': 'application/json' }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setProgress(data)
+      }
+    } catch (err) {
+      console.error('[Progress] Fetch failed:', err)
+    }
+  }, [])
+
   useEffect(() => {
     let isMounted = true
     loadDashboardData()
+    fetchProgress() // Initial fetch
     const id = setInterval(() => {
-      if (isMounted) loadDashboardData()
-    }, 30000)
+      if (isMounted) {
+        loadDashboardData()
+        fetchProgress()
+      }
+    }, 3000) // Poll every 3 seconds for progress updates
     return () => { isMounted = false; clearInterval(id) }
-  }, [loadDashboardData])
+  }, [loadDashboardData, fetchProgress])
 
   // Calculate aggregate statistics
   const aggregateStats = stats.length > 0 ? {
@@ -185,6 +206,89 @@ export default function AdminOverviewPage() {
           borderRadius: 'var(--border-radius)'
         }}>
           <strong>⚠️ Warning:</strong> {error} (showing cached data)
+        </div>
+      )}
+
+      {/* Document Processing Progress */}
+      {progress && progress.status === 'processing' && (
+        <div className="card" style={{ 
+          marginBottom: 'var(--spacing-lg)',
+          backgroundColor: 'var(--cisa-blue-lightest)',
+          border: '2px solid var(--cisa-blue)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-md)' }}>
+            <h2 style={{ 
+              fontSize: 'var(--font-size-lg)', 
+              fontWeight: 600, 
+              color: 'var(--cisa-blue)', 
+              margin: 0 
+            }}>
+              📄 Processing Document
+            </h2>
+            <span style={{
+              padding: '4px 12px',
+              borderRadius: '999px',
+              fontSize: 'var(--font-size-xs)',
+              fontWeight: 600,
+              backgroundColor: 'var(--cisa-blue)',
+              color: 'white'
+            }}>
+              {progress.progress_percent || 0}%
+            </span>
+          </div>
+          <div style={{ marginBottom: 'var(--spacing-md)' }}>
+            <p style={{ 
+              fontSize: 'var(--font-size-base)', 
+              fontWeight: 600, 
+              color: 'var(--cisa-black)', 
+              margin: '0 0 var(--spacing-xs) 0' 
+            }}>
+              {progress.current_file || 'Processing...'}
+            </p>
+            <p style={{ 
+              fontSize: 'var(--font-size-sm)', 
+              color: 'var(--cisa-gray)', 
+              margin: 0 
+            }}>
+              {progress.message}
+            </p>
+          </div>
+          {progress.total_files > 0 && (
+            <div style={{ marginBottom: 'var(--spacing-sm)' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                fontSize: 'var(--font-size-xs)', 
+                color: 'var(--cisa-gray)',
+                marginBottom: '4px'
+              }}>
+                <span>File {progress.current_step || 0} of {progress.total_files}</span>
+                <span>{progress.progress_percent || 0}% complete</span>
+              </div>
+              <div style={{
+                width: '100%',
+                height: '8px',
+                backgroundColor: 'var(--cisa-gray-light)',
+                borderRadius: '4px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  width: `${progress.progress_percent || 0}%`,
+                  height: '100%',
+                  backgroundColor: 'var(--cisa-blue)',
+                  transition: 'width 0.3s ease'
+                }}></div>
+              </div>
+            </div>
+          )}
+          <p style={{ 
+            fontSize: 'var(--font-size-xs)', 
+            color: 'var(--cisa-gray)', 
+            opacity: 0.7,
+            margin: 'var(--spacing-xs) 0 0 0'
+          }}>
+            Started: {new Date(progress.timestamp).toLocaleTimeString()}
+          </p>
         </div>
       )}
 
