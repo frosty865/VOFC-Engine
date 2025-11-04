@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { fetchWithAuth } from '../../lib/fetchWithAuth'
-import '@/styles/cisa.css'
+import '../../../styles/cisa.css'
 
 export default function SoftmatchesPage() {
   const [rows, setRows] = useState([])

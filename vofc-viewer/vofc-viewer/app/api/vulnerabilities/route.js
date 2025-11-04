@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/app/lib/supabase-admin.js';
-import { applyCacheHeaders, CacheStrategies } from '../middleware/cache';
+import { applyCacheHeaders, CacheStrategies } from '../middleware/cache.js';
 
 // Vulnerabilities change moderately - cache for 5 minutes with ISR
 export const revalidate = 300; // 5 minutes

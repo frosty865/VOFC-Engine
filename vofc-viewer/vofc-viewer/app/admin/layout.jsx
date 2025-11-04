@@ -2,7 +2,7 @@
 
 import RoleGate from '@/components/RoleGate'
 import Link from 'next/link'
-import '@/styles/cisa.css'
+import '../../styles/cisa.css'
 
 function AdminLayout({ children }) {
   return (
