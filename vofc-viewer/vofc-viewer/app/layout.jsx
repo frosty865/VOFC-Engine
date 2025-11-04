@@ -1,4 +1,4 @@
-import '../styles/cisa.css'
+import '@/styles/cisa.css'
 import './globals.css'
 import Navigation from '../components/Navigation'
 import AnalyticsProvider from '../components/AnalyticsProvider'

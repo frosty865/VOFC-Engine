@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { fetchWithAuth } from '../../lib/fetchWithAuth'
 import RoleGate from '@/components/RoleGate'
-import '../../../styles/cisa.css'
+import '@/styles/cisa.css'
 
 export default function ReviewSubmissionsPage() {
   const [submissions, setSubmissions] = useState([])

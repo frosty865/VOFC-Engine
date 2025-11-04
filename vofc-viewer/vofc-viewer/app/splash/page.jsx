@@ -5,7 +5,7 @@ import { getCurrentUser, logout } from '../lib/auth';
 import { supabase } from '@/app/lib/supabase-client.js';
 import { trackVOFCEvent } from '../../components/AnalyticsProvider';
 // import SessionTimeoutWarning from '../../components/SessionTimeoutWarning';
-import '../../styles/cisa.css';
+import '@/styles/cisa.css';
 
 export default function SplashPage() {
   const [loading, setLoading] = useState(true);

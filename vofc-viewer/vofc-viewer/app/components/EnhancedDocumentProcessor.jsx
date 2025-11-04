@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import '../../styles/cisa.css';
+import '@/styles/cisa.css';
 import { getOllamaUrl } from '../lib/ollama-client';
 
 export default function EnhancedDocumentProcessor() {

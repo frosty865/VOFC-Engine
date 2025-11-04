@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/app/lib/supabase-client.js';
 // Removed localStorage dependencies - now using secure server-side authentication
-import '../styles/cisa.css';
+import '@/styles/cisa.css';
 import PropTypes from 'prop-types';
 
 export default function Navigation({ simple = false }) {
