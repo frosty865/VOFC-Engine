@@ -7,7 +7,7 @@ import sys
 import uuid
 import time
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import re
 import logging
@@ -260,7 +260,7 @@ def create_submission_record(submission_id, filename, vuln_count, ofc_count, fil
             "file_path": filepath or "",
             "vulnerabilities_count": vuln_count,
             "ofcs_count": ofc_count,
-            "processed_at": datetime.utcnow().isoformat()
+            "processed_at": datetime.now(timezone.utc).isoformat()
         }
         submission_data = {
             "id": submission_id,
@@ -268,8 +268,8 @@ def create_submission_record(submission_id, filename, vuln_count, ofc_count, fil
             "status": "pending_review",
             "source": "file_processing",
             "data": json.dumps(vofc_data or metadata),
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
         }
         headers = {
             "apikey": SUPABASE_KEY,
