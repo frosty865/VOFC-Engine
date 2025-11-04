@@ -1,5 +1,4 @@
 export default function TestPage() {
-  console.log('🎯 Test page is rendering');
   
   return (
     <div style={{ padding: '20px', backgroundColor: 'lightgreen' }}>

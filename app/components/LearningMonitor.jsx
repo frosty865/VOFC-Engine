@@ -62,10 +62,13 @@ export default function LearningMonitor() {
       const data = await response.json();
       
       if (data.success) {
-        alert('Continuous Learning System started!');
+        const message = data.statistics 
+          ? `Continuous Learning System is active!\n\nMode: ${data.mode || 'API/Database'}\nTotal events: ${data.statistics.total_learning_events || 0}\nApproved events: ${data.statistics.approved_events || 0}\n\n${data.note || ''}`
+          : 'Continuous Learning System is active!';
+        alert(message);
         loadLearningStatus();
       } else {
-        alert(`Failed to start learning system: ${data.error}`);
+        alert(`Failed to start learning system: ${data.error || 'Unknown error'}\n\n${data.message || ''}`);
       }
     } catch (err) {
       alert('Error starting learning system: ' + err.message);
@@ -88,10 +91,14 @@ export default function LearningMonitor() {
       const data = await response.json();
       
       if (data.success) {
-        alert('Learning cycle completed!');
+        const message = `Learning cycle completed!\n\nEvents processed: ${data.events_processed || 0}\nTotal events: ${data.statistics?.total_events || 0}\nApproved events: ${data.statistics?.approved_events || 0}`;
+        alert(message);
         loadLearningStatus();
       } else {
-        alert(`Learning cycle failed: ${data.error}`);
+        const errorMsg = data.details 
+          ? `Learning cycle failed: ${data.error}\n\nDetails: ${data.details}\n\n${data.note || ''}`
+          : `Learning cycle failed: ${data.error || 'Unknown error'}`;
+        alert(errorMsg);
       }
     } catch (err) {
       alert('Error running learning cycle: ' + err.message);
@@ -172,9 +179,12 @@ export default function LearningMonitor() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Learning Status</p>
-                <p className={`text-2xl font-bold ${learningStatus?.daemon_status === 'running' ? 'text-green-900' : 'text-red-900'}`}>
-                  {learningStatus?.daemon_status || 'Unknown'}
+                <p className={`text-2xl font-bold ${(learningStatus?.daemon_status === 'running' || learningStatus?.daemon_status === 'active') ? 'text-green-900' : 'text-red-900'}`}>
+                  {learningStatus?.daemon_status === 'active' ? 'Active' : learningStatus?.daemon_status || 'Unknown'}
                 </p>
+                {learningStatus?.mode && (
+                  <p className="text-xs text-gray-500 mt-1">Mode: {learningStatus.mode}</p>
+                )}
               </div>
             </div>
           </div>

@@ -2,7 +2,7 @@
 // Cache bust: v3.0 - Added submit button debugging and improved template
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '@/app/lib/supabase-client.js';
 import { getCurrentUser, getUserProfile, canSubmitVOFC } from '../../lib/auth';
 import { fetchSectors, fetchSubsectorsBySector } from '../../lib/fetchVOFC';
 import SessionTimeoutWarning from '../../../components/SessionTimeoutWarning';

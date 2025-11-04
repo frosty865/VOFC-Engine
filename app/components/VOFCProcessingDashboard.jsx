@@ -7,22 +7,23 @@ export default function VOFCProcessingDashboard() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
+  const [processing, setProcessing] = useState(false);
+
+  const loadStatus = async () => {
+    try {
+      const response = await fetch('/api/dashboard/status');
+      const data = await response.json();
+      if (data.success) {
+        setStatus(data.status);
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Failed to load status:', error);
+    }
+  };
 
   // Load status every 5 seconds
   useEffect(() => {
-    const loadStatus = async () => {
-      try {
-        const response = await fetch('/api/dashboard/status');
-        const data = await response.json();
-        if (data.success) {
-          setStatus(data.status);
-          setLoading(false);
-        }
-      } catch (error) {
-        console.error('Failed to load status:', error);
-      }
-    };
-
     loadStatus();
     const interval = setInterval(loadStatus, 5000);
     return () => clearInterval(interval);
@@ -67,10 +68,12 @@ export default function VOFCProcessingDashboard() {
   };
 
   const getServiceStatus = (service) => {
-    if (!service || !status?.services[service]) return { color: 'gray', text: 'Unknown', icon: '❓' };
+    if (!service || !status?.services || !status.services[service]) {
+      return { color: 'gray', text: 'Unknown', icon: '❓' };
+    }
     
     const svc = status.services[service];
-    const serviceStatus = svc.status || 'unknown';
+    const serviceStatus = svc?.status || 'unknown';
     
     switch (serviceStatus) {
       case 'online':
@@ -95,6 +98,86 @@ export default function VOFCProcessingDashboard() {
       case 'success': return 'text-green-600 bg-green-50';
       case 'system': return 'text-blue-600 bg-blue-50';
       default: return 'text-gray-700 bg-gray-50';
+    }
+  };
+
+  const handleProcessPending = async () => {
+    if (processing) return;
+    
+    setProcessing(true);
+    addLog('🔄 Starting batch processing of pending files...', 'system');
+    
+    // Try Flask backend first (processes files directly from incoming folder)
+    try {
+      addLog('📡 Attempting to connect to Flask backend...', 'system');
+      const flaskResponse = await fetch('/api/proxy/flask/process-pending', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const flaskResult = await flaskResponse.json();
+      
+      if (flaskResult.success) {
+        const processedCount = flaskResult.processed || 0;
+        addLog(`✅ Flask processing complete: ${processedCount} file(s) processed`, 'success');
+        if (flaskResult.flask_response?.processed) {
+          flaskResult.flask_response.processed.forEach(subId => {
+            addLog(`✅ Submission ${subId} processed successfully`, 'success');
+          });
+        }
+        // Reload status after a short delay
+        setTimeout(() => {
+          loadStatus();
+        }, 3000);
+        setProcessing(false);
+        return;
+      } else {
+        addLog(`⚠️ Flask processing failed: ${flaskResult.error || 'Unknown error'}`, 'warning');
+        if (flaskResult.hint) {
+          addLog(`💡 Hint: ${flaskResult.hint}`, 'warning');
+        }
+        // Fall through to try Next.js API route
+      }
+    } catch (flaskError) {
+      console.warn('Flask backend not available, trying Next.js API route:', flaskError);
+      addLog('⚠️ Flask backend not available, trying alternative method...', 'warning');
+    }
+    
+    // Fallback: Try Next.js API route (processes files from database)
+    try {
+      addLog('📋 Attempting to process via Next.js API...', 'system');
+      const response = await fetch('/api/documents/process-pending', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        addLog(`✅ Processing complete: ${result.processed || 0} files processed, ${result.failed || 0} failed`, 'success');
+        if (result.results && result.results.length > 0) {
+          result.results.forEach(r => {
+            if (r.success) {
+              addLog(`✅ ${r.filename}: ${r.count || 0} vulnerabilities extracted`, 'success');
+            } else {
+              addLog(`❌ ${r.filename}: ${r.error || 'Failed'}`, 'error');
+            }
+          });
+        } else if (result.message) {
+          addLog(`ℹ️ ${result.message}`, 'info');
+        }
+        // Reload status after a short delay
+        setTimeout(() => {
+          loadStatus();
+        }, 2000);
+      } else {
+        addLog(`❌ Processing failed: ${result.error || 'Unknown error'}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error processing pending files:', error);
+      addLog(`❌ Error: ${error.message}`, 'error');
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -152,6 +235,40 @@ export default function VOFCProcessingDashboard() {
         <StatCard label="Active Jobs" value={status?.processing?.active_jobs || 0} color={status?.processing?.active_jobs > 0 ? 'yellow' : 'gray'} icon="⚙️" />
       </div>
 
+      {/* Process Pending Files Button */}
+      {(status?.files?.incoming > 0 || status?.processing?.active_jobs > 0) && (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">File Processing Control</h2>
+              <p className="text-sm text-gray-600">
+                {status?.files?.incoming || 0} file(s) waiting in incoming folder. Click to start processing.
+              </p>
+            </div>
+            <button
+              onClick={handleProcessPending}
+              disabled={processing}
+              className={`px-6 py-3 rounded-lg font-semibold text-white transition-all ${
+                processing
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
+              }`}
+            >
+              {processing ? (
+                <>
+                  <span className="inline-block animate-spin mr-2">⏳</span>
+                  Processing...
+                </>
+              ) : (
+                <>
+                  🚀 Process Pending Files ({status?.files?.incoming || 0})
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Real-time Activity Log */}
       <div className="bg-white rounded-lg shadow-lg p-6">
         <div className="flex justify-between items-center mb-4">
@@ -178,30 +295,102 @@ export default function VOFCProcessingDashboard() {
         </div>
       </div>
 
-      {/* Processing Pipeline Status */}
-      {status?.python && (
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Python Processing Pipeline</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <div className="text-sm text-gray-600 mb-1">Status</div>
-              <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                status.python.status === 'running' 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-red-100 text-red-800'
-              }`}>
-                {status.python.status === 'running' ? '✅ Running' : '❌ Stopped'}
+      {/* Python & Flask Service Information */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Python Service */}
+        {status?.python && (
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <span>🐍</span> Python Runtime
+            </h2>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Status</span>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  status.python.status === 'running' || status.python.runtime_status === 'running'
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-red-100 text-red-800'
+                }`}>
+                  {status.python.status === 'running' || status.python.runtime_status === 'running' ? '✅ Running' : '❌ Stopped'}
+                </span>
               </div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 mb-1">Model</div>
-              <div className="text-lg font-semibold">{status.python.model || 'N/A'}</div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 mb-1">Version</div>
-              <div className="text-lg font-semibold">{status.python.version || 'N/A'}</div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Version</span>
+                <span className="text-sm font-mono font-semibold">{status.python.version || 'N/A'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Model</span>
+                <span className="text-sm font-semibold">{status.python.model || 'N/A'}</span>
+              </div>
+              {status.python.executable && status.python.executable !== 'unknown' && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Executable</span>
+                  <span className="text-xs font-mono text-gray-500 truncate ml-2">{status.python.executable}</span>
+                </div>
+              )}
+              {status.python.platform && Object.keys(status.python.platform).length > 0 && (
+                <div className="pt-2 border-t border-gray-200">
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <div>Platform: {status.python.platform.system} {status.python.platform.release}</div>
+                    {status.python.platform.machine && <div>Architecture: {status.python.platform.machine}</div>}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
+        )}
+
+        {/* Flask Service */}
+        {status?.flask && (
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <span>🔧</span> Flask Server
+            </h2>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Version</span>
+                <span className="text-sm font-mono font-semibold">{status.flask.version || 'N/A'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Environment</span>
+                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                  status.flask.environment === 'production' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'
+                }`}>
+                  {status.flask.environment || 'N/A'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Debug Mode</span>
+                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                  status.flask.debug ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                }`}>
+                  {status.flask.debug ? '⚠️ Enabled' : '✅ Disabled'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Ollama Models */}
+      {status?.services?.ollama_models && status.services.ollama_models.length > 0 && (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <span>🤖</span> Available Ollama Models
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {status.services.ollama_models.map((model, idx) => (
+              <div key={idx} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <div className="font-mono text-sm font-semibold text-gray-900">{model}</div>
+                <div className="text-xs text-gray-500 mt-1">Model {idx + 1}</div>
+              </div>
+            ))}
+          </div>
+          {status.services.ollama_base_url && (
+            <div className="mt-4 text-xs text-gray-500">
+              Ollama Base URL: <span className="font-mono">{status.services.ollama_base_url}</span>
+            </div>
+          )}
         </div>
       )}
     </div>

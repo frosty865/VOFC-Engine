@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 import uuid
+import time
 import requests
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +13,29 @@ from pathlib import Path
 app = Flask(__name__)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Disable caching
 # Note: For production, consider using background tasks (Celery, etc.) for long-running processing
+
+# CORS support for cross-origin requests
+@app.after_request
+def after_request(response):
+    """Add CORS headers to all responses"""
+    origin = request.headers.get('Origin', '*')
+    # Allow requests from known domains or all origins in development
+    allowed_origins = [
+        'https://www.zophielgroup.com',
+        'https://zophielgroup.com',
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        '*'
+    ]
+    
+    if origin in allowed_origins or '*' in allowed_origins:
+        response.headers['Access-Control-Allow-Origin'] = origin if origin != '*' else '*'
+    
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    response.headers['Access-Control-Max-Age'] = '3600'
+    return response
 
 # Configuration - can be overridden via environment variables
 BASE_DIR = os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'Ollama', 'data')
@@ -35,6 +59,10 @@ EXTRACTED_TEXT_DIR = os.getenv(
     'OLLAMA_EXTRACTED_TEXT_DIR',
     os.path.join(BASE_DIR, 'extracted_text')
 )
+PROGRESS_FILE = os.getenv(
+    'OLLAMA_PROGRESS_FILE',
+    os.path.join(BASE_DIR, 'processing_progress.json')
+)
 MODEL_NAME = os.getenv('OLLAMA_MODEL', 'vofc-engine:latest')
 SERVER_HOST = os.getenv('SERVER_HOST', '127.0.0.1')
 SERVER_PORT = int(os.getenv('SERVER_PORT', '5000'))
@@ -48,31 +76,226 @@ SUPABASE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '')
 for directory in [UPLOAD_DIR, PROCESSED_DIR, LIBRARY_DIR, ERRORS_DIR, EXTRACTED_TEXT_DIR]:
     os.makedirs(directory, exist_ok=True)
 
+# Helper function to update processing progress
+def update_progress(status, message, current_file=None, total_files=0, current_step=None, step_total=None):
+    """Update processing progress file."""
+    progress_data = {
+        "status": status,  # "idle", "processing", "completed", "error"
+        "message": message,
+        "current_file": current_file,
+        "total_files": total_files,
+        "current_step": current_step,
+        "step_total": step_total,
+        "timestamp": datetime.now().isoformat(),
+        "progress_percent": 0
+    }
+    
+    # Calculate progress percentage
+    if step_total and current_step:
+        progress_data["progress_percent"] = min(100, int((current_step / step_total) * 100))
+    elif total_files > 0 and current_step:
+        progress_data["progress_percent"] = min(100, int((current_step / total_files) * 100))
+    
+    try:
+        with open(PROGRESS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(progress_data, f, indent=2)
+    except Exception as e:
+        logging.warning(f"Failed to write progress file: {e}")
+
+def get_progress():
+    """Get current processing progress."""
+    try:
+        if os.path.exists(PROGRESS_FILE):
+            with open(PROGRESS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        logging.warning(f"Failed to read progress file: {e}")
+    return {
+        "status": "idle",
+        "message": "No active processing",
+        "current_file": None,
+        "total_files": 0,
+        "current_step": None,
+        "step_total": None,
+        "timestamp": datetime.now().isoformat(),
+        "progress_percent": 0
+    }
+
+@app.route("/api/health", methods=["GET", "OPTIONS"])
+def health_check():
+    """Health check endpoint with CORS support"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    return jsonify({
+        "status": "ok",
+        "message": "VOFC Flask backend online",
+        "model": MODEL_NAME,
+        "upload_dir": UPLOAD_DIR
+    }), 200
+
+@app.route("/api/progress", methods=["GET", "OPTIONS"])
+def get_processing_progress():
+    """Get current document processing progress"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    try:
+        progress = get_progress()
+        # Ensure progress has all required fields
+        if not isinstance(progress, dict):
+            progress = {
+                "status": "idle",
+                "message": "No active processing",
+                "current_file": None,
+                "progress_percent": 0
+            }
+        # Ensure progress_percent exists
+        if "progress_percent" not in progress:
+            progress["progress_percent"] = 0
+        return jsonify(progress), 200
+    except Exception as e:
+        logging.error(f"Error in get_processing_progress: {e}", exc_info=True)
+        return jsonify({
+            "status": "error",
+            "message": f"Failed to get progress: {str(e)}",
+            "current_file": None,
+            "progress_percent": 0
+        }), 500
+
+@app.route("/api/system/health", methods=["GET", "OPTIONS"])
+def system_health():
+    """System health check endpoint with CORS support"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    import requests
+    from datetime import datetime
+    
+    # Get Ollama URL from environment (supports production)
+    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    ollama_url = f"{ollama_host}/api/tags"
+    supabase_url = os.getenv("SUPABASE_URL", "") or os.getenv("NEXT_PUBLIC_SUPABASE_URL", "")
+    
+    # Initialize components status
+    components = {
+        "flask": "online",
+        "ollama": "unknown",
+        "supabase": "unknown"
+    }
+
+    # Check Ollama
+    try:
+        r = requests.get(ollama_url, timeout=3)
+        if r.status_code == 200:
+            components["ollama"] = "online"
+        else:
+            components["ollama"] = "error"
+    except requests.exceptions.Timeout:
+        components["ollama"] = "timeout"
+    except requests.exceptions.ConnectionError:
+        components["ollama"] = "offline"
+    except Exception as e:
+        components["ollama"] = "error"
+
+    # Check Supabase connectivity (optional)
+    try:
+        if supabase_url:
+            supabase_check_url = f"{supabase_url}/rest/v1/"
+            headers = {}
+            api_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "") or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "")
+            if api_key:
+                headers["apikey"] = api_key
+                headers["Authorization"] = f"Bearer {api_key}"
+            
+            r = requests.get(supabase_check_url, headers=headers, timeout=3)
+            if r.status_code < 400:
+                components["supabase"] = "online"
+            else:
+                components["supabase"] = "error"
+        else:
+            components["supabase"] = "not_configured"
+    except requests.exceptions.Timeout:
+        components["supabase"] = "timeout"
+    except requests.exceptions.ConnectionError:
+        components["supabase"] = "offline"
+    except Exception as e:
+        components["supabase"] = "error"
+
+    # Determine overall status
+    overall_status = "ok"
+    if components["flask"] != "online":
+        overall_status = "error"
+    elif components["ollama"] == "offline" or components["supabase"] == "offline":
+        overall_status = "degraded"
+
+    return jsonify({
+        "status": overall_status,
+        "timestamp": datetime.now().isoformat(),
+        "components": components,
+        "flask": {
+            "status": components["flask"],
+            "url": f"http://{SERVER_HOST}:{SERVER_PORT}"
+        },
+        "ollama": {
+            "status": components["ollama"],
+            "url": ollama_host
+        },
+        "supabase": {
+            "status": components["supabase"],
+            "configured": bool(supabase_url)
+        }
+    }), 200
+
 # Helper function to create submission record in Supabase
-def create_submission_record(submission_id, filename, vuln_count, ofc_count, filepath=None):
+def create_submission_record(submission_id, filename, vuln_count, ofc_count, filepath=None, vofc_data=None):
     """
     Create a submission record in Supabase submissions table.
     This is Step 4: Update approval queue with extracted data.
+    
+    Args:
+        submission_id: Unique submission ID
+        filename: Original filename
+        vuln_count: Number of vulnerabilities found
+        ofc_count: Number of OFCs found
+        filepath: Path to processed file
+        vofc_data: Full VOFC extraction results (vulnerabilities, ofcs, etc.)
     """
     if not SUPABASE_URL or not SUPABASE_KEY:
         print(f"WARNING: Supabase credentials not configured - skipping submission record creation")
         return None
     
     try:
+        # Prepare metadata
+        metadata = {
+            "document_name": filename,
+            "file_path": filepath or "",
+            "vulnerabilities_count": vuln_count,
+            "ofcs_count": ofc_count,
+            "processed_at": datetime.utcnow().isoformat(),
+            "storage_type": "local",
+            "processing_method": "heuristic_pipeline_llm"
+        }
+        
+        # Include full VOFC data if provided
+        if vofc_data:
+            # Store the full extracted data for review
+            submission_payload = {
+                **metadata,
+                "vulnerabilities": vofc_data.get('vulnerabilities', []),
+                "ofcs": vofc_data.get('ofcs', []),
+                "sources": vofc_data.get('sources', []),
+                "links": vofc_data.get('links', {})
+            }
+        else:
+            # Fallback to metadata only
+            submission_payload = metadata
+        
         submission_data = {
             "id": submission_id,
             "type": "ofc",  # Document submissions are treated as OFC submissions
             "status": "pending_review",  # Ready for approval queue
             "source": "file_processing",
-            "data": json.dumps({
-                "document_name": filename,
-                "file_path": filepath or "",
-                "vulnerabilities_count": vuln_count,
-                "ofcs_count": ofc_count,
-                "processed_at": datetime.utcnow().isoformat(),
-                "storage_type": "local",
-                "processing_method": "heuristic_pipeline_llm"
-            }),
+            "data": json.dumps(submission_payload),
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat()
         }
@@ -262,6 +485,20 @@ def generate():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/', methods=['GET'])
+def root():
+    """Root endpoint - redirect to health or show API info."""
+    return jsonify({
+        "service": "VOFC Processing Server",
+        "version": "1.0.0",
+        "status": "running",
+        "endpoints": {
+            "health": "/health",
+            "process": "/api/files/process",
+            "files": "/api/files/list"
+        }
+    })
+
 @app.route('/api/tags', methods=['GET'])
 def get_tags():
     """Get available models/tags."""
@@ -325,6 +562,48 @@ def move_file():
             "message": f"File moved from {source_folder} to {target_folder}"
         })
     
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/files/read', methods=['GET'])
+def read_file():
+    """Read a file from a specific folder."""
+    try:
+        folder = request.args.get('folder', 'library')  # processed, library, errors, extracted_text
+        filename = request.args.get('filename')
+        
+        if not filename:
+            return jsonify({"error": "filename is required"}), 400
+        
+        folder_map = {
+            'processed': PROCESSED_DIR,
+            'library': LIBRARY_DIR,
+            'errors': ERRORS_DIR,
+            'extracted_text': EXTRACTED_TEXT_DIR,
+            'incoming': UPLOAD_DIR
+        }
+        
+        if folder not in folder_map:
+            return jsonify({"error": "Invalid folder name"}), 400
+        
+        file_path = os.path.join(folder_map[folder], filename)
+        
+        if not os.path.exists(file_path):
+            return jsonify({"error": "File not found", "path": file_path}), 404
+        
+        # Read file content
+        with open(file_path, 'r', encoding='utf-8') as f:
+            if filename.endswith('.json'):
+                # Parse JSON files
+                content = json.load(f)
+                return jsonify(content)
+            else:
+                # Return text files as-is
+                content = f.read()
+                return jsonify({"content": content, "filename": filename, "folder": folder})
+    
+    except json.JSONDecodeError as e:
+        return jsonify({"error": f"Invalid JSON: {str(e)}"}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -563,6 +842,9 @@ def process_file_with_heuristic_pipeline(filepath, filename):
         cmd = [sys.executable, pipeline_script,
                '--submission-id', submission_id,
                '--text-file', text_file]
+        # Add PDF path if original file was a PDF (for citation extraction)
+        if file_ext == '.pdf':
+            cmd.extend(['--pdf-path', filepath])
         # Removed --dry-run to enable Supabase writes (Step 4: Update approval queue)
         print(f"   Command: {' '.join(cmd)}")
         
@@ -627,8 +909,12 @@ def process_file_with_heuristic_pipeline(filepath, filename):
         
         # Move extracted text file to EXTRACTED_TEXT_DIR for additional analysis
         if file_ext == '.pdf' and os.path.exists(text_file):
-            # Save text file with clean name (remove _temp suffix)
-            text_filename = f"{os.path.splitext(filename)[0]}.txt"
+            # G. Improve Temporary File Handling - use safe name
+            safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', os.path.splitext(filename)[0])
+            safe_name = safe_name[:100]  # Limit length
+            if not safe_name:
+                safe_name = f"document_{uuid.uuid4().hex[:8]}"
+            text_filename = f"{safe_name}.txt"
             saved_text_path = os.path.join(EXTRACTED_TEXT_DIR, text_filename)
             shutil.move(text_file, saved_text_path)
             print(f"   Saved extracted text to: {saved_text_path}")
@@ -651,12 +937,48 @@ def process_file_with_heuristic_pipeline(filepath, filename):
         traceback.print_exc()
         raise RuntimeError(error_msg) from e
 
+# I. Queue Management - limit concurrent processing
+MAX_CONCURRENT_DOCS = int(os.getenv('MAX_CONCURRENT_DOCS', '3'))
+PROCESSING_QUEUE = []
+_active_processing = 0
+
+def get_pending_documents():
+    """Get list of pending documents from incoming folder."""
+    if not os.path.exists(UPLOAD_DIR):
+        return []
+    return [
+        os.path.join(UPLOAD_DIR, f)
+        for f in os.listdir(UPLOAD_DIR)
+        if os.path.isfile(os.path.join(UPLOAD_DIR, f))
+        and not f.endswith('_temp.txt')
+    ]
+
+def process_document_safe(filepath):
+    """
+    Safely process a single document with error handling.
+    Used for queue-based processing.
+    """
+    global _active_processing
+    filename = os.path.basename(filepath)
+    try:
+        _active_processing += 1
+        # Process document (reuse existing logic)
+        result = process_file_with_heuristic_pipeline(filepath, filename)
+        return result
+    except Exception as e:
+        logging.error(f"Error processing {filename}: {e}")
+        return {"success": False, "error": str(e)}
+    finally:
+        _active_processing -= 1
+
 @app.route('/api/files/process', methods=['POST'])
 def process_files():
     """
     Process all files in the incoming folder using heuristic pipeline.
     Flow: incoming/ → extracted_text/ → library/
     Note: This endpoint can take 10-30+ minutes for large documents with LLM processing.
+    
+    I. Queue Management: Processes documents serially with delay to prevent Ollama overload.
     """
     try:
         # --- Validate incoming directory ---
@@ -709,14 +1031,48 @@ def process_files():
                     "processed": 0
                 }), 500
 
+        # Update progress: Starting processing
+        update_progress("processing", f"Starting batch processing of {len(incoming_files)} file(s)", total_files=len(incoming_files))
+        
+        # I. Queue Management - process serially with delay to prevent Ollama overload
+        # Process documents one at a time (not concurrently) to avoid overwhelming Ollama
+        # Add delay between documents to prevent memory/context issues
+        
         # --- Process each file ---
-        for filepath in incoming_files:
+        for file_index, filepath in enumerate(incoming_files, 1):
+            # Add delay between documents (except for the first one)
+            if file_index > 1:
+                time.sleep(2)  # Prevents overload on Ollama
             filename = os.path.basename(filepath)
+            # G. Improve Temporary File Handling - sanitize filename
+            safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', os.path.splitext(filename)[0])
+            safe_name = safe_name[:100]  # Limit length
+            if not safe_name:
+                safe_name = f"document_{uuid.uuid4().hex[:8]}"
+            
+            # Sanitize filename for safe printing (handle encoding issues)
+            safe_filename = filename.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
             file_basename = os.path.splitext(filename)[0]
-            print(f"Processing {filename} ...")
+            
+            # Update progress: Current file
+            update_progress(
+                "processing",
+                f"Processing file {file_index} of {len(incoming_files)}: {safe_filename}",
+                current_file=safe_filename,
+                total_files=len(incoming_files),
+                current_step=file_index,
+                step_total=len(incoming_files)
+            )
+            
+            try:
+                print(f"Processing {safe_filename} ({file_index}/{len(incoming_files)}) ...")
+            except (OSError, UnicodeEncodeError):
+                # Fallback for problematic filenames
+                print(f"Processing file {file_index}/{len(incoming_files)} (name may contain special characters) ...")
 
             try:
                 # Step 1: Extract text from PDF
+                update_progress("processing", f"Extracting text from {safe_filename}...", current_file=safe_filename, total_files=len(incoming_files), current_step=file_index, step_total=len(incoming_files))
                 text = extract_text_from_pdf(filepath)
                 txt_name = filename.replace(".pdf", "_temp.txt")
                 extracted_path = os.path.join(EXTRACTED_TEXT_DIR, txt_name)
@@ -724,9 +1080,68 @@ def process_files():
                     t.write(text)
                 print(f"Extracted text saved to {extracted_path}")
 
-                # Step 2: Run VOFC Engine on extracted text
-                print(f"Analyzing extracted text for {filename} ...")
-                vofc_result = process_text_with_vofc_engine(text)
+                # Step 2: Run VOFC Engine with citation extraction
+                update_progress("processing", f"Analyzing document with VOFC Engine: {safe_filename}...", current_file=safe_filename, total_files=len(incoming_files), current_step=file_index, step_total=len(incoming_files))
+                try:
+                    print(f"Analyzing extracted text for {safe_filename} ...")
+                except (OSError, UnicodeEncodeError):
+                    print("Analyzing extracted text...")
+                
+                # Import process_submission instead of just process_text_with_vofc_engine
+                # to get citation extraction
+                try:
+                    from heuristic_pipeline import process_submission
+                except ImportError:
+                    try:
+                        from pipeline.heuristic_pipeline import process_submission
+                    except ImportError:
+                        # Fallback to old method if import fails
+                        # Pass doc_id for audit logging (F. Local Logging + Auditing)
+                        # Pass filename as doc_title for UFC/MIL-STD detection
+                        vofc_result = process_text_with_vofc_engine(text, doc_id=safe_name, doc_title=filename)
+                        # Add empty sources
+                        if 'sources' not in vofc_result:
+                            vofc_result['sources'] = []
+                    else:
+                        # Use process_submission for citation extraction
+                        submission_id = str(uuid.uuid4())
+                        result = process_submission(
+                            submission_id=submission_id,
+                            document_text=text,
+                            pdf_path=filepath,  # Pass PDF path for metadata extraction
+                            dry_run=True  # Don't write to DB, just get the data
+                        )
+                        vofc_result = {
+                            'vulnerabilities': result.get('vulnerabilities', []),
+                            'ofcs': result.get('ofcs', []),
+                            'sources': result.get('sources', []),
+                            'links': result.get('links', {})
+                        }
+                        
+                        # If process_submission doesn't use enhanced extraction, use direct call
+                        if not vofc_result.get('vulnerabilities'):
+                            from heuristic_pipeline import process_text_with_vofc_engine
+                            vofc_result = process_text_with_vofc_engine(text, doc_id=safe_name, doc_title=filename)
+                else:
+                    # Use process_submission for citation extraction
+                    submission_id = str(uuid.uuid4())
+                    result = process_submission(
+                        submission_id=submission_id,
+                        document_text=text,
+                        pdf_path=filepath,  # Pass PDF path for metadata extraction
+                        dry_run=True  # Don't write to DB, just get the data
+                    )
+                    vofc_result = {
+                        'vulnerabilities': result.get('vulnerabilities', []),
+                        'ofcs': result.get('ofcs', []),
+                        'sources': result.get('sources', []),
+                        'links': result.get('links', {})
+                    }
+                
+                # Update progress: Analysis complete
+                vuln_count = len(vofc_result.get('vulnerabilities', []))
+                ofc_count = len(vofc_result.get('ofcs', []))
+                update_progress("processing", f"Analysis complete: Found {vuln_count} vulnerabilities, {ofc_count} OFCs", current_file=safe_filename, total_files=len(incoming_files), current_step=file_index, step_total=len(incoming_files))
 
                 # Step 3: Save JSON output to library
                 json_filename = f"{file_basename}.json"
@@ -735,12 +1150,40 @@ def process_files():
                     json.dump(vofc_result, j, indent=2)
                 print(f"JSON written: {json_path}")
 
-                # Step 4: Move original PDF and extracted text to library
-                library_pdf_path = os.path.join(LIBRARY_DIR, filename)
+                # Step 4: Move original PDF to processed folder, extracted text to library
+                # Files go to processed/ first, then can be moved to library/ after review
+                # Ensure processed directory exists
+                os.makedirs(PROCESSED_DIR, exist_ok=True)
+                os.makedirs(LIBRARY_DIR, exist_ok=True)
+                
+                processed_pdf_path = os.path.join(PROCESSED_DIR, filename)
                 library_txt_path = os.path.join(LIBRARY_DIR, txt_name)
-                shutil.move(filepath, library_pdf_path)
-                shutil.move(extracted_path, library_txt_path)
-                print(f"Moved {filename} + {txt_name} to library")
+                
+                # Check if source file exists before moving
+                if not os.path.exists(filepath):
+                    print(f"WARNING: Source file not found: {filepath}. It may have already been moved.")
+                else:
+                    # Check if destination already exists (avoid overwrite errors)
+                    if os.path.exists(processed_pdf_path):
+                        # Add timestamp to avoid collision
+                        base, ext = os.path.splitext(filename)
+                        timestamp = int(time.time())
+                        processed_pdf_path = os.path.join(PROCESSED_DIR, f"{base}_{timestamp}{ext}")
+                    
+                    shutil.move(filepath, processed_pdf_path)
+                    print(f"Moved {filename} to processed folder: {processed_pdf_path}")
+                
+                # Move extracted text
+                if os.path.exists(extracted_path):
+                    if os.path.exists(library_txt_path):
+                        # Add timestamp to avoid collision
+                        base, ext = os.path.splitext(txt_name)
+                        timestamp = int(time.time())
+                        library_txt_path = os.path.join(LIBRARY_DIR, f"{base}_{timestamp}{ext}")
+                    shutil.move(extracted_path, library_txt_path)
+                    print(f"Moved {txt_name} to library: {library_txt_path}")
+                else:
+                    print(f"WARNING: Extracted text file not found: {extracted_path}")
 
                 # Step 5: Create submission record in Supabase
                 submission_id = str(uuid.uuid4())
@@ -752,7 +1195,8 @@ def process_files():
                     filename=filename,
                     vuln_count=vuln_count,
                     ofc_count=ofc_count,
-                    filepath=library_pdf_path
+                    filepath=processed_pdf_path,  # Use processed path, not library
+                    vofc_data=vofc_result  # Include full extracted data
                 )
 
                 processed += 1
@@ -768,17 +1212,44 @@ def process_files():
             except Exception as e:
                 error_msg = str(e)
                 error_type = type(e).__name__
-                print(f"Failed {filename}: {error_type}: {error_msg}")
+                try:
+                    print(f"Failed {safe_filename}: {error_type}: {error_msg}")
+                except (OSError, UnicodeEncodeError):
+                    print(f"Failed file (encoding issue): {error_type}: {error_msg}")
+                
                 import traceback
-                traceback.print_exc()
+                try:
+                    tb_str = traceback.format_exc()
+                    print(tb_str[:500])  # Limit output to avoid encoding issues
+                except (OSError, UnicodeEncodeError):
+                    # Fallback if print still fails
+                    print(f"ERROR: {error_type}: {error_msg}")
 
                 # Move to errors folder
                 try:
+                    os.makedirs(ERRORS_DIR, exist_ok=True)
                     error_path = os.path.join(ERRORS_DIR, filename)
-                    shutil.move(filepath, error_path)
-                    print(f"Moved {filename} to errors folder")
+                    
+                    # Check if source file exists
+                    if not os.path.exists(filepath):
+                        print(f"WARNING: Source file not found: {filepath}. It may have already been moved.")
+                    else:
+                        # Check if destination already exists (avoid overwrite errors)
+                        if os.path.exists(error_path):
+                            # Add timestamp to avoid collision
+                            base, ext = os.path.splitext(filename)
+                            timestamp = int(time.time())
+                            error_path = os.path.join(ERRORS_DIR, f"{base}_{timestamp}{ext}")
+                        
+                        shutil.move(filepath, error_path)
+                        try:
+                            print(f"Moved {safe_filename} to errors folder: {error_path}")
+                        except (OSError, UnicodeEncodeError):
+                            print("Moved file to errors folder")
                 except Exception as move_error:
                     print(f"WARNING: Failed to move file to errors folder: {move_error}")
+                    import traceback
+                    print(traceback.format_exc())
 
                 errors += 1
                 results.append({
@@ -789,6 +1260,8 @@ def process_files():
                 })
 
         # --- Final summary ---
+        update_progress("completed", f"Processing completed: {processed} successful, {errors} errors", total_files=len(incoming_files))
+        
         return jsonify({
             "success": True,
             "message": f"Processing completed: {processed} successful, {errors} errors",
@@ -801,6 +1274,11 @@ def process_files():
     except Exception as e:
         import traceback
         traceback.print_exc()
+        try:
+            total = len(incoming_files) if 'incoming_files' in locals() and incoming_files else 0
+            update_progress("error", f"Processing failed: {str(e)}", total_files=total)
+        except:
+            pass
         return jsonify({
             "success": False,
             "error": str(e),
@@ -842,14 +1320,14 @@ def process_extracted_text():
             sys.path.insert(0, pipeline_path)
         
         try:
-            from heuristic_pipeline import process_text_with_vofc_engine
+            from heuristic_pipeline import process_submission
         except ImportError:
             try:
-                from pipeline.heuristic_pipeline import process_text_with_vofc_engine
+                from pipeline.heuristic_pipeline import process_submission
             except ImportError:
                 return jsonify({
                     "success": False,
-                    "error": "Failed to import process_text_with_vofc_engine. Check pipeline path.",
+                    "error": "Failed to import process_submission. Check pipeline path.",
                     "processed": 0
                 }), 500
 
@@ -862,8 +1340,31 @@ def process_extracted_text():
                 with open(path, "r", encoding="utf-8") as f:
                     text = f.read()
 
-                # Process with VOFC engine
-                vofc_result = process_text_with_vofc_engine(text)
+                # Try to find original PDF for citation extraction
+                pdf_name = fname.replace('_temp.txt', '.pdf').replace('.txt', '.pdf')
+                pdf_path = None
+                # Look in library first, then incoming
+                for folder in [LIBRARY_DIR, UPLOAD_DIR]:
+                    potential_pdf = os.path.join(folder, pdf_name)
+                    if os.path.exists(potential_pdf):
+                        pdf_path = potential_pdf
+                        print(f"   Found original PDF for citation extraction: {pdf_path}")
+                        break
+
+                # Process with VOFC engine and citation extraction
+                submission_id = str(uuid.uuid4())
+                result = process_submission(
+                    submission_id=submission_id,
+                    document_text=text,
+                    pdf_path=pdf_path,  # Pass PDF path if found for metadata extraction
+                    dry_run=True  # Don't write to DB, just get the data
+                )
+                vofc_result = {
+                    'vulnerabilities': result.get('vulnerabilities', []),
+                    'ofcs': result.get('ofcs', []),
+                    'sources': result.get('sources', []),
+                    'links': result.get('links', {})
+                }
 
                 # Save JSON output to library
                 json_filename = fname.replace("_temp.txt", ".json")
@@ -885,7 +1386,8 @@ def process_extracted_text():
                     filename=fname.replace('_temp.txt', '.pdf'),  # Original PDF name
                     vuln_count=vuln_count,
                     ofc_count=ofc_count,
-                    filepath=library_txt_path
+                    filepath=library_txt_path,
+                    vofc_data=vofc_result  # Include full extracted data
                 )
 
                 print(f"SUCCESS: Processed {fname} - {vuln_count} vulnerabilities, {ofc_count} OFCs")
@@ -1037,8 +1539,11 @@ def process_batch():
 
 @app.route('/health', methods=['GET'])
 def health():
-    """Health check endpoint with directory contents"""
+    """Health check endpoint with comprehensive service information"""
     try:
+        import platform
+        import flask
+        
         dirs = {}
         dir_paths = {
             "incoming": UPLOAD_DIR,
@@ -1070,6 +1575,112 @@ def health():
                     "exists": False
                 }
         
+        # Get Python version
+        python_version = sys.version.split()[0]
+        
+        # Get Flask version
+        flask_version = flask.__version__
+        
+        # Get platform information
+        platform_info = {
+            "system": platform.system(),
+            "release": platform.release(),
+            "machine": platform.machine(),
+            "processor": platform.processor()
+        }
+        
+        # Get available models from Ollama (if accessible)
+        ollama_models = []
+        ollama_url = os.getenv('OLLAMA_URL', 'http://localhost:11434')
+        try:
+            models_response = requests.get(f"{ollama_url}/api/tags", timeout=2)
+            if models_response.ok:
+                models_data = models_response.json()
+                ollama_models = [m.get('name', '') for m in models_data.get('models', [])]
+        except:
+            pass  # Ollama may not be accessible from Flask server
+        
+        # Get GPU utilization (if available)
+        gpu_info = {
+            "available": False,
+            "utilization": 0,
+            "memory_used": 0,
+            "memory_total": 0,
+            "devices": []
+        }
+        try:
+            # Try nvidia-ml-py for NVIDIA GPUs (replacement for deprecated pynvml)
+            try:
+                import pynvml as nvml  # nvidia-ml-py uses pynvml as the import name
+                nvml.nvmlInit()
+                device_count = nvml.nvmlDeviceGetCount()
+                if device_count > 0:
+                    gpu_info["available"] = True
+                    gpu_info["devices"] = []
+                    total_util = 0
+                    total_mem_used = 0
+                    total_mem_total = 0
+                    
+                    for i in range(device_count):
+                        try:
+                            handle = nvml.nvmlDeviceGetHandleByIndex(i)
+                            name_bytes = nvml.nvmlDeviceGetName(handle)
+                            # Handle both bytes and string types (different pynvml versions)
+                            if isinstance(name_bytes, bytes):
+                                name = name_bytes.decode('utf-8')
+                            else:
+                                name = str(name_bytes)
+                            util = nvml.nvmlDeviceGetUtilizationRates(handle)
+                            mem_info = nvml.nvmlDeviceGetMemoryInfo(handle)
+                            
+                            gpu_info["devices"].append({
+                                "id": i,
+                                "name": name,
+                                "utilization": util.gpu,
+                                "memory_used_mb": mem_info.used // (1024 * 1024),
+                                "memory_total_mb": mem_info.total // (1024 * 1024)
+                            })
+                            total_util += util.gpu
+                            total_mem_used += mem_info.used
+                            total_mem_total += mem_info.total
+                        except Exception as gpu_err:
+                            # Skip individual GPU if it fails
+                            if DEBUG_MODE:
+                                print(f"Error reading GPU {i}: {gpu_err}")
+                            continue
+                    
+                    if device_count > 0:
+                        gpu_info["utilization"] = total_util // device_count
+                        gpu_info["memory_used"] = total_mem_used // (1024 * 1024 * 1024)  # GB
+                        gpu_info["memory_total"] = total_mem_total // (1024 * 1024 * 1024)  # GB
+            except ImportError:
+                # nvidia-ml-py not installed - this is fine, GPU just won't be available
+                pass
+            except Exception as e:
+                # GPU detection failed - log but don't crash
+                if DEBUG_MODE:
+                    print(f"GPU detection error: {e}")
+                    import traceback
+                    print(traceback.format_exc())
+                # Continue without GPU info
+                pass
+        except Exception as outer_err:
+            # Catch any outer exceptions to prevent health endpoint from crashing
+            if DEBUG_MODE:
+                print(f"Outer GPU check error: {outer_err}")
+                import traceback
+                print(traceback.format_exc())
+            pass
+        
+        # Backend statistics (tracking request metrics)
+        # Note: In production, you'd want to use a proper metrics library
+        backend_stats = {
+            "active_connections": len(list(app.url_map.iter_rules())) if hasattr(app, 'url_map') else 0,
+            "requests_per_minute": 0,  # Would need middleware to track
+            "avg_response_time": 0,  # Would need middleware to track
+            "queue_size": dirs.get("incoming", {}).get("file_count", 0)
+        }
+        
         return jsonify({
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
@@ -1077,13 +1688,33 @@ def health():
             "server": {
                 "host": SERVER_HOST,
                 "port": SERVER_PORT,
-                "model": MODEL_NAME
-            }
+                "model": MODEL_NAME,
+                "url": f"http://{SERVER_HOST}:{SERVER_PORT}"
+            },
+            "python": {
+                "version": python_version,
+                "executable": sys.executable,
+                "platform": platform_info
+            },
+            "flask": {
+                "version": flask_version,
+                "environment": os.getenv('FLASK_ENV', 'production'),
+                "debug": DEBUG_MODE
+            },
+            "services": {
+                "ollama_models": ollama_models,
+                "ollama_url": ollama_url,
+                "base_directory": BASE_DIR
+            },
+            "gpu": gpu_info,
+            "backend": backend_stats
         }), 200
     except Exception as e:
+        import traceback
         return jsonify({
             "status": "error",
             "error": str(e),
+            "traceback": traceback.format_exc() if DEBUG_MODE else None,
             "timestamp": datetime.now().isoformat()
         }), 500
 

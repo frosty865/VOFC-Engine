@@ -147,6 +147,9 @@ async function processFilesInFolder() {
       processingStartTime = Date.now();
       
       // Call Ollama server directly to process files
+      let processingError = null;
+      let processingComplete = false;
+      
       try {
         log(`🔗 Calling Ollama processing API: ${PROCESS_ENDPOINT}`, 'cyan');
         const response = await fetch(PROCESS_ENDPOINT, {
@@ -166,37 +169,69 @@ async function processFilesInFolder() {
             }
             // Mark files as processed
             validFiles.forEach(file => processedFiles.add(file));
+            processingComplete = true;
           } else {
-            log(`❌ Processing failed: ${result.error || result.message || 'Unknown error'}`, 'red');
+            processingError = new Error(result.error || result.message || 'Unknown error');
+            log(`❌ Processing failed: ${processingError.message}`, 'red');
           }
         } else {
           const errorText = await response.text().catch(() => 'Unknown error');
+          processingError = new Error(`HTTP ${response.status}: ${errorText}`);
           log(`❌ Processing endpoint returned ${response.status}: ${errorText}`, 'red');
         }
       } catch (error) {
-        if (error.name === 'AbortError') {
-          log(`❌ Processing request timed out after 30 minutes`, 'red');
-          log(`   Large documents with LLM processing can take a long time.`, 'yellow');
-          log(`   You may need to process files manually or increase the timeout.`, 'yellow');
+        processingError = error;
+        const elapsed = processingStartTime ? Math.round((Date.now() - processingStartTime) / 1000) : 0;
+        
+        if (error.name === 'AbortError' || error.message.includes('timeout') || error.message.includes('aborted')) {
+          // Timeout is expected for long-running processing
+          // Don't reset the flag - let the timeout protection handle it
+          if (elapsed < 1800) {  // Less than 30 minutes
+            log(`⏳ Processing still in progress (${elapsed}s) - timeout is normal for large documents`, 'yellow');
+            log(`   LLM processing can take 10-30+ minutes for large documents`, 'yellow');
+            // Keep the flag set so we don't try to start another process
+            return; // Exit early, don't reset flag
+          } else {
+            log(`❌ Processing request timed out after ${Math.round(elapsed / 60)} minutes`, 'red');
+            log(`   Large documents with LLM processing can take a long time.`, 'yellow');
+            // Reset only if it's been too long
+            isProcessing = false;
+            processingStartTime = null;
+            return;
+          }
         } else if (error.code === 'ECONNREFUSED' || error.message.includes('fetch failed') || error.message.includes('Cannot connect')) {
-          log(`❌ Cannot connect to Ollama server at ${PROCESS_ENDPOINT}`, 'red');
-          log(`   Make sure your Ollama server is running!`, 'yellow');
-          log(`   Expected URL: ${PROCESSING_URL}`, 'yellow');
-          log(`   Try running: python ollama/server.py (in vofc-viewer directory)`, 'yellow');
-          // Immediately reset flag on connection errors
-          isProcessing = false;
-          processingStartTime = null;
+          // Only log connection errors if we're not already processing (might be a stale error from a previous attempt)
+          if (!isProcessing || elapsed < 5) {
+            log(`❌ Cannot connect to Ollama server at ${PROCESS_ENDPOINT}`, 'red');
+            log(`   Make sure your Ollama server is running!`, 'yellow');
+            log(`   Expected URL: ${PROCESSING_URL}`, 'yellow');
+            log(`   Try running: python ollama/server.py (in vofc-viewer directory)`, 'yellow');
+            // Only reset on actual connection errors (not during active processing)
+            if (elapsed < 5) {
+              isProcessing = false;
+              processingStartTime = null;
+            }
+          } else {
+            // If we've been processing for a while, this might be a stale error, ignore it
+            log(`⚠️ Connection check failed but processing may still be active (${elapsed}s)`, 'yellow');
+            return; // Don't reset flag if processing is active
+          }
         } else {
           log(`❌ Error processing files: ${error.message}`, 'red');
           log(`   Endpoint: ${PROCESS_ENDPOINT}`, 'yellow');
           if (error.code) {
             log(`   Error code: ${error.code}`, 'yellow');
           }
+          // Reset on other errors (unless it's a timeout during active processing)
+          isProcessing = false;
+          processingStartTime = null;
         }
       } finally {
-        // Always reset processing flag and start time, even on error
-        isProcessing = false;
-        processingStartTime = null;
+        // Only reset if processing completed successfully or failed with non-timeout error
+        if (processingComplete || (processingError && processingError.name !== 'AbortError' && !processingError.message.includes('timeout'))) {
+          isProcessing = false;
+          processingStartTime = null;
+        }
       }
     }
   } catch (error) {

@@ -1,26 +1,31 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser } from './lib/auth';
-import { fetchVulnerabilities } from './lib/fetchVOFC';
+import { fetchVulnerabilities, fetchSectors, fetchSubsectorsBySector } from './lib/fetchVOFC';
 
 export default function VOFCViewer() {
   const router = useRouter();
   const [authenticated, setAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [vulnerabilities, setVulnerabilities] = useState([]);
   const [filteredVulnerabilities, setFilteredVulnerabilities] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDiscipline, setSelectedDiscipline] = useState('');
+  const [selectedSector, setSelectedSector] = useState('');
+  const [selectedSubsector, setSelectedSubsector] = useState('');
   const [disciplines, setDisciplines] = useState([]);
+  const [sectors, setSectors] = useState([]);
+  const [subsectors, setSubsectors] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedVulnerability, setSelectedVulnerability] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [mounted, setMounted] = useState(false);
 
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
+      setLoading(true);
       const user = await getCurrentUser();
       if (user) {
         setAuthenticated(true);
@@ -34,11 +39,48 @@ export default function VOFCViewer() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [router]);
 
-  const loadData = async () => {
+  // Load sectors from sectors table via API route (bypasses RLS)
+  const loadSectors = useCallback(async () => {
+    try {
+      console.log('[loadSectors] Starting to load sectors...');
+      
+      // Try API route first (uses admin client, bypasses RLS)
+      const response = await fetch('/api/sectors', { cache: 'no-store' });
+      if (response.ok) {
+        const result = await response.json();
+        const sectorsData = result.sectors || [];
+        console.log('[loadSectors] Received sectors from API:', sectorsData);
+        setSectors(sectorsData);
+        
+        if (sectorsData.length === 0) {
+          console.warn('[loadSectors] API returned 0 sectors - table may be empty');
+        }
+        return;
+      }
+      
+      // Fallback to direct client fetch
+      console.log('[loadSectors] API route failed, trying direct client fetch...');
+      const sectorsData = await fetchSectors();
+      console.log('[loadSectors] Received sectors data from client:', sectorsData);
+      setSectors(sectorsData || []);
+      
+      if (!sectorsData || sectorsData.length === 0) {
+        console.warn('[loadSectors] No sectors returned - this may indicate an issue with the database or RLS policies');
+      }
+    } catch (error) {
+      console.error('[loadSectors] Error loading sectors:', error);
+      setSectors([]);
+    }
+  }, []);
+
+  const loadData = useCallback(async () => {
+    if (!authenticated) return;
+    
     try {
       setDataLoading(true);
+      setError('');
       
       // Fetch vulnerabilities with their OFCs and sources
       const vulnsData = await fetchVulnerabilities();
@@ -53,26 +95,88 @@ export default function VOFCViewer() {
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       setError('Failed to load vulnerability data. Please try again.');
+      setVulnerabilities([]);
+      setFilteredVulnerabilities([]);
     } finally {
       setDataLoading(false);
     }
-  };
+  }, [authenticated]);
 
-  const getUniqueDisciplines = () => {
+  const getUniqueDisciplines = useCallback(() => {
     const disciplines = vulnerabilities.map(v => v.discipline).filter(Boolean);
     return [...new Set(disciplines)].sort();
-  };
+  }, [vulnerabilities]);
+
+  // Load subsectors based on selected sector via API route (bypasses RLS)
+  const loadSubsectors = useCallback(async (sectorId) => {
+    try {
+      if (!sectorId) {
+        setSubsectors([]);
+        return;
+      }
+
+      console.log(`[loadSubsectors] Loading subsectors for sectorId: ${sectorId}`);
+      
+      // Try API route first (uses admin client, bypasses RLS)
+      const response = await fetch(`/api/subsectors?sectorId=${sectorId}`, { cache: 'no-store' });
+      if (response.ok) {
+        const result = await response.json();
+        const subsectorsData = result.subsectors || [];
+        console.log(`[loadSubsectors] Received ${subsectorsData.length} subsectors from API`);
+        setSubsectors(subsectorsData);
+        return;
+      }
+      
+      // Fallback to direct client fetch
+      console.log('[loadSubsectors] API route failed, trying direct client fetch...');
+      const subsectorsData = await fetchSubsectorsBySector(sectorId);
+      console.log(`[loadSubsectors] Received ${subsectorsData?.length || 0} subsectors from client`);
+      setSubsectors(subsectorsData || []);
+    } catch (error) {
+      console.error('[loadSubsectors] Error loading subsectors:', error);
+      setSubsectors([]);
+    }
+  }, []);
+
+  // Load subsectors when sector changes
+  useEffect(() => {
+    if (selectedSector && sectors.length > 0) {
+      // Find sector ID from sectors array - check both sector_name and ID matching
+      const sector = sectors.find(s => 
+        s.sector_name === selectedSector || 
+        String(s.id) === String(selectedSector) ||
+        s.id === selectedSector
+      );
+      if (sector && sector.id) {
+        loadSubsectors(sector.id);
+      } else {
+        // If no match found, clear subsectors
+        setSubsectors([]);
+        setSelectedSubsector('');
+      }
+    } else {
+      setSubsectors([]);
+      setSelectedSubsector('');
+    }
+  }, [selectedSector, sectors, loadSubsectors]);
 
   useEffect(() => {
     setMounted(true);
     checkAuth();
-  }, []);
+  }, [checkAuth]);
+
+  // Load sectors immediately on mount - they should be accessible automatically
+  useEffect(() => {
+    loadSectors();
+  }, [loadSectors]);
 
   useEffect(() => {
     if (authenticated) {
       loadData();
+      // Also ensure sectors are loaded when authenticated (in case initial load failed)
+      loadSectors();
     }
-  }, [authenticated]);
+  }, [authenticated, loadData, loadSectors]);
 
   useEffect(() => {
     let filtered = vulnerabilities;
@@ -80,7 +184,9 @@ export default function VOFCViewer() {
     if (searchTerm) {
       filtered = filtered.filter(v => 
         v.vulnerability?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        v.discipline?.toLowerCase().includes(searchTerm.toLowerCase())
+        v.discipline?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.sector?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.subsector?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
@@ -88,9 +194,39 @@ export default function VOFCViewer() {
       filtered = filtered.filter(v => v.discipline === selectedDiscipline);
     }
 
+    if (selectedSector) {
+      // Find the selected sector object
+      const sector = sectors.find(s => s.sector_name === selectedSector || String(s.id) === String(selectedSector));
+      if (sector) {
+        // Filter by sector name, sector_id, or ID matching
+        filtered = filtered.filter(v => {
+          // Check multiple possible field formats
+          return v.sector === sector.sector_name || 
+                 v.sector === String(sector.id) || 
+                 v.sector_id === sector.id ||
+                 String(v.sector_id) === String(sector.id);
+        });
+      }
+    }
+
+    if (selectedSubsector) {
+      // Find the selected subsector object
+      const subsector = subsectors.find(s => s.name === selectedSubsector || String(s.id) === String(selectedSubsector));
+      if (subsector) {
+        // Filter by subsector name, subsector_id, or ID matching
+        filtered = filtered.filter(v => {
+          // Check multiple possible field formats
+          return v.subsector === subsector.name || 
+                 v.subsector === String(subsector.id) || 
+                 v.subsector_id === subsector.id ||
+                 String(v.subsector_id) === String(subsector.id);
+        });
+      }
+    }
 
     setFilteredVulnerabilities(filtered);
-  }, [vulnerabilities, searchTerm, selectedDiscipline]);
+  }, [vulnerabilities, searchTerm, selectedDiscipline, selectedSector, selectedSubsector, sectors, subsectors]);
+
 
   if (!mounted) {
     return (
@@ -164,7 +300,7 @@ export default function VOFCViewer() {
             <h2 className="card-title">Filters</h2>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             {/* Search */}
             <div className="form-group">
               <label className="form-label" htmlFor="search-input">
@@ -200,6 +336,65 @@ export default function VOFCViewer() {
               </select>
             </div>
 
+            {/* Sector */}
+            <div className="form-group">
+              <label className="form-label" htmlFor="sector-select">
+                Sector
+              </label>
+              <select
+                id="sector-select"
+                value={selectedSector}
+                onChange={(e) => setSelectedSector(e.target.value)}
+                className="form-select"
+              >
+                <option value="">All Sectors</option>
+                {sectors.length === 0 ? (
+                  <option value="" disabled>Loading sectors...</option>
+                ) : (
+                  sectors.map(sector => (
+                    <option key={sector.id} value={sector.sector_name || sector.id}>
+                      {sector.sector_name || `Sector ${sector.id}`}
+                    </option>
+                  ))
+                )}
+              </select>
+              {sectors.length === 0 && authenticated && (
+                <small className="text-gray-500 text-xs mt-1 block">
+                  No sectors found in database
+                </small>
+              )}
+            </div>
+
+            {/* Subsector */}
+            <div className="form-group">
+              <label className="form-label" htmlFor="subsector-select">
+                Subsector
+              </label>
+              <select
+                id="subsector-select"
+                value={selectedSubsector}
+                onChange={(e) => setSelectedSubsector(e.target.value)}
+                className="form-select"
+                disabled={!selectedSector}
+              >
+                <option value="">All Subsectors</option>
+                {selectedSector && subsectors.length === 0 ? (
+                  <option value="" disabled>Loading subsectors...</option>
+                ) : (
+                  subsectors.map(subsector => (
+                    <option key={subsector.id} value={subsector.name || subsector.id}>
+                      {subsector.name || `Subsector ${subsector.id}`}
+                    </option>
+                  ))
+                )}
+              </select>
+              {selectedSector && subsectors.length === 0 && (
+                <small className="text-gray-500 text-xs mt-1 block">
+                  No subsectors available for this sector
+                </small>
+              )}
+            </div>
+
             {/* Clear Filters */}
             <div className="form-group">
               <label className="form-label">&nbsp;</label>
@@ -207,6 +402,8 @@ export default function VOFCViewer() {
                 onClick={() => {
                   setSearchTerm('');
                   setSelectedDiscipline('');
+                  setSelectedSector('');
+                  setSelectedSubsector('');
                 }}
                 className="btn btn-secondary w-full"
               >

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '@/app/lib/supabase-client.js';
 import { getCurrentUser, getUserProfile, canSubmitVOFC } from '../lib/auth';
 import { fetchSectors, fetchSubsectors, fetchSubsectorsBySector } from '../lib/fetchVOFC';
 import SessionTimeoutWarning from '../../components/SessionTimeoutWarning';

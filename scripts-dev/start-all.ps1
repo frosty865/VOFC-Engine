@@ -10,9 +10,10 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$projectRoot = Split-Path -Parent $scriptDir
-Set-Location $projectRoot
-Set-Location "vofc-viewer"
+# scriptDir is: .../vofc-viewer/scripts-dev
+# So we need to go up one level to get vofc-viewer
+$vofcViewerDir = Split-Path -Parent $scriptDir
+Set-Location $vofcViewerDir
 
 # Check Python
 Write-Host "[1/4] Checking Python installation..." -ForegroundColor Yellow
@@ -70,30 +71,38 @@ Write-Host "Press Ctrl+C to stop all services" -ForegroundColor Yellow
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Start Flask server in new window
-Write-Host "Starting Flask server..." -ForegroundColor Yellow
-$flaskPath = (Get-Location).Path
-$flaskJob = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$flaskPath'; python ollama\server.py; Write-Host 'Flask server stopped. Press any key...'; Read-Host" -PassThru
+# Start Service Monitor (handles Flask, Ollama, and File Watcher with auto-restart)
+Write-Host "Starting Service Monitor..." -ForegroundColor Yellow
+$monitorPath = (Get-Location).Path
+$monitorScript = Join-Path $monitorPath "scripts-dev\service-monitor.js"
+Write-Host "  Monitor path: $monitorScript" -ForegroundColor Gray
+if (-not (Test-Path $monitorScript)) {
+    Write-Host "  ERROR: Service monitor script not found!" -ForegroundColor Red
+    Write-Host "  Expected: $monitorScript" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+    exit 1
+}
+# Use absolute path and ensure we're in the vofc-viewer directory
+$monitorJob = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$monitorPath'; `$env:NODE_ENV='production'; node '$monitorScript'" -PassThru
+Start-Sleep -Seconds 5
+
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host " Service Monitor Started" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Service Monitor PID: $($monitorJob.Id)" -ForegroundColor Green
+Write-Host ""
+Write-Host "The monitor will:" -ForegroundColor Cyan
+Write-Host "  - Keep Flask server running on port 5000" -ForegroundColor Gray
+Write-Host "  - Keep File Watcher running" -ForegroundColor Gray
+Write-Host "  - Monitor Ollama on port 11434" -ForegroundColor Gray
+Write-Host "  - Auto-restart services if they fail" -ForegroundColor Gray
+Write-Host ""
+
+# Test services
+Write-Host "Testing services..." -ForegroundColor Yellow
 Start-Sleep -Seconds 3
-
-# Start file watcher in new window
-Write-Host "Starting file watcher..." -ForegroundColor Yellow
-$watcherPath = (Get-Location).Path
-$watcherJob = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$watcherPath'; node scripts-dev\file-watcher.js; Write-Host 'File watcher stopped. Press any key...'; Read-Host" -PassThru
-Start-Sleep -Seconds 2
-
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host " Services Started" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Flask Server PID: $($flaskJob.Id)" -ForegroundColor Green
-Write-Host "File Watcher PID: $($watcherJob.Id)" -ForegroundColor Green
-Write-Host ""
-
-# Test Flask server
-Write-Host "Testing Flask server..." -ForegroundColor Yellow
-Start-Sleep -Seconds 2
 try {
     $response = Invoke-RestMethod -Uri "http://127.0.0.1:5000/health" -TimeoutSec 3 -ErrorAction Stop
     Write-Host "  SUCCESS: Flask server is responding" -ForegroundColor Green
@@ -102,17 +111,26 @@ try {
     Write-Host "  Library files: $($response.directories.library.file_count)" -ForegroundColor Cyan
 } catch {
     Write-Host "  WARNING: Flask server may not be responding yet" -ForegroundColor Yellow
-    Write-Host "  Give it a few more seconds to start up" -ForegroundColor Yellow
+    Write-Host "  The monitor will automatically restart it" -ForegroundColor Yellow
+}
+
+try {
+    $ollamaResponse = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 3 -ErrorAction Stop
+    Write-Host "  SUCCESS: Ollama is responding" -ForegroundColor Green
+} catch {
+    Write-Host "  WARNING: Ollama may not be running" -ForegroundColor Yellow
+    Write-Host "  Ensure Ollama service is started (or run: ollama serve)" -ForegroundColor Yellow
 }
 
 Write-Host ""
-Write-Host "All services are running!" -ForegroundColor Green
+Write-Host "All services are being monitored!" -ForegroundColor Green
 Write-Host ""
-Write-Host "To stop services, run:" -ForegroundColor Yellow
-Write-Host "  Stop-Process -Id $($flaskJob.Id) -Force  # Stop Flask" -ForegroundColor Gray
-Write-Host "  Stop-Process -Id $($watcherJob.Id) -Force  # Stop Watcher" -ForegroundColor Gray
+Write-Host "To stop the monitor and all services, run:" -ForegroundColor Yellow
+Write-Host "  Stop-Process -Id $($monitorJob.Id) -Force  # Stop Service Monitor" -ForegroundColor Gray
 Write-Host ""
-Write-Host "Or close this window to keep services running in background." -ForegroundColor Cyan
+Write-Host "Or use: .\scripts-dev\stop-all.ps1" -ForegroundColor Gray
+Write-Host ""
+Write-Host "Services will auto-restart on failure." -ForegroundColor Cyan
 Write-Host ""
 
 Read-Host "Press Enter to exit (services will continue running)"

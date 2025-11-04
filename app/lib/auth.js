@@ -1,5 +1,5 @@
 // Auth functions using Supabase authentication with server verification endpoint
-import { supabase } from './supabaseClient';
+import { supabase } from './supabase-client.js';
 
 export const getCurrentUser = async () => {
   try {

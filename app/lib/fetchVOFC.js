@@ -3,7 +3,7 @@
  */
 
 // Use singleton Supabase client to avoid multiple instances
-import { supabase } from './supabaseClient';
+import { supabase } from './supabase-client.js';
 
 // Database Schema Discovery Function - Query actual column information
 export async function discoverDatabaseSchema() {
@@ -187,6 +187,13 @@ export async function getVulnerabilityText(vulnerabilityId) {
 // Fetch subsectors by sector ID
 export async function fetchSubsectorsBySector(sectorId) {
   try {
+    if (!sectorId) {
+      console.warn('[fetchSubsectorsBySector] No sectorId provided');
+      return [];
+    }
+
+    console.log(`[fetchSubsectorsBySector] Fetching subsectors for sectorId: ${sectorId}`);
+    
     const { data, error } = await supabase
       .from('subsectors')
       .select('id, name, sector_id, description')
@@ -194,14 +201,25 @@ export async function fetchSubsectorsBySector(sectorId) {
       .order('name');
 
     if (error) {
-      console.error('Supabase error:', error);
-      throw error;
+      console.error('[fetchSubsectorsBySector] Error:', error);
+      console.error('[fetchSubsectorsBySector] Error details:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      });
+      // If RLS error, return empty array gracefully instead of throwing
+      if (error.code === '42501' || error.code === 'PGRST301') {
+        console.warn('[fetchSubsectorsBySector] RLS policy blocking access - this may be expected');
+      }
+      return [];
     }
     
+    console.log(`[fetchSubsectorsBySector] Successfully fetched ${data?.length || 0} subsectors`);
     return data || [];
   } catch (error) {
-    console.error('Error in fetchSubsectorsBySector:', error);
-    throw error;
+    console.error('[fetchSubsectorsBySector] Exception:', error);
+    return [];
   }
 }
 
@@ -375,19 +393,72 @@ export async function fetchVulnerabilityOFCLinks() {
 
 export async function fetchSectors() {
   try {
-    const { data, error } = await supabase
+    console.log('[fetchSectors] Fetching sectors from database...');
+    
+    // Check authentication status
+    const { data: { session } } = await supabase.auth.getSession();
+    console.log('[fetchSectors] Session status:', session ? 'authenticated' : 'not authenticated');
+    
+    // Try with all possible column combinations
+    let data = null;
+    let error = null;
+    
+    // Try: select all columns first
+    const result = await supabase
       .from('sectors')
       .select('*')
       .order('id');
+    
+    data = result.data;
+    error = result.error;
 
     if (error) {
-      console.error('Error fetching sectors:', error);
-      return [];
+      console.error('[fetchSectors] Error:', error);
+      console.error('[fetchSectors] Error details:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      });
+      
+      // If RLS error or access denied, try with explicit columns
+      if (error.code === '42501' || error.code === 'PGRST301' || error.code === '42P01') {
+        console.warn('[fetchSectors] Access error - trying with explicit column selection...');
+        const altResult = await supabase
+          .from('sectors')
+          .select('id, name, description')
+          .order('id');
+        
+        if (!altResult.error) {
+          data = altResult.data;
+          error = null;
+        }
+      }
+      
+      if (error) {
+        return [];
+      }
     }
 
-    return data || [];
+    console.log(`[fetchSectors] Query successful - fetched ${data?.length || 0} sectors`);
+    
+    if (data && data.length > 0) {
+      console.log('[fetchSectors] Sample sector:', data[0]);
+      // Normalize sector_name - use sector_name if it exists, otherwise name
+      return data.map(s => ({
+        ...s,
+        sector_name: s.sector_name || s.name || `Sector ${s.id}`
+      }));
+    } else {
+      console.warn('[fetchSectors] Sectors table appears to be empty or RLS is filtering all rows');
+      console.warn('[fetchSectors] This could mean:');
+      console.warn('[fetchSectors]   1. The sectors table is empty');
+      console.warn('[fetchSectors]   2. RLS policies are filtering all rows');
+      console.warn('[fetchSectors]   3. The user does not have permission to read sectors');
+      return [];
+    }
   } catch (error) {
-    console.error('Error in fetchSectors:', error);
+    console.error('[fetchSectors] Exception:', error);
     return [];
   }
 }
