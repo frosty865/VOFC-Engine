@@ -36,6 +36,12 @@ const nextConfig = {
   
   // Bundle optimization
   webpack: (config, { dev, isServer }) => {
+    // Add path alias resolution for webpack
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': __dirname,
+    };
+    
     // Production optimizations
     if (!dev) {
       config.optimization.splitChunks = {
