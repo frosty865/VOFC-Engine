@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { fetchWithAuth } from '../lib/fetchWithAuth'
-import '../../styles/cisa.css'
+import '@/styles/cisa.css'
 import Link from 'next/link'
 
 export default function AdminOverviewPage() {
