@@ -1,6 +1,0 @@
-{
-  "buildCommand": "cd vofc-viewer/vofc-viewer && npm install && npm run build",
-  "outputDirectory": "vofc-viewer/vofc-viewer/.next",
-  "installCommand": "cd vofc-viewer/vofc-viewer && npm install",
-  "framework": "nextjs"
-}
