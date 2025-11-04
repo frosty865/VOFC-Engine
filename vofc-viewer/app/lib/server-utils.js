@@ -206,15 +206,30 @@ export async function checkFlaskHealth() {
   const flaskUrl = getFlaskUrl();
   const healthUrl = `${flaskUrl}/api/system/health`;
   
+  // Log what we're checking
+  if (typeof console !== 'undefined') {
+    console.log('[checkFlaskHealth] Checking:', healthUrl);
+  }
+  
   try {
     const result = await safeFetch(healthUrl, {
       timeout: 10000,
     });
     
+    // Log result
+    if (typeof console !== 'undefined') {
+      console.log('[checkFlaskHealth] Result:', {
+        success: result.success,
+        statusCode: result.statusCode,
+        error: result.error,
+        hasData: !!result.data,
+      });
+    }
+    
     if (result.success && result.data) {
       const data = result.data;
       // Flask is definitely online if we got a response
-      return {
+      const response = {
         status: 'ok',
         timestamp: data.timestamp || new Date().toISOString(),
         components: {
@@ -225,10 +240,19 @@ export async function checkFlaskHealth() {
         ...data,
         url: flaskUrl,
       };
+      
+      if (typeof console !== 'undefined') {
+        console.log('[checkFlaskHealth] Success, returning:', {
+          status: response.status,
+          flask: response.components.flask,
+        });
+      }
+      
+      return response;
     }
     
     // Failed - Flask is offline
-    return {
+    const errorResponse = {
       status: 'offline',
       message: result.error || 'Flask server not responding',
       components: {
@@ -238,8 +262,14 @@ export async function checkFlaskHealth() {
       error: result.error,
       statusCode: result.statusCode,
     };
+    
+    if (typeof console !== 'undefined') {
+      console.log('[checkFlaskHealth] Failed:', errorResponse);
+    }
+    
+    return errorResponse;
   } catch (err) {
-    return {
+    const errorResponse = {
       status: 'offline',
       message: err.message || 'Failed to connect to Flask',
       components: {
@@ -248,6 +278,12 @@ export async function checkFlaskHealth() {
       url: flaskUrl,
       error: err.message,
     };
+    
+    if (typeof console !== 'undefined') {
+      console.error('[checkFlaskHealth] Exception:', err);
+    }
+    
+    return errorResponse;
   }
 }
 

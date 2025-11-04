@@ -61,8 +61,11 @@ export async function GET() {
   }
   
   // Build response - use Flask's component data if available, otherwise use independent checks
+  // Flask is online if we got a successful response (status === 'ok' or components.flask === 'online')
+  const flaskIsOnline = flask.status === 'ok' || flask.components?.flask === 'online' || !flask.error
+  
   const components = {
-    flask: flask.components?.flask || (flask.status === 'ok' ? 'online' : 'offline'),
+    flask: flaskIsOnline ? 'online' : 'offline',
     ollama: flask.components?.ollama || (ollama.status === 'online' ? 'online' : 'offline'),
     supabase: flask.components?.supabase || (supabase.status === 'online' ? 'online' : 'offline'),
   }
