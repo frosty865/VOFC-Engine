@@ -162,7 +162,8 @@ sql/
 src/
 
 # Styles that might be duplicated
-styles/
+# Exclude styles/ from gitignore - needed for build
+# styles/
 
 # Packages directory
 packages/
