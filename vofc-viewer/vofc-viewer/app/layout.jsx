@@ -9,6 +9,9 @@ export const metadata = {
   description: 'Vulnerability and Options for Consideration Viewer',
 }
 
+// Force dynamic rendering to prevent build hangs
+export const dynamic = 'force-dynamic'
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">

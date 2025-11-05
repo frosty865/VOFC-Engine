@@ -9,14 +9,33 @@ const nextConfig = {
   reactStrictMode: true,
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
-  staticPageGenerationTimeout: 10,
+  staticPageGenerationTimeout: 60,
+  
+  // Experimental: Better build performance
+  experimental: {
+    outputFileTracingExcludes: {
+      '*': [
+        'node_modules/@swc/core-*',
+        'node_modules/webpack',
+      ],
+    },
+  },
   
   // Minimal webpack config - essential aliases only
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve.alias = {
       ...config.resolve.alias,
       '@': __dirname,
     };
+    
+    // Reduce webpack processing time
+    if (!isServer) {
+      config.optimization = {
+        ...config.optimization,
+        moduleIds: 'deterministic',
+      };
+    }
+    
     return config;
   },
   
