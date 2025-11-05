@@ -36,7 +36,7 @@ $FrontendEnv = @"
 # FRONTEND CONFIGURATION
 NEXT_PUBLIC_SUPABASE_URL=${env:NEXT_PUBLIC_SUPABASE_URL:-https://your-supabase-url.supabase.co}
 NEXT_PUBLIC_SUPABASE_ANON_KEY=${env:NEXT_PUBLIC_SUPABASE_ANON_KEY:-your-anon-key}
-NEXT_PUBLIC_FLASK_API_URL=${env:NEXT_PUBLIC_FLASK_API_URL:-http://localhost:5000}
+NEXT_PUBLIC_FLASK_API_URL=${env:NEXT_PUBLIC_FLASK_API_URL:-http://localhost:8080}
 NEXT_PUBLIC_OLLAMA_URL=${env:NEXT_PUBLIC_OLLAMA_URL:-http://localhost:11434}
 NEXT_PUBLIC_OLLAMA_MODEL=vofc-engine:latest
 NEXT_PUBLIC_OLLAMA_EMBED_MODEL=nomic-embed-text:latest
@@ -53,9 +53,9 @@ $NextConfig = "$FrontendDir\next.config.mjs"
 if (Test-Path $NextConfig) {
     $content = Get-Content $NextConfig -Raw
     if ($content -match 'flask\.frostech\.site') {
-        $content = $content -replace 'flask\.frostech\.site', 'localhost:5000'
+        $content = $content -replace 'flask\.frostech\.site', 'localhost:8080'
         Set-Content $NextConfig -Value $content -Encoding utf8
-        Write-Host "✅ Patched Next.js proxy (localhost:5000)" -ForegroundColor Green
+        Write-Host "✅ Patched Next.js proxy (localhost:8080)" -ForegroundColor Green
     } else {
         Write-Host "ℹ️  Next.js proxy already configured" -ForegroundColor Gray
     }
@@ -119,27 +119,26 @@ foreach ($m in $Models) {
     }
 }
 
-# --- Restart Flask backend ---
-Write-Host "`n🔄 Restarting Flask backend..." -ForegroundColor Cyan
+# --- Check Flask service status ---
+Write-Host "`n🔄 Checking Flask service (VOFC-Flask)..." -ForegroundColor Cyan
 
-# Kill existing Flask processes
-Get-Process python -ErrorAction SilentlyContinue | Where-Object { 
-    $_.CommandLine -like "*server.py*" 
-} | Stop-Process -Force -ErrorAction SilentlyContinue
-
-Start-Sleep -Seconds 2
-
-# Start Flask server
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$FlaskDir'; python server.py" -WindowStyle Normal
-Start-Sleep -Seconds 5
-
-Write-Host "✅ Flask backend restarted" -ForegroundColor Green
+$flaskService = Get-Service -Name "VOFC-Flask" -ErrorAction SilentlyContinue
+if ($flaskService) {
+    if ($flaskService.Status -ne "Running") {
+        Write-Host "⚠️  Flask service is not running. Starting..." -ForegroundColor Yellow
+        Start-Service -Name "VOFC-Flask" -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 3
+    }
+    Write-Host "✅ Flask service status: $($flaskService.Status)" -ForegroundColor Green
+} else {
+    Write-Host "⚠️  VOFC-Flask service not found. Flask should be running as Windows service." -ForegroundColor Yellow
+}
 
 # --- Health checks ---
 $ApiResults = @()
 $Checks = @(
-    @{ name="Flask System Health"; url="http://localhost:5000/api/system/health" },
-    @{ name="Flask Files Process"; url="http://localhost:5000/api/files/process" }
+    @{ name="Flask System Health"; url="http://localhost:8080/api/system/health" },
+    @{ name="Flask Document Processor"; url="http://localhost:8080/api/files/list" }
 )
 
 Write-Host "`n🔍 Checking API endpoints..." -ForegroundColor Cyan

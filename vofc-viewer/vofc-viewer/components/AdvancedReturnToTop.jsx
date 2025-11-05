@@ -1,6 +1,5 @@
 'use client';
 import { useState, useEffect } from 'react';
-import '../styles/return-to-top.css';
 
 export default function AdvancedReturnToTop() {
   const [isVisible, setIsVisible] = useState(false);

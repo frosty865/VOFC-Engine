@@ -11,16 +11,6 @@ const nextConfig = {
   typescript: { ignoreBuildErrors: true },
   staticPageGenerationTimeout: 60,
   
-  // Experimental: Better build performance
-  experimental: {
-    outputFileTracingExcludes: {
-      '*': [
-        'node_modules/@swc/core-*',
-        'node_modules/webpack',
-      ],
-    },
-  },
-  
   // Minimal webpack config - essential aliases only
   webpack: (config, { isServer }) => {
     config.resolve.alias = {

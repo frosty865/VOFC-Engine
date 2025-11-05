@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-11-03T19:40:33",
+  "timestamp": "2025-11-05T12:29:02",
   "project_path": "C:\\Users\\frost\\OneDrive\\Desktop\\Projects\\VOFC Engine",
   "models": [
     {
@@ -35,9 +35,8 @@
     },
     {
       "endpoint": "Flask Document Processor",
-      "status": "ERROR",
-      "ok": false,
-      "error": "Response status code does not indicate success: 404 (NOT FOUND)."
+      "status": 200,
+      "ok": true
     }
   ],
   "setup_complete": true

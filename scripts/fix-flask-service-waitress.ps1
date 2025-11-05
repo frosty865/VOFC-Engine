@@ -49,11 +49,9 @@ if ($service.Status -ne "Stopped") {
     }
 }
 
-# Paths
-$projectRoot = "C:\Users\frost\OneDrive\Desktop\Projects\VOFC Engine"
-$vofcViewerRoot = Join-Path $projectRoot "vofc-viewer\vofc-viewer"
-$pythonPath = Join-Path $projectRoot ".venv\Scripts\python.exe"
-$workingDir = Join-Path $vofcViewerRoot "ollama"
+# Paths - Production structure
+$pythonPath = "C:\Tools\python\python.exe"
+$workingDir = "C:\Tools\VOFC-Flask"
 
 # Verify paths
 Write-Host "Verifying paths..." -ForegroundColor Yellow
@@ -69,6 +67,19 @@ if (-not (Test-Path $workingDir)) {
 }
 Write-Host "[OK] Working directory: $workingDir" -ForegroundColor Green
 
+# Verify service configuration
+Write-Host "Verifying service configuration..." -ForegroundColor Yellow
+$currentApp = & $nssmPath get $ServiceName Application 2>&1
+$currentParams = & $nssmPath get $ServiceName AppParameters 2>&1
+if ($currentApp -ne $pythonPath) {
+    Write-Host "Setting Application path..." -ForegroundColor Yellow
+    & $nssmPath set $ServiceName Application $pythonPath
+}
+if ($currentParams -notlike "*-m waitress*") {
+    Write-Host "Setting AppParameters..." -ForegroundColor Yellow
+    & $nssmPath set $ServiceName AppParameters "-m waitress --listen=0.0.0.0:8080 server:app"
+}
+
 Write-Host ""
 
 # Get current settings
@@ -82,12 +93,13 @@ Write-Host "  Parameters: $currentParams" -ForegroundColor Gray
 Write-Host "  Directory: $currentDir" -ForegroundColor Gray
 Write-Host ""
 
-# Set PYTHONPATH environment variable
-# This is critical for waitress to find the vofc-viewer module
-Write-Host "Setting PYTHONPATH environment variable..." -ForegroundColor Yellow
-$pythonPathEnv = $vofcViewerRoot
-& $nssmPath set $ServiceName AppEnvironmentExtra "PYTHONPATH=$pythonPathEnv"
-Write-Host "[OK] PYTHONPATH set to: $pythonPathEnv" -ForegroundColor Green
+# Set log paths (production structure)
+$logDir = "C:\Tools\nssm\logs"
+if (-not (Test-Path $logDir)) {
+    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+}
+$logPath = Join-Path $logDir "vofc_flask_out.log"
+$errorLogPath = Join-Path $logDir "vofc_flask_err.log"
 
 # Set working directory (should already be set, but ensure it's correct)
 Write-Host "Setting working directory..." -ForegroundColor Yellow
@@ -96,32 +108,9 @@ Write-Host "[OK] Working directory: $workingDir" -ForegroundColor Green
 
 # Verify the module path is correct
 Write-Host "Verifying module path..." -ForegroundColor Yellow
-$modulePath = "vofc-viewer.vofc-viewer.ollama.server:app"
+$modulePath = "server:app"
 Write-Host "  Module path: $modulePath" -ForegroundColor Gray
-
-# Test if Python can import the module with the PYTHONPATH
-Write-Host "Testing module import..." -ForegroundColor Yellow
-$env:PYTHONPATH = $pythonPathEnv
-try {
-    $testResult = & $pythonPath -c "import sys; sys.path.insert(0, r'$vofcViewerRoot'); from ollama.server import app; print('OK')" 2>&1
-    if ($LASTEXITCODE -eq 0 -and $testResult -match "OK") {
-        Write-Host "[OK] Module can be imported" -ForegroundColor Green
-    } else {
-        Write-Host "[WARNING] Module import test: $testResult" -ForegroundColor Yellow
-    }
-} catch {
-    Write-Host "[WARNING] Module import test failed: $($_.Exception.Message)" -ForegroundColor Yellow
-}
-
-Write-Host ""
-
-# Set log paths
-$logDir = Join-Path $projectRoot "logs"
-if (-not (Test-Path $logDir)) {
-    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-}
-$logPath = Join-Path $logDir "flask_out.log"
-$errorLogPath = Join-Path $logDir "flask_err.log"
+Write-Host "  (server.py should be in: $workingDir)" -ForegroundColor Gray
 
 & $nssmPath set $ServiceName AppStdout $logPath
 & $nssmPath set $ServiceName AppStderr $errorLogPath
@@ -166,11 +155,12 @@ if ($service.Status -eq "Running") {
     Write-Host "Testing Flask endpoint..." -ForegroundColor Yellow
     Start-Sleep -Seconds 2
     try {
-        $response = Invoke-WebRequest -Uri "http://127.0.0.1:5000/api/system/health" -Method Get -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+        $response = Invoke-WebRequest -Uri "http://localhost:8080/api/system/health" -Method Get -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
         Write-Host "[OK] Flask is responding: $($response.StatusCode)" -ForegroundColor Green
     } catch {
         Write-Host "[WARNING] Flask not responding yet: $($_.Exception.Message)" -ForegroundColor Yellow
         Write-Host "Service may still be starting. Wait a few seconds and try again." -ForegroundColor Yellow
+        Write-Host "Check logs at: $logPath" -ForegroundColor Cyan
     }
 }
 
